@@ -206,9 +206,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const posInCycle = (sentencesRead - 1) % CYCLE_SIZE + 1 // 1–13
 
   const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxProgress * 100
-  const bar2Width = overallProgress >= 0.5
-    ? Math.max((posInCycle - HALF_CYCLE) / (CYCLE_SIZE - HALF_CYCLE), 0) * maxProgress * 100
-    : 0
+  const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (CYCLE_SIZE - HALF_CYCLE), 0) * maxProgress * 100
 
   const getProgressColor = () => {
     if (goalCompleted) return '#22c55e'
