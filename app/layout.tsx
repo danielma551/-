@@ -1,5 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
+import FontLoader from './components/FontLoader'
 
 export const metadata: Metadata = {
   title: '閱讀網站',
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-TW">
-      <body>{children}</body>
+      <body>
+        <FontLoader />
+        {children}
+      </body>
     </html>
   )
 }

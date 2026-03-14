@@ -23,20 +23,15 @@ export const storage = {
 
   saveBook(book: BookData): void {
     if (typeof window === 'undefined') return
-    try {
-      const books = this.getAllBooks()
-      const existingIndex = books.findIndex(b => b.id === book.id)
-      
-      if (existingIndex >= 0) {
-        books[existingIndex] = book
-      } else {
-        books.push(book)
-      }
-      
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(books))
-    } catch (error) {
-      console.error('Error saving book:', error)
+    const books = this.getAllBooks()
+    const existingIndex = books.findIndex(b => b.id === book.id)
+    if (existingIndex >= 0) {
+      books[existingIndex] = book
+    } else {
+      books.push(book)
     }
+    // Let quota errors propagate so callers can handle them
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(books))
   },
 
   getBook(id: string): BookData | null {
@@ -85,14 +80,114 @@ export function generateBookId(title: string): string {
 }
 
 const FONT_STORAGE_KEY = 'reading_website_font'
+const SHORTCUTS_STORAGE_KEY = 'reading_website_shortcuts'
+const DISPLAY_STORAGE_KEY = 'reading_website_display'
+
+export interface KeyboardShortcuts {
+  nextSentence: string
+  previousSentence: string
+  returnHome: string
+}
+
+export const DEFAULT_SHORTCUTS: KeyboardShortcuts = {
+  nextSentence: 'ArrowRight',
+  previousSentence: 'ArrowLeft',
+  returnHome: 'Escape'
+}
+
+export const shortcutsStorage = {
+  saveShortcuts(shortcuts: KeyboardShortcuts): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(shortcuts))
+    } catch (error) {
+      console.error('Error saving shortcuts:', error)
+    }
+  },
+
+  getShortcuts(): KeyboardShortcuts {
+    if (typeof window === 'undefined') return DEFAULT_SHORTCUTS
+    try {
+      const data = localStorage.getItem(SHORTCUTS_STORAGE_KEY)
+      return data ? JSON.parse(data) : DEFAULT_SHORTCUTS
+    } catch (error) {
+      console.error('Error loading shortcuts:', error)
+      return DEFAULT_SHORTCUTS
+    }
+  },
+
+  clearShortcuts(): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.removeItem(SHORTCUTS_STORAGE_KEY)
+    } catch (error) {
+      console.error('Error clearing shortcuts:', error)
+    }
+  }
+}
+
+export interface DisplaySettings {
+  fontSize: number
+  backgroundColor: string
+  textColor: string
+}
+
+export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
+  fontSize: 32,
+  backgroundColor: '#ffffff',
+  textColor: '#1f2937'
+}
+
+export const displayStorage = {
+  saveSettings(settings: DisplaySettings): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(DISPLAY_STORAGE_KEY, JSON.stringify(settings))
+    } catch (error) {
+      console.error('Error saving display settings:', error)
+    }
+  },
+
+  getSettings(): DisplaySettings {
+    if (typeof window === 'undefined') return DEFAULT_DISPLAY_SETTINGS
+    try {
+      const data = localStorage.getItem(DISPLAY_STORAGE_KEY)
+      return data ? JSON.parse(data) : DEFAULT_DISPLAY_SETTINGS
+    } catch (error) {
+      console.error('Error loading display settings:', error)
+      return DEFAULT_DISPLAY_SETTINGS
+    }
+  },
+
+  clearSettings(): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.removeItem(DISPLAY_STORAGE_KEY)
+    } catch (error) {
+      console.error('Error clearing display settings:', error)
+    }
+  }
+}
 
 export const fontStorage = {
   saveFont(fontFamily: string, fontData?: string): void {
     if (typeof window === 'undefined') return
     try {
+      // Warn if font data is too large (>3MB base64)
+      if (fontData && fontData.length > 3 * 1024 * 1024) {
+        console.warn('Font file is large, storing name only to avoid storage quota issues')
+        localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily, fontData: undefined }))
+        return
+      }
       localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily, fontData }))
     } catch (error) {
       console.error('Error saving font:', error)
+      // Try saving just the name without data
+      try {
+        localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily, fontData: undefined }))
+      } catch {
+        // Storage completely full, ignore
+      }
     }
   },
 
@@ -100,7 +195,21 @@ export const fontStorage = {
     if (typeof window === 'undefined') return null
     try {
       const data = localStorage.getItem(FONT_STORAGE_KEY)
-      return data ? JSON.parse(data) : null
+      if (!data) return null
+      const parsed = JSON.parse(data)
+      // If stored font data is too large, strip the data and keep only the name
+      if (parsed.fontData && parsed.fontData.length > 3 * 1024 * 1024) {
+        console.warn('Stored font data too large, clearing font data from storage')
+        const trimmed = { fontFamily: parsed.fontFamily, fontData: undefined }
+        try {
+          localStorage.removeItem(FONT_STORAGE_KEY)
+          localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify(trimmed))
+        } catch {
+          // Ignore cleanup errors
+        }
+        return trimmed
+      }
+      return parsed
     } catch (error) {
       console.error('Error loading font:', error)
       return null

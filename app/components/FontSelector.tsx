@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Type, Upload, X, Check } from 'lucide-react'
+import { fontStorage } from '../utils/storage'
 
 interface FontSelectorProps {
   currentFont: string
@@ -19,7 +20,15 @@ const DEFAULT_FONTS = [
 
 export default function FontSelector({ currentFont, onFontChange }: FontSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [customFont, setCustomFont] = useState<{ name: string; value: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const savedFont = fontStorage.getFont()
+    if (savedFont && savedFont.fontData) {
+      setCustomFont({ name: `📎 ${savedFont.fontFamily}`, value: savedFont.fontFamily })
+    }
+  }, [])
 
   const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -40,6 +49,7 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
         fontFace.load().then((loadedFace) => {
           document.fonts.add(loadedFace)
           onFontChange(fontName, fontData)
+          setCustomFont({ name: `📎 ${fontName}`, value: fontName })
           setIsOpen(false)
         }).catch((error) => {
           console.error('字體加載失敗:', error)
@@ -87,6 +97,31 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
             </div>
 
             <div className="max-h-64 overflow-y-auto">
+              {customFont && (
+                <>
+                  <button
+                    onClick={() => {
+                      const savedFont = fontStorage.getFont()
+                      if (savedFont) {
+                        onFontChange(savedFont.fontFamily, savedFont.fontData)
+                      }
+                      setIsOpen(false)
+                    }}
+                    className="w-full px-4 py-3 text-left hover:bg-indigo-50 transition-colors flex items-center justify-between group bg-indigo-50/50"
+                  >
+                    <span 
+                      className="text-indigo-700 font-medium"
+                      style={{ fontFamily: customFont.value }}
+                    >
+                      {customFont.name}
+                    </span>
+                    {currentFont === customFont.value && (
+                      <Check className="w-4 h-4 text-indigo-600" />
+                    )}
+                  </button>
+                  <div className="border-t border-gray-200 my-2"></div>
+                </>
+              )}
               {DEFAULT_FONTS.map((font) => (
                 <button
                   key={font.value}

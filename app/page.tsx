@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Upload, BookOpen, Trash2, Clock } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
+import CloudSync from './components/CloudSync'
 import { storage, generateBookId, BookData } from './utils/storage'
 
 export default function Home() {
@@ -21,6 +22,8 @@ export default function Home() {
     id: string
     index: number
   } | null>(null)
+  const [uploadError, setUploadError] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setSavedBooks(storage.getAllBooks())
@@ -30,6 +33,7 @@ export default function Home() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setUploadError('')
     setIsUploading(true)
     const formData = new FormData()
     formData.append('file', file)
@@ -57,8 +61,13 @@ export default function Home() {
         lastReadDate: Date.now()
       }
       
-      storage.saveBook(bookData)
-      setSavedBooks(storage.getAllBooks())
+      try {
+        storage.saveBook(bookData)
+        setSavedBooks(storage.getAllBooks())
+      } catch (storageError) {
+        console.error('Storage full:', storageError)
+        setUploadError('本地存儲空間不足，書本已加載但無法保存。請刪除部分書本後再試。')
+      }
       
       setPendingBook({
         sentences: data.sentences,
@@ -69,9 +78,11 @@ export default function Home() {
       setShowGoalModal(true)
     } catch (error) {
       console.error('Error uploading file:', error)
-      alert('上傳或解析文件時出錯')
+      setUploadError('上傳失敗，請確認文件格式（TXT 或 EPUB）並重試')
     } finally {
       setIsUploading(false)
+      // Reset file input so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -128,6 +139,13 @@ export default function Home() {
     setBookTitle('')
     setBookId('')
     setCurrentIndex(0)
+    setShowGoalModal(false)
+    setPendingBook(null)
+    setUploadError('')
+    setSavedBooks(storage.getAllBooks())
+  }
+
+  const handleSyncComplete = () => {
     setSavedBooks(storage.getAllBooks())
   }
 
@@ -178,6 +196,7 @@ export default function Home() {
                 </div>
                 <input
                   id="file-upload"
+                  ref={fileInputRef}
                   type="file"
                   className="hidden"
                   accept=".txt,.epub"
@@ -192,6 +211,16 @@ export default function Home() {
                   <p className="mt-2 text-sm text-gray-600">正在處理文件...</p>
                 </div>
               )}
+
+              {uploadError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700">{uploadError}</p>
+                </div>
+              )}
+
+              <div className="flex justify-center">
+                <CloudSync onSyncComplete={handleSyncComplete} />
+              </div>
 
               {savedBooks.length > 0 && (
                 <div className="mt-6">
