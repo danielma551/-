@@ -113,7 +113,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       return
     }
     const results = sentences.reduce<number[]>((acc, s, i) => {
-      if (s.toLowerCase().includes(query.toLowerCase())) acc.push(i)
+      if (!s.startsWith('data:image/') && s.toLowerCase().includes(query.toLowerCase())) acc.push(i)
       return acc
     }, [])
     setSearchResults(results)
@@ -334,16 +334,24 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           <div 
             className="rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40"
           >
-            <p 
-              className="leading-relaxed text-center"
-              style={{ 
-                fontFamily: textFontFamily,
-                fontSize: `${displaySettings.fontSize}px`,
-                color: displaySettings.textColor
-              }}
-            >
-              {sentences[currentIndex]}
-            </p>
+            {sentences[currentIndex]?.startsWith('data:image/') ? (
+              <img
+                src={sentences[currentIndex]}
+                alt="圖片"
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            ) : (
+              <p
+                className="leading-relaxed text-center"
+                style={{
+                  fontFamily: textFontFamily,
+                  fontSize: `${displaySettings.fontSize}px`,
+                  color: displaySettings.textColor
+                }}
+              >
+                {sentences[currentIndex]}
+              </p>
+            )}
           </div>
 
           <div className="mt-8 flex items-center justify-between">
