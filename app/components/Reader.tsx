@@ -146,7 +146,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const sentencesRead = currentIndex - startIndex + 1
-  const CYCLE_SIZE = 25
+  const CYCLE_SIZE = 13
 
   const completedCycles = Math.floor((sentencesRead - 1) / CYCLE_SIZE)
   const cycleRatio = ((sentencesRead - 1) % CYCLE_SIZE + 1) / CYCLE_SIZE
