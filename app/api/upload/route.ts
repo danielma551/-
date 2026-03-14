@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import EPub from 'epub2'
+import { writeFileSync, unlinkSync } from 'fs'
+import { join } from 'path'
+import { randomUUID } from 'crypto'
 
 function splitIntoSentences(text: string): string[] {
   const cleaned = text
@@ -21,8 +24,10 @@ function splitIntoSentences(text: string): string[] {
 }
 
 async function parseEpub(buffer: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const epub = new EPub(buffer)
+  const tmpPath = join('/tmp', `epub-${randomUUID()}.epub`)
+  writeFileSync(tmpPath, buffer)
+  return new Promise<string>((resolve, reject) => {
+    const epub = new EPub(tmpPath)
     
     epub.on('error', (err: Error) => {
       reject(err)
@@ -41,13 +46,13 @@ async function parseEpub(buffer: Buffer): Promise<string> {
       }
 
       flow.forEach((chapter: any) => {
-        epub.getChapter(chapter.id, (err: Error | null, text: string) => {
+        epub.getChapter(chapter.id, (err: Error, text?: string) => {
           if (err) {
             reject(err)
             return
           }
 
-          const cleanText = text
+          const cleanText = (text ?? '')
             .replace(/<[^>]*>/g, ' ')
             .replace(/&nbsp;/g, ' ')
             .replace(/&amp;/g, '&')
@@ -69,6 +74,8 @@ async function parseEpub(buffer: Buffer): Promise<string> {
     })
 
     epub.parse()
+  }).finally(() => {
+    try { unlinkSync(tmpPath) } catch {}
   })
 }
 
