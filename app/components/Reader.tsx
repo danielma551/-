@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X } from 'lucide-react'
 import { storage, fontStorage, shortcutsStorage, displayStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
@@ -24,6 +24,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [fontFamily, setFontFamily] = useState('system-ui, -apple-system, sans-serif')
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<number[]>([])
+  const [searchResultIdx, setSearchResultIdx] = useState(0)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -101,6 +105,43 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentIndex, sentences.length, shortcuts, onReset])
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    if (!query.trim()) {
+      setSearchResults([])
+      return
+    }
+    const results = sentences.reduce<number[]>((acc, s, i) => {
+      if (s.toLowerCase().includes(query.toLowerCase())) acc.push(i)
+      return acc
+    }, [])
+    setSearchResults(results)
+    setSearchResultIdx(0)
+    if (results.length > 0) {
+      setCurrentIndex(results[0])
+      setStartIndex(results[0])
+      setGoalCompleted(false)
+    }
+  }
+
+  const goToNextResult = () => {
+    if (searchResults.length === 0) return
+    const next = (searchResultIdx + 1) % searchResults.length
+    setSearchResultIdx(next)
+    setCurrentIndex(searchResults[next])
+    setStartIndex(searchResults[next])
+    setGoalCompleted(false)
+  }
+
+  const goToPrevResult = () => {
+    if (searchResults.length === 0) return
+    const prev = (searchResultIdx - 1 + searchResults.length) % searchResults.length
+    setSearchResultIdx(prev)
+    setCurrentIndex(searchResults[prev])
+    setStartIndex(searchResults[prev])
+    setGoalCompleted(false)
+  }
 
   const goToNext = () => {
     if (currentIndex < sentences.length - 1) {
@@ -181,7 +222,93 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <BookOpen className="w-6 h-6 text-indigo-600" />
-            <h1 className="text-xl font-semibold text-gray-800">{bookTitle}</h1>
+            {!showSearch && (
+              <h1 className="text-xl font-semibold text-gray-800">{bookTitle}</h1>
+            )}
+            {showSearch ? (
+              <div className="relative">
+                <div className="flex items-center w-72 px-3 py-1.5 border-2 border-indigo-400 rounded-full bg-white shadow-sm">
+                  <Search className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }
+                    }}
+                    placeholder="搜索句子..."
+                    className="flex-1 text-sm outline-none bg-transparent"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => { setSearchQuery(''); setSearchResults([]) }} className="ml-1 p-0.5 hover:bg-gray-100 rounded-full">
+                      <X className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                  )}
+                </div>
+
+                {searchQuery && (
+                  <div className="absolute top-full left-0 mt-1 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                    {searchResults.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-400">無符合結果</div>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-50">
+                          共 {searchResults.length} 個結果
+                        </div>
+                        <ul className="max-h-64 overflow-y-auto">
+                          {searchResults.slice(0, 10).map((idx, i) => {
+                            const sentence = sentences[idx]
+                            const lower = sentence.toLowerCase()
+                            const qLower = searchQuery.toLowerCase()
+                            const matchPos = lower.indexOf(qLower)
+                            const preview = sentence.length > 60
+                              ? sentence.slice(Math.max(0, matchPos - 15), matchPos + searchQuery.length + 30) + '…'
+                              : sentence
+                            const previewBefore = preview.slice(0, preview.toLowerCase().indexOf(qLower))
+                            const previewMatch = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                            const previewAfter = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                            return (
+                              <li key={idx}>
+                                <button
+                                  onClick={() => {
+                                    setCurrentIndex(idx)
+                                    setStartIndex(idx)
+                                    setGoalCompleted(false)
+                                    setSearchResultIdx(i)
+                                    setShowSearch(false)
+                                    setSearchQuery('')
+                                    setSearchResults([])
+                                  }}
+                                  className={`w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2 ${i === searchResultIdx ? 'bg-indigo-50' : ''}`}
+                                >
+                                  <Search className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
+                                  <span className="text-gray-600 leading-snug">
+                                    {previewBefore}
+                                    <strong className="text-indigo-600 font-semibold">{previewMatch}</strong>
+                                    {previewAfter}
+                                  </span>
+                                  <span className="text-xs text-gray-300 flex-shrink-0 ml-auto pl-2">#{idx + 1}</span>
+                                </button>
+                              </li>
+                            )
+                          })}
+                          {searchResults.length > 10 && (
+                            <li className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
+                              還有 {searchResults.length - 10} 個結果…
+                            </li>
+                          )}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+                <Search className="w-4 h-4 text-gray-500" />
+              </button>
+            )}
           </div>
           <div className="flex items-center space-x-3">
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
@@ -264,7 +391,30 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </button>
           </div>
 
-          <div className="mt-4 text-center text-sm text-gray-500">
+          <div className="mt-6">
+            <input
+              type="range"
+              min={0}
+              max={sentences.length - 1}
+              value={currentIndex}
+              onChange={(e) => {
+                const idx = Number(e.target.value)
+                setCurrentIndex(idx)
+                setStartIndex(idx)
+                setGoalCompleted(false)
+              }}
+              className="w-full h-2 rounded-full appearance-none cursor-pointer"
+              style={{
+                background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(currentIndex / (sentences.length - 1)) * 100}%, #e5e7eb ${(currentIndex / (sentences.length - 1)) * 100}%, #e5e7eb 100%)`
+              }}
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-1">
+              <span>1</span>
+              <span>{sentences.length}</span>
+            </div>
+          </div>
+
+          <div className="mt-2 text-center text-sm text-gray-500">
             <p>使用鍵盤左右箭頭鍵導航</p>
           </div>
           
