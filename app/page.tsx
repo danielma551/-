@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2 } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -248,10 +248,14 @@ export default function Home() {
                     {/* Cover */}
                     <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow duration-200">
                       <div
-                        className="w-full h-full flex flex-col items-center justify-center p-4"
-                        style={{ background: getBookStyle(book.title) }}
+                        className="w-full h-full flex flex-col items-center justify-center p-4 relative"
+                        style={book.coverImage
+                          ? { backgroundImage: `url(${book.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                          : { background: book.coverColor ?? getBookStyle(book.title) }
+                        }
                       >
-                        <p className="text-white text-sm font-medium text-center leading-snug line-clamp-5 drop-shadow">
+                        {book.coverImage && <div className="absolute inset-0 bg-black/30" />}
+                        <p className="relative text-white text-sm font-medium text-center leading-snug line-clamp-5 drop-shadow">
                           {book.title}
                         </p>
                       </div>
@@ -261,6 +265,31 @@ export default function Home() {
                           <div className="h-full bg-white/70" style={{ width: `${progress}%` }} />
                         </div>
                       )}
+                      {/* Cover image picker */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); document.getElementById(`cover-img-${book.id}`)?.click() }}
+                        className="absolute top-2 left-2 p-1.5 bg-black/40 hover:bg-blue-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <ImagePlus className="w-3 h-3" />
+                      </button>
+                      <input
+                        type="file"
+                        id={`cover-img-${book.id}`}
+                        accept="image/*"
+                        className="hidden"
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation()
+                          const file = e.currentTarget.files?.[0]
+                          if (!file) return
+                          const reader = new FileReader()
+                          reader.onload = (ev) => {
+                            const updated = { ...book, coverImage: ev.target?.result as string }
+                            saveBookToIDB(updated).then(() => getAllBooksFromIDB().then(setSavedBooks))
+                          }
+                          reader.readAsDataURL(file)
+                        }}
+                      />
                       {/* Delete */}
                       <button
                         onClick={(e) => handleDeleteBook(book.id, e)}

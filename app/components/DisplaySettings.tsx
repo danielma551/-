@@ -7,12 +7,14 @@ export interface DisplaySettings {
   fontSize: number
   backgroundColor: string
   textColor: string
+  progressColor: string
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   fontSize: 32,
   backgroundColor: '#ffffff',
-  textColor: '#1f2937'
+  textColor: '#1f2937',
+  progressColor: '#6366f1'
 }
 
 interface DisplaySettingsProps {
@@ -195,6 +197,25 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                         className="w-full h-10 rounded border border-gray-300 cursor-pointer"
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Progress Bar Color */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    進度條顏色
+                  </label>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="color"
+                      value={editingSettings.progressColor}
+                      onChange={(e) => setEditingSettings(prev => ({
+                        ...prev,
+                        progressColor: e.target.value
+                      }))}
+                      className="w-16 h-10 rounded border border-gray-300 cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600">{editingSettings.progressColor}</span>
                   </div>
                 </div>
 

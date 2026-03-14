@@ -212,11 +212,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   const getProgressColor = () => {
     if (goalCompleted) return '#22c55e'
-    // Red #ef4444 → 瑞幸藍 #00A8E0
-    const r = Math.round(239 + (0   - 239) * overallProgress)
-    const g = Math.round(68  + (168 - 68)  * overallProgress)
-    const b = Math.round(68  + (224 - 68)  * overallProgress)
-    return `rgb(${r},${g},${b})`
+    return displaySettings.progressColor
   }
   const textFontFamily = fontFamily.includes(',')
     ? fontFamily
@@ -378,29 +374,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <span>上一句</span>
             </button>
 
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                {currentIndex + 1} / {sentences.length}
-              </p>
-              {readingGoal > 0 && (
-                <div className="mt-2 flex items-center justify-center space-x-2">
-                  {goalCompleted ? (
-                    <div className="flex items-center space-x-1 text-green-600">
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="text-xs font-medium">目標達成！</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-1 text-indigo-600">
-                      <Target className="w-4 h-4" />
-                      <span className="text-xs font-medium">
-                        {Math.min(currentIndex - startIndex + 1, readingGoal)} / {readingGoal}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
             <button
               onClick={goToNext}
               disabled={currentIndex === sentences.length - 1}
@@ -409,33 +382,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <span>下一句</span>
               <ChevronRight className="w-5 h-5" />
             </button>
-          </div>
-
-          <div className="mt-6">
-            <input
-              type="range"
-              min={0}
-              max={sentences.length - 1}
-              value={currentIndex}
-              onChange={(e) => {
-                const idx = Number(e.target.value)
-                setCurrentIndex(idx)
-                setStartIndex(idx)
-                setGoalCompleted(false)
-              }}
-              className="w-full h-2 rounded-full appearance-none cursor-pointer"
-              style={{
-                background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(currentIndex / (sentences.length - 1)) * 100}%, #e5e7eb ${(currentIndex / (sentences.length - 1)) * 100}%, #e5e7eb 100%)`
-              }}
-            />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>1</span>
-              <span>{sentences.length}</span>
-            </div>
-          </div>
-
-          <div className="mt-2 text-center text-sm text-gray-500">
-            <p>使用鍵盤左右箭頭鍵導航</p>
           </div>
           
           {goalCompleted && (

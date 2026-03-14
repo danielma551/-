@@ -5,6 +5,8 @@ export interface BookData {
   currentIndex: number
   uploadDate: number
   lastReadDate: number
+  coverColor?: string
+  coverImage?: string
 }
 
 const STORAGE_KEY = 'reading_website_books'
@@ -130,12 +132,14 @@ export interface DisplaySettings {
   fontSize: number
   backgroundColor: string
   textColor: string
+  progressColor: string
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   fontSize: 32,
   backgroundColor: '#ffffff',
-  textColor: '#1f2937'
+  textColor: '#1f2937',
+  progressColor: '#6366f1'
 }
 
 export const displayStorage = {
@@ -152,7 +156,7 @@ export const displayStorage = {
     if (typeof window === 'undefined') return DEFAULT_DISPLAY_SETTINGS
     try {
       const data = localStorage.getItem(DISPLAY_STORAGE_KEY)
-      return data ? JSON.parse(data) : DEFAULT_DISPLAY_SETTINGS
+      return data ? { ...DEFAULT_DISPLAY_SETTINGS, ...JSON.parse(data) } : DEFAULT_DISPLAY_SETTINGS
     } catch (error) {
       console.error('Error loading display settings:', error)
       return DEFAULT_DISPLAY_SETTINGS
