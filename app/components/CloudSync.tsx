@@ -2,9 +2,21 @@
 
 import { useState } from 'react'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
+import { BookData, fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
+
+const UPLOAD_FP_KEY = 'msw_last_upload_fp'
+const DOWNLOAD_FP_KEY = 'msw_last_download_fp'
+
+function makeFingerprint(data: { books: BookData[]; font: unknown; shortcuts: unknown; displaySettings: unknown }): string {
+  return JSON.stringify({
+    books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate })),
+    font: data.font,
+    shortcuts: data.shortcuts,
+    displaySettings: data.displaySettings
+  })
+}
 
 interface CloudSyncProps {
   onSyncComplete?: () => void
@@ -23,16 +35,20 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
     setMessage('')
     try {
       const allBooks = await getAllBooksFromIDB()
-      const booksWithoutImages = allBooks.map(book => ({
-        ...book,
-        sentences: book.sentences.filter((s: string) => !s.startsWith('data:image/'))
-      }))
       const data = {
-        books: booksWithoutImages,
+        books: allBooks,
         font: fontStorage.getFont(),
         shortcuts: shortcutsStorage.getShortcuts(),
         displaySettings: displayStorage.getSettings()
       }
+
+      const fp = makeFingerprint(data)
+      if (fp === localStorage.getItem(UPLOAD_FP_KEY)) {
+        setStatus('success')
+        setMessage('數據與上次上傳完全一致，無需重新上傳')
+        return
+      }
+
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,6 +57,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       const json = await res.json()
       if (!res.ok || !json.code) throw new Error(json.error || '上傳失敗')
       setSyncCode(json.code)
+      localStorage.setItem(UPLOAD_FP_KEY, fp)
       setStatus('success')
       setMessage('上傳成功！請記下同步碼，在其他設備輸入')
     } catch (e: unknown) {
@@ -57,6 +74,14 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       const res = await fetch(`/api/sync?code=${inputCode.trim()}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '下載失敗')
+
+      const fp = makeFingerprint(data)
+      if (fp === localStorage.getItem(DOWNLOAD_FP_KEY)) {
+        setStatus('success')
+        setMessage('數據與上次同步完全一致，無需更新')
+        return
+      }
+
       if (data.books) {
         for (const book of data.books) await saveBookToIDB(book)
       }
@@ -66,6 +91,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       }
       if (data.shortcuts) shortcutsStorage.saveShortcuts(data.shortcuts)
       if (data.displaySettings) displayStorage.saveSettings(data.displaySettings)
+      localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')
       setMessage(`同步成功！共 ${data.books?.length ?? 0} 本書`)
       setTimeout(() => { onSyncComplete?.(); setIsOpen(false) }, 1500)
