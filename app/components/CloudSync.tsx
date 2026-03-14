@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2 } from 'lucide-react'
-import { storage, fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
+import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 
 interface CloudSyncProps {
   onSyncComplete?: () => void
@@ -15,27 +16,19 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
   const [message, setMessage] = useState('')
   const [syncCode, setSyncCode] = useState('')
 
-  const generateSyncData = () => {
-    const allBooks = storage.getAllBooks()
-    const font = fontStorage.getFont()
-    const shortcuts = shortcutsStorage.getShortcuts()
-    const displaySettings = displayStorage.getSettings()
-
-    return {
-      books: allBooks,
-      font,
-      shortcuts,
-      displaySettings,
-      timestamp: Date.now()
-    }
-  }
-
   const handleUpload = async () => {
     setSyncStatus('uploading')
     setMessage('正在上傳數據...')
 
     try {
-      const syncData = generateSyncData()
+      const allBooks = await getAllBooksFromIDB()
+      const syncData = {
+        books: allBooks,
+        font: fontStorage.getFont(),
+        shortcuts: shortcutsStorage.getShortcuts(),
+        displaySettings: displayStorage.getSettings(),
+        timestamp: Date.now()
+      }
       const dataString = JSON.stringify(syncData)
       
       // 使用 JSONBin.io 免費 API 存儲數據
@@ -93,9 +86,9 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
 
       // 恢復數據
       if (syncData.books) {
-        syncData.books.forEach((book: any) => {
-          storage.saveBook(book)
-        })
+        for (const book of syncData.books) {
+          await saveBookToIDB(book)
+        }
       }
       if (syncData.font) {
         fontStorage.saveFont(syncData.font.fontFamily)
