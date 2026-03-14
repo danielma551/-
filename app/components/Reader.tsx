@@ -193,24 +193,29 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const completedCycles = Math.floor((sentencesRead - 1) / CYCLE_SIZE)
   const cycleRatio = ((sentencesRead - 1) % CYCLE_SIZE + 1) / CYCLE_SIZE
 
-  // Bar max per cycle = CYCLE_SIZE / remaining sentences at cycle start
-  // e.g. goal=100: cycle1→25%, cycle2→33%, cycle3→50%, cycle4→100%
-  const barProgress = (() => {
-    if (readingGoal > 0) {
-      const sentencesAtCycleStart = completedCycles * CYCLE_SIZE
-      const remaining = readingGoal - sentencesAtCycleStart
-      const maxProgress = remaining > 0 ? Math.min(CYCLE_SIZE / remaining, 1) : 1
-      return cycleRatio * maxProgress * 100
-    }
-    return cycleRatio * 100
-  })()
+  const overallProgress = sentences.length > 1 ? currentIndex / (sentences.length - 1) : 0
+
+  // Max fill per cycle = CYCLE_SIZE / remaining sentences
+  // e.g. 100 sentences: cycle1→13/100=13%, cycle2→13/87≈15%, cycle3→13/74≈18%...
+  const sentencesAtCycleStart = completedCycles * CYCLE_SIZE
+  const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
+  const remaining = Math.max(totalForProgress - sentencesAtCycleStart, CYCLE_SIZE)
+  const maxProgress = Math.min(CYCLE_SIZE / remaining, 1)
+
+  const HALF_CYCLE = Math.ceil(CYCLE_SIZE / 2) // 7
+  const posInCycle = (sentencesRead - 1) % CYCLE_SIZE + 1 // 1–13
+
+  const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxProgress * 100
+  const bar2Width = overallProgress >= 0.5
+    ? Math.max((posInCycle - HALF_CYCLE) / (CYCLE_SIZE - HALF_CYCLE), 0) * maxProgress * 100
+    : 0
 
   const getProgressColor = () => {
     if (goalCompleted) return '#22c55e'
     // Red #ef4444 → 瑞幸藍 #00A8E0
-    const r = Math.round(239 + (0   - 239) * cycleRatio)
-    const g = Math.round(68  + (168 - 68)  * cycleRatio)
-    const b = Math.round(68  + (224 - 68)  * cycleRatio)
+    const r = Math.round(239 + (0   - 239) * overallProgress)
+    const g = Math.round(68  + (168 - 68)  * overallProgress)
+    const b = Math.round(68  + (224 - 68)  * overallProgress)
     return `rgb(${r},${g},${b})`
   }
   const textFontFamily = fontFamily.includes(',')
@@ -322,11 +327,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </button>
           </div>
         </div>
-        <div className="w-full bg-gray-200 h-1">
-          <div
-            className="h-1 transition-all duration-300"
-            style={{ width: `${barProgress}%`, backgroundColor: getProgressColor() }}
-          />
+        <div className="w-full">
+          <div className="w-full bg-gray-200 h-3">
+            <div
+              className="h-3 transition-all duration-300"
+              style={{ width: `${bar1Width}%`, backgroundColor: getProgressColor() }}
+            />
+          </div>
+          <div className="w-full bg-gray-200 h-3 mt-0.5">
+            <div
+              className="h-3 transition-all duration-300"
+              style={{ width: `${bar2Width}%`, backgroundColor: getProgressColor() }}
+            />
+          </div>
         </div>
       </header>
 
