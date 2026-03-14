@@ -146,9 +146,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const sentencesRead = currentIndex - startIndex + 1
-  const progress = readingGoal > 0 
-    ? Math.min((sentencesRead / readingGoal) * 100, 100)
-    : ((currentIndex + 1) / sentences.length) * 100
+  const CYCLE_SIZE = 25
+  // Progress resets every 25 sentences: 4% → 100%, then loops
+  const cycleProgress = ((sentencesRead - 1) % CYCLE_SIZE + 1) / CYCLE_SIZE * 100
+
+  const getProgressColor = () => {
+    if (goalCompleted) return '#22c55e'
+    const ratio = cycleProgress / 100
+    // Red #ef4444 → 瑞幸藍 #00A8E0
+    const r = Math.round(239 + (0   - 239) * ratio)
+    const g = Math.round(68  + (168 - 68)  * ratio)
+    const b = Math.round(68  + (224 - 68)  * ratio)
+    return `rgb(${r},${g},${b})`
+  }
   const textFontFamily = fontFamily.includes(',')
     ? fontFamily
     : `"${fontFamily}", system-ui, -apple-system, sans-serif`
@@ -176,8 +186,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
         <div className="w-full bg-gray-200 h-1">
           <div
-            className={`h-1 transition-all duration-300 ${goalCompleted ? 'bg-green-600' : 'bg-indigo-600'}`}
-            style={{ width: `${progress}%` }}
+            className="h-1 transition-all duration-300"
+            style={{ width: `${cycleProgress}%`, backgroundColor: getProgressColor() }}
           />
         </div>
       </header>
