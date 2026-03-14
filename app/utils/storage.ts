@@ -170,46 +170,31 @@ export const displayStorage = {
 }
 
 export const fontStorage = {
-  saveFont(fontFamily: string, fontData?: string): void {
+  saveFont(fontFamily: string): void {
     if (typeof window === 'undefined') return
     try {
-      // Warn if font data is too large (>3MB base64)
-      if (fontData && fontData.length > 3 * 1024 * 1024) {
-        console.warn('Font file is large, storing name only to avoid storage quota issues')
-        localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily, fontData: undefined }))
-        return
-      }
-      localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily, fontData }))
+      localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily }))
     } catch (error) {
-      console.error('Error saving font:', error)
-      // Try saving just the name without data
-      try {
-        localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily, fontData: undefined }))
-      } catch {
-        // Storage completely full, ignore
-      }
+      console.error('Error saving font name:', error)
     }
   },
 
-  getFont(): { fontFamily: string; fontData?: string } | null {
+  getFont(): { fontFamily: string } | null {
     if (typeof window === 'undefined') return null
     try {
       const data = localStorage.getItem(FONT_STORAGE_KEY)
       if (!data) return null
       const parsed = JSON.parse(data)
-      // If stored font data is too large, strip the data and keep only the name
-      if (parsed.fontData && parsed.fontData.length > 3 * 1024 * 1024) {
-        console.warn('Stored font data too large, clearing font data from storage')
-        const trimmed = { fontFamily: parsed.fontFamily, fontData: undefined }
+      if (!parsed.fontFamily) return null
+      // Migrate: remove any old large font data that was stored here
+      if (parsed.fontData) {
         try {
-          localStorage.removeItem(FONT_STORAGE_KEY)
-          localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify(trimmed))
+          localStorage.setItem(FONT_STORAGE_KEY, JSON.stringify({ fontFamily: parsed.fontFamily }))
         } catch {
-          // Ignore cleanup errors
+          // Ignore
         }
-        return trimmed
       }
-      return parsed
+      return { fontFamily: parsed.fontFamily }
     } catch (error) {
       console.error('Error loading font:', error)
       return null

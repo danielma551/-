@@ -1,31 +1,28 @@
 'use client'
 
 import { useEffect } from 'react'
-import { fontStorage } from '../utils/storage'
+import { getFontFromIDB } from '../utils/fontDB'
 
 export default function FontLoader() {
   useEffect(() => {
-    const savedFont = fontStorage.getFont()
+    const loadFont = async () => {
+      try {
+        const saved = await getFontFromIDB()
+        if (!saved) return
 
-    if (savedFont && savedFont.fontData) {
-      const fontName = savedFont.fontFamily
-
-      // Check if font is already loaded
-      const isFontLoaded = Array.from(document.fonts.values()).some(
-        font => font.family === fontName
-      )
-
-      if (!isFontLoaded) {
-        const fontFace = new FontFace(fontName, `url(${savedFont.fontData})`)
-        fontFace.load()
-          .then((loadedFace) => {
-            document.fonts.add(loadedFace)
-          })
-          .catch((error) => {
-            console.error('Failed to load custom font:', error)
-          })
+        const isFontLoaded = Array.from(document.fonts.values()).some(
+          font => font.family === saved.fontFamily
+        )
+        if (!isFontLoaded) {
+          const fontFace = new FontFace(saved.fontFamily, `url(${saved.fontData})`)
+          const loaded = await fontFace.load()
+          document.fonts.add(loaded)
+        }
+      } catch (error) {
+        console.error('Failed to load custom font:', error)
       }
     }
+    loadFont()
   }, [])
 
   return null

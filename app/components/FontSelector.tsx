@@ -25,7 +25,7 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
 
   useEffect(() => {
     const savedFont = fontStorage.getFont()
-    if (savedFont && savedFont.fontData) {
+    if (savedFont) {
       setCustomFont({ name: `📎 ${savedFont.fontFamily}`, value: savedFont.fontFamily })
     }
   }, [])
@@ -103,7 +103,7 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
                     onClick={() => {
                       const savedFont = fontStorage.getFont()
                       if (savedFont) {
-                        onFontChange(savedFont.fontFamily, savedFont.fontData)
+                        onFontChange(savedFont.fontFamily)
                       }
                       setIsOpen(false)
                     }}

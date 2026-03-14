@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle } from 'lucide-react'
 import { storage, fontStorage, shortcutsStorage, displayStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
+import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
 import DisplaySettingsPanel from './DisplaySettings'
@@ -32,24 +33,24 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   useEffect(() => {
     const loadSavedFont = async () => {
-      const savedFont = fontStorage.getFont()
-      if (!savedFont) return
-
-      if (savedFont.fontData) {
-        try {
-          const fontName = savedFont.fontFamily
-          const fontFace = new FontFace(fontName, `url(${savedFont.fontData})`)
+      try {
+        const saved = await getFontFromIDB()
+        if (!saved) return
+        const isFontLoaded = Array.from(document.fonts.values()).some(
+          font => font.family === saved.fontFamily
+        )
+        if (!isFontLoaded) {
+          const fontFace = new FontFace(saved.fontFamily, `url(${saved.fontData})`)
           const loadedFace = await fontFace.load()
           document.fonts.add(loadedFace)
-          await document.fonts.load(`16px "${fontName}"`)
-          setFontFamily(fontName)
-          return
-        } catch (error) {
-          console.error('Failed to load saved custom font:', error)
+          await document.fonts.load(`16px "${saved.fontFamily}"`)
         }
+        setFontFamily(saved.fontFamily)
+      } catch (error) {
+        console.error('Failed to load saved custom font:', error)
+        const savedFont = fontStorage.getFont()
+        if (savedFont) setFontFamily(savedFont.fontFamily)
       }
-
-      setFontFamily(savedFont.fontFamily)
     }
 
     loadSavedFont()
@@ -121,6 +122,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         .then((loadedFace) => {
           document.fonts.add(loadedFace)
           setFontFamily(newFontFamily)
+          saveFontToIDB(newFontFamily, fontData).catch(console.error)
         })
         .catch((error) => {
           console.error('Failed to apply custom font:', error)
@@ -128,8 +130,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         })
     } else {
       setFontFamily(newFontFamily)
+      clearFontFromIDB().catch(console.error)
     }
-    fontStorage.saveFont(newFontFamily, fontData)
+    fontStorage.saveFont(newFontFamily)
   }
 
   const handleShortcutsChange = (newShortcuts: KeyboardShortcuts) => {

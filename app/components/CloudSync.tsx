@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2 } from 'lucide-react'
 import { storage, fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
+import { saveFontToIDB } from '../utils/fontDB'
 
 interface CloudSyncProps {
   onSyncComplete?: () => void
@@ -97,7 +98,10 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         })
       }
       if (syncData.font) {
-        fontStorage.saveFont(syncData.font.fontFamily, syncData.font.fontData)
+        fontStorage.saveFont(syncData.font.fontFamily)
+        if (syncData.font.fontData) {
+          saveFontToIDB(syncData.font.fontFamily, syncData.font.fontData).catch(console.error)
+        }
       }
       if (syncData.shortcuts) {
         shortcutsStorage.saveShortcuts(syncData.shortcuts)
