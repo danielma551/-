@@ -277,8 +277,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                                     setGoalCompleted(false)
                                     setSearchResultIdx(i)
                                     setShowSearch(false)
-                                    setSearchQuery('')
-                                    setSearchResults([])
                                   }}
                                   className={`w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2 ${i === searchResultIdx ? 'bg-indigo-50' : ''}`}
                                 >

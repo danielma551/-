@@ -1,11 +1,33 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Upload, BookOpen, Trash2, Clock } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2 } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
 import { storage, generateBookId, BookData } from './utils/storage'
+
+function getBookStyle(title: string): string {
+  const gradients = [
+    'linear-gradient(160deg,#1a1a2e,#16213e)',
+    'linear-gradient(160deg,#134e4a,#065f46)',
+    'linear-gradient(160deg,#4a1d96,#6d28d9)',
+    'linear-gradient(160deg,#7f1d1d,#b91c1c)',
+    'linear-gradient(160deg,#78350f,#b45309)',
+    'linear-gradient(160deg,#1e3a5f,#1d4ed8)',
+    'linear-gradient(160deg,#831843,#be185d)',
+    'linear-gradient(160deg,#1f2937,#374151)',
+    'linear-gradient(160deg,#14532d,#166534)',
+    'linear-gradient(160deg,#7c2d12,#c2410c)',
+    'linear-gradient(160deg,#312e81,#4338ca)',
+    'linear-gradient(160deg,#0c4a6e,#0369a1)',
+  ]
+  let hash = 0
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return gradients[Math.abs(hash) % gradients.length]
+}
 
 export default function Home() {
   const [sentences, setSentences] = useState<string[]>([])
@@ -162,7 +184,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <main className="min-h-screen bg-white">
       {showGoalModal && pendingBook && (
         <GoalModal
           onSetGoal={handleSetGoal}
@@ -170,30 +192,26 @@ export default function Home() {
           maxSentences={pendingBook.sentences.length}
         />
       )}
-      
-      {sentences.length === 0 ? (
-        <div className="flex items-center justify-center min-h-screen p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 max-w-md w-full">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4">
-                <BookOpen className="w-8 h-8 text-indigo-600" />
-              </div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">閱讀網站</h1>
-              <p className="text-gray-600">上傳電子書，一句一句慢慢讀</p>
-            </div>
 
-            <div className="space-y-4">
+      {sentences.length === 0 ? (
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          {/* Header */}
+          <header className="flex items-center justify-between mb-10">
+            <div className="flex items-center space-x-2">
+              <BookOpen className="w-6 h-6 text-gray-800" />
+              <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
+            </div>
+            <div className="flex items-center space-x-3">
+              <CloudSync onSyncComplete={handleSyncComplete} />
               <label
                 htmlFor="file-upload"
-                className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-indigo-300 rounded-xl cursor-pointer bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700 cursor-pointer transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50'}`}
               >
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <Upload className="w-12 h-12 text-indigo-500 mb-3" />
-                  <p className="mb-2 text-sm text-gray-700">
-                    <span className="font-semibold">點擊上傳</span> 或拖放文件
-                  </p>
-                  <p className="text-xs text-gray-500">支持 TXT, EPUB 格式</p>
-                </div>
+                {isUploading
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Plus className="w-4 h-4" />
+                }
+                <span>{isUploading ? '處理中...' : '添加書籍'}</span>
                 <input
                   id="file-upload"
                   ref={fileInputRef}
@@ -204,68 +222,79 @@ export default function Home() {
                   disabled={isUploading}
                 />
               </label>
-
-              {isUploading && (
-                <div className="text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                  <p className="mt-2 text-sm text-gray-600">正在處理文件...</p>
-                </div>
-              )}
-
-              {uploadError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-700">{uploadError}</p>
-                </div>
-              )}
-
-              <div className="flex justify-center">
-                <CloudSync onSyncComplete={handleSyncComplete} />
-              </div>
-
-              {savedBooks.length > 0 && (
-                <div className="mt-6">
-                  <h2 className="text-lg font-semibold text-gray-800 mb-3">我的書架</h2>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {savedBooks.map((book) => (
-                      <div
-                        key={book.id}
-                        onClick={() => handleLoadBook(book)}
-                        className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors group"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-800 truncate">{book.title}</p>
-                          <div className="flex items-center space-x-3 mt-1">
-                            <p className="text-xs text-gray-500 flex items-center">
-                              <Clock className="w-3 h-3 mr-1" />
-                              {formatDate(book.lastReadDate)}
-                            </p>
-                            <p className="text-xs text-indigo-600">
-                              {book.currentIndex + 1} / {book.sentences.length}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => handleDeleteBook(book.id, e)}
-                          className="ml-3 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
+          </header>
+
+          {uploadError && (
+            <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">{uploadError}</p>
+            </div>
+          )}
+
+          {/* Book Grid */}
+          {savedBooks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-40 text-gray-300">
+              <BookOpen className="w-20 h-20 mb-4" />
+              <p className="text-lg font-medium">書架空空如也</p>
+              <p className="text-sm mt-1">點擊「添加書籍」上傳您的第一本書</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-5 gap-y-8">
+              {savedBooks.map((book) => {
+                const progress = book.sentences.length > 0
+                  ? Math.round(((book.currentIndex + 1) / book.sentences.length) * 100)
+                  : 0
+                return (
+                  <div
+                    key={book.id}
+                    className="group cursor-pointer"
+                    onClick={() => handleLoadBook(book)}
+                  >
+                    {/* Cover */}
+                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow duration-200">
+                      <div
+                        className="w-full h-full flex flex-col items-center justify-center p-4"
+                        style={{ background: getBookStyle(book.title) }}
+                      >
+                        <p className="text-white text-sm font-medium text-center leading-snug line-clamp-5 drop-shadow">
+                          {book.title}
+                        </p>
+                      </div>
+                      {/* Reading progress */}
+                      {book.currentIndex > 0 && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+                          <div className="h-full bg-white/70" style={{ width: `${progress}%` }} />
+                        </div>
+                      )}
+                      {/* Delete */}
+                      <button
+                        onClick={(e) => handleDeleteBook(book.id, e)}
+                        className="absolute top-2 right-2 p-1.5 bg-black/40 hover:bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Title & date */}
+                    <p className="mt-2 text-xs text-gray-700 font-medium line-clamp-2 leading-snug">
+                      {book.title}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {formatDate(book.lastReadDate)}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       ) : (
-        <Reader 
-          sentences={sentences} 
-          bookTitle={bookTitle} 
+        <Reader
+          sentences={sentences}
+          bookTitle={bookTitle}
           bookId={bookId}
           initialIndex={currentIndex}
           readingGoal={readingGoal}
-          onReset={handleReset} 
+          onReset={handleReset}
         />
       )}
     </main>
