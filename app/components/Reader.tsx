@@ -147,16 +147,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   const sentencesRead = currentIndex - startIndex + 1
   const CYCLE_SIZE = 25
-  // Progress resets every 25 sentences: 4% → 100%, then loops
-  const cycleProgress = ((sentencesRead - 1) % CYCLE_SIZE + 1) / CYCLE_SIZE * 100
+
+  const completedCycles = Math.floor((sentencesRead - 1) / CYCLE_SIZE)
+  const cycleRatio = ((sentencesRead - 1) % CYCLE_SIZE + 1) / CYCLE_SIZE
+
+  // Bar max per cycle = CYCLE_SIZE / remaining sentences at cycle start
+  // e.g. goal=100: cycle1→25%, cycle2→33%, cycle3→50%, cycle4→100%
+  const barProgress = (() => {
+    if (readingGoal > 0) {
+      const sentencesAtCycleStart = completedCycles * CYCLE_SIZE
+      const remaining = readingGoal - sentencesAtCycleStart
+      const maxProgress = remaining > 0 ? Math.min(CYCLE_SIZE / remaining, 1) : 1
+      return cycleRatio * maxProgress * 100
+    }
+    return cycleRatio * 100
+  })()
 
   const getProgressColor = () => {
     if (goalCompleted) return '#22c55e'
-    const ratio = cycleProgress / 100
     // Red #ef4444 → 瑞幸藍 #00A8E0
-    const r = Math.round(239 + (0   - 239) * ratio)
-    const g = Math.round(68  + (168 - 68)  * ratio)
-    const b = Math.round(68  + (224 - 68)  * ratio)
+    const r = Math.round(239 + (0   - 239) * cycleRatio)
+    const g = Math.round(68  + (168 - 68)  * cycleRatio)
+    const b = Math.round(68  + (224 - 68)  * cycleRatio)
     return `rgb(${r},${g},${b})`
   }
   const textFontFamily = fontFamily.includes(',')
@@ -187,7 +199,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         <div className="w-full bg-gray-200 h-1">
           <div
             className="h-1 transition-all duration-300"
-            style={{ width: `${cycleProgress}%`, backgroundColor: getProgressColor() }}
+            style={{ width: `${barProgress}%`, backgroundColor: getProgressColor() }}
           />
         </div>
       </header>
