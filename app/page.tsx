@@ -5,7 +5,8 @@ import { BookOpen, Trash2, Plus, Loader2 } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
-import { storage, generateBookId, BookData } from './utils/storage'
+import { generateBookId, BookData } from './utils/storage'
+import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
 function getBookStyle(title: string): string {
   const gradients = [
@@ -48,7 +49,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setSavedBooks(storage.getAllBooks())
+    getAllBooksFromIDB().then(setSavedBooks)
   }, [])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,13 +84,8 @@ export default function Home() {
         lastReadDate: Date.now()
       }
       
-      try {
-        storage.saveBook(bookData)
-        setSavedBooks(storage.getAllBooks())
-      } catch (storageError) {
-        console.error('Storage full:', storageError)
-        setUploadError('本地存儲空間不足，書本已加載但無法保存。請刪除部分書本後再試。')
-      }
+      await saveBookToIDB(bookData)
+      getAllBooksFromIDB().then(setSavedBooks)
       
       setPendingBook({
         sentences: data.sentences,
@@ -145,8 +141,7 @@ export default function Home() {
   const handleDeleteBook = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     if (confirm('確定要刪除這本書嗎？')) {
-      storage.deleteBook(id)
-      setSavedBooks(storage.getAllBooks())
+      deleteBookFromIDB(id).then(() => getAllBooksFromIDB().then(setSavedBooks))
       if (bookId === id) {
         setSentences([])
         setBookTitle('')
@@ -164,11 +159,11 @@ export default function Home() {
     setShowGoalModal(false)
     setPendingBook(null)
     setUploadError('')
-    setSavedBooks(storage.getAllBooks())
+    getAllBooksFromIDB().then(setSavedBooks)
   }
 
   const handleSyncComplete = () => {
-    setSavedBooks(storage.getAllBooks())
+    getAllBooksFromIDB().then(setSavedBooks)
   }
 
   const formatDate = (timestamp: number) => {
