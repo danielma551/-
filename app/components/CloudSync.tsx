@@ -36,7 +36,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
     try {
       const allBooks = await getAllBooksFromIDB()
       const data = {
-        books: allBooks,
+        books: allBooks.map(({ coverImage: _ci, ...book }) => book),
         font: fontStorage.getFont(),
         shortcuts: shortcutsStorage.getShortcuts(),
         displaySettings: displayStorage.getSettings()
