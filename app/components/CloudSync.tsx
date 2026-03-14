@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
 import { BookData, fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
@@ -49,10 +50,18 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         return
       }
 
+      // Upload directly to Vercel Blob (bypasses Vercel 4.5MB function body limit)
+      const blob = await upload(`sync-${Date.now()}.json`, JSON.stringify(data), {
+        access: 'public',
+        handleUploadUrl: '/api/blob',
+        contentType: 'application/json',
+      })
+
+      // Store blob URL in Redis and get 4-digit code
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ blobUrl: blob.url })
       })
       const json = await res.json()
       if (!res.ok || !json.code) throw new Error(json.error || '上傳失敗')
@@ -71,9 +80,15 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
     setStatus('downloading')
     setMessage('')
     try {
+      // Get blob URL from Redis
       const res = await fetch(`/api/sync?code=${inputCode.trim()}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || '下載失敗')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || '下載失敗')
+
+      // Fetch actual data directly from Vercel Blob
+      const dataRes = await fetch(json.blobUrl)
+      if (!dataRes.ok) throw new Error('讀取數據失敗')
+      const data = await dataRes.json()
 
       const fp = makeFingerprint(data)
       if (fp === localStorage.getItem(DOWNLOAD_FP_KEY)) {
@@ -200,7 +215,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
                 </div>
               )}
 
-              <p className="text-xs text-gray-400 text-center">同步碼有效期約 30 天・圖片不包含在同步中</p>
+              <p className="text-xs text-gray-400 text-center">同步碼有效期約 30 天</p>
             </div>
           </div>
         </div>

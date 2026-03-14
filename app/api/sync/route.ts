@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '伺服器尚未設定同步功能' }, { status: 503 })
   }
   try {
-    const body = await request.json()
-    const value = JSON.stringify(body)
+    const { blobUrl } = await request.json()
+    if (!blobUrl) return NextResponse.json({ error: '缺少 blobUrl' }, { status: 400 })
 
     // Find a free 4-digit PIN
     let pin = ''
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
     if (!pin) return NextResponse.json({ error: '暫時無法生成同步碼，請稍後再試' }, { status: 503 })
 
-    await redis(['SET', KEY_PREFIX + pin, value, 'EX', TTL_SECONDS])
+    await redis(['SET', KEY_PREFIX + pin, blobUrl, 'EX', TTL_SECONDS])
     return NextResponse.json({ code: pin })
   } catch (error) {
     console.error('Sync upload error:', error)
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   try {
     const result = await redis(['GET', KEY_PREFIX + code])
     if (!result.result) return NextResponse.json({ error: '找不到數據，請確認同步碼是否正確' }, { status: 404 })
-    return NextResponse.json(JSON.parse(result.result))
+    return NextResponse.json({ blobUrl: result.result })
   } catch {
     return NextResponse.json({ error: '下載失敗' }, { status: 500 })
   }
