@@ -86,16 +86,18 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
 }
 
 async function parsePdf(buffer: Buffer): Promise<string[]> {
-  // Use pdfjs-dist directly (avoids version conflict with unpdf's bundled pdfjs)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
+  // Set absolute workerSrc so pdfjs can find the file at runtime (included via vercel.json includeFiles)
+  const workerPath = join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`
+
   const cmapUrl = join(process.cwd(), 'node_modules/pdfjs-dist/cmaps/')
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), cMapUrl: cmapUrl, cMapPacked: true }).promise
 
   // Fast path: text-based PDF
   let fullText = ''
   for (let i = 1; i <= pdf.numPages; i++) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,7 +111,6 @@ async function parsePdf(buffer: Buffer): Promise<string[]> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createCanvas } = require('@napi-rs/canvas') as { createCanvas: (w: number, h: number) => { getContext: (t: string) => unknown; toBuffer: (fmt: string) => Buffer } }
   const { createWorker } = await import('tesseract.js')
-
   const worker = await createWorker('chi_tra+chi_sim+jpn+eng', undefined, { cachePath: '/tmp' })
   const allText: string[] = []
 
