@@ -72,7 +72,7 @@ export default function Home() {
       }
 
       const data = await response.json()
-      const title = file.name.replace(/\.(txt|epub)$/i, '')
+      const title = file.name.replace(/\.(txt|epub|pdf)$/i, '')
       const id = generateBookId(title)
       
       const bookData: BookData = {
@@ -96,7 +96,7 @@ export default function Home() {
       setShowGoalModal(true)
     } catch (error) {
       console.error('Error uploading file:', error)
-      setUploadError('上傳失敗，請確認文件格式（TXT 或 EPUB）並重試')
+      setUploadError('上傳失敗，請確認文件格式（TXT、EPUB 或 PDF）並重試')
     } finally {
       setIsUploading(false)
       // Reset file input so same file can be selected again
@@ -212,7 +212,7 @@ export default function Home() {
                   ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  accept=".txt,.epub"
+                  accept=".txt,.epub,.pdf"
                   onChange={handleFileUpload}
                   disabled={isUploading}
                 />

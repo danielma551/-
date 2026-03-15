@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['epub2'],
+    serverComponentsExternalPackages: ['epub2', '@napi-rs/canvas', 'tesseract.js', 'pdfjs-dist'],
   },
 }
 

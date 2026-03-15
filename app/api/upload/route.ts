@@ -85,6 +85,48 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
   return items
 }
 
+async function parsePdf(buffer: Buffer): Promise<string[]> {
+  // Use pdfjs-dist directly (avoids version conflict with unpdf's bundled pdfjs)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
+  const cmapUrl = join(process.cwd(), 'node_modules/pdfjs-dist/cmaps/')
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), cMapUrl: cmapUrl, cMapPacked: true }).promise
+
+  // Fast path: text-based PDF
+  let fullText = ''
+  for (let i = 1; i <= pdf.numPages; i++) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fullText += content.items.map((item: any) => item.str ?? '').join(' ')
+  }
+  if (fullText.trim().length > 0) {
+    return splitIntoSentences(fullText)
+  }
+
+  // OCR path: image-based PDF (e.g. scanned books)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createCanvas } = require('@napi-rs/canvas') as { createCanvas: (w: number, h: number) => { getContext: (t: string) => unknown; toBuffer: (fmt: string) => Buffer } }
+  const { createWorker } = await import('tesseract.js')
+
+  const worker = await createWorker('chi_tra+chi_sim+jpn+eng', undefined, { cachePath: '/tmp' })
+  const allText: string[] = []
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const viewport = page.getViewport({ scale: 1.5 }) as any
+    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height))
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    const { data: { text: ocrText } } = await worker.recognize(canvas.toBuffer('image/png'))
+    if (ocrText.trim()) allText.push(ocrText)
+  }
+
+  await worker.terminate()
+  return splitIntoSentences(allText.join(' '))
+}
+
 async function parseEpub(buffer: Buffer): Promise<string[]> {
   const tmpPath = join('/tmp', `epub-${randomUUID()}.epub`)
   writeFileSync(tmpPath, buffer)
@@ -126,6 +168,8 @@ export async function POST(request: NextRequest) {
       sentences = splitIntoSentences(buffer.toString('utf-8'))
     } else if (fileName.endsWith('.epub')) {
       sentences = await parseEpub(buffer)
+    } else if (fileName.endsWith('.pdf')) {
+      sentences = await parsePdf(buffer)
     } else {
       return NextResponse.json({ error: '不支持的文件格式' }, { status: 400 })
     }
@@ -137,6 +181,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ sentences })
   } catch (error) {
     console.error('Error processing file:', error)
-    return NextResponse.json({ error: '處理文件時出錯' }, { status: 500 })
+    const msg = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: `處理文件時出錯: ${msg}` }, { status: 500 })
   }
 }
