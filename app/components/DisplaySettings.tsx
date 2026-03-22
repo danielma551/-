@@ -8,13 +8,15 @@ export interface DisplaySettings {
   backgroundColor: string
   textColor: string
   progressColor: string
+  vibrationIntensity: number
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   fontSize: 32,
   backgroundColor: '#ffffff',
   textColor: '#1f2937',
-  progressColor: '#6366f1'
+  progressColor: '#6366f1',
+  vibrationIntensity: 50
 }
 
 interface DisplaySettingsProps {
@@ -216,6 +218,46 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                       className="w-16 h-10 rounded border border-gray-300 cursor-pointer"
                     />
                     <span className="text-sm text-gray-600">{editingSettings.progressColor}</span>
+                  </div>
+                </div>
+
+                {/* Vibration */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    震動強度（手機）
+                  </label>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      step="10"
+                      value={editingSettings.vibrationIntensity}
+                      onChange={(e) => setEditingSettings(prev => ({
+                        ...prev,
+                        vibrationIntensity: parseInt(e.target.value)
+                      }))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <span className="text-sm font-semibold text-gray-800 w-20 text-right">
+                      {editingSettings.vibrationIntensity === 0 ? '關閉' : `${editingSettings.vibrationIntensity}ms`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex justify-between text-xs text-gray-500 flex-1 mr-4">
+                      <span>關閉</span>
+                      <span>強</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (editingSettings.vibrationIntensity > 0 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                          navigator.vibrate(editingSettings.vibrationIntensity)
+                        }
+                      }}
+                      className="text-xs px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+                    >
+                      測試震動
+                    </button>
                   </div>
                 </div>
 

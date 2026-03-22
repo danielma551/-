@@ -72,7 +72,13 @@ export default function Home() {
       }
 
       const data = await response.json()
-      const title = file.name.replace(/\.(txt|epub|pdf)$/i, '')
+      let title = file.name.replace(/\.(txt|epub|pdf)$/i, '').trim()
+      let prev = ''
+      while (prev !== title) {
+        prev = title
+        title = title.replace(/\s*(?:\([^()]*\)|（[^（）]*）|\[[^\[\]]*\])\s*$/, '').trim()
+      }
+      title = title || file.name.replace(/\.(txt|epub|pdf)$/i, '')
       const id = generateBookId(title)
       
       const bookData: BookData = {

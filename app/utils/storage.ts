@@ -133,13 +133,15 @@ export interface DisplaySettings {
   backgroundColor: string
   textColor: string
   progressColor: string
+  vibrationIntensity: number
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   fontSize: 32,
   backgroundColor: '#ffffff',
   textColor: '#1f2937',
-  progressColor: '#6366f1'
+  progressColor: '#6366f1',
+  vibrationIntensity: 50
 }
 
 export const displayStorage = {

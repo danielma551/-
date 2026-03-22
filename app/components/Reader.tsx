@@ -144,15 +144,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setGoalCompleted(false)
   }
 
+  const vibrate = (ms: number) => {
+    if (ms > 0 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(ms)
+    }
+  }
+
   const goToNext = () => {
     if (currentIndex < sentences.length - 1) {
       setCurrentIndex(prev => prev + 1)
+      vibrate(displaySettings.vibrationIntensity)
     }
   }
 
   const goToPrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1)
+      vibrate(displaySettings.vibrationIntensity)
     }
   }
 
@@ -223,7 +231,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           <div className="flex items-center space-x-3">
             <BookOpen className="w-6 h-6 text-indigo-600" />
             {!showSearch && (
-              <h1 className="text-xl font-semibold text-gray-800">{bookTitle}</h1>
+              <h1 className="text-base sm:text-xl font-semibold text-gray-800 max-w-[160px] sm:max-w-xs md:max-w-sm truncate" title={bookTitle}>{bookTitle}</h1>
             )}
             {showSearch ? (
               <div className="relative">
