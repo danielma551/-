@@ -141,7 +141,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   backgroundColor: '#ffffff',
   textColor: '#1f2937',
   progressColor: '#6366f1',
-  vibrationIntensity: 50
+  vibrationIntensity: 100
 }
 
 export const displayStorage = {

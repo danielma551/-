@@ -16,7 +16,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   backgroundColor: '#ffffff',
   textColor: '#1f2937',
   progressColor: '#6366f1',
-  vibrationIntensity: 50
+  vibrationIntensity: 100
 }
 
 interface DisplaySettingsProps {
@@ -234,10 +234,11 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                       max="200"
                       step="10"
                       value={editingSettings.vibrationIntensity}
-                      onChange={(e) => setEditingSettings(prev => ({
-                        ...prev,
-                        vibrationIntensity: parseInt(e.target.value)
-                      }))}
+                      onChange={(e) => {
+                        const newSettings = { ...editingSettings, vibrationIntensity: parseInt(e.target.value) }
+                        setEditingSettings(newSettings)
+                        onSave(newSettings)
+                      }}
                       className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
                     <span className="text-sm font-semibold text-gray-800 w-20 text-right">
