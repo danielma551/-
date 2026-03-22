@@ -225,7 +225,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     : `"${fontFamily}", system-ui, -apple-system, sans-serif`
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: displaySettings.backgroundColor }}>
+    <div className="min-h-screen flex flex-col overflow-x-hidden" style={{ backgroundColor: displaySettings.backgroundColor }}>
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -316,16 +316,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </button>
             )}
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1 sm:space-x-3">
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
             <KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} />
             <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
             <button
               onClick={onReset}
-              className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center space-x-1 px-2 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <Home className="w-5 h-5" />
-              <span>返回首頁</span>
+              <span className="hidden sm:inline">返回首頁</span>
             </button>
           </div>
         </div>

@@ -38,6 +38,7 @@ const PRESET_BACKGROUNDS = [
 export default function DisplaySettings({ settings, onSave }: DisplaySettingsProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [editingSettings, setEditingSettings] = useState(settings)
+  const [vibrateResult, setVibrateResult] = useState<'idle' | 'ok' | 'unsupported'>('idle')
 
   useEffect(() => {
     setEditingSettings(settings)
@@ -250,13 +251,21 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                     </div>
                     <button
                       onClick={() => {
-                        if (editingSettings.vibrationIntensity > 0 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                          navigator.vibrate(editingSettings.vibrationIntensity)
+                        if (typeof navigator === 'undefined' || !('vibrate' in navigator)) {
+                          setVibrateResult('unsupported')
+                        } else if (editingSettings.vibrationIntensity > 0) {
+                          const ok = navigator.vibrate(editingSettings.vibrationIntensity)
+                          setVibrateResult(ok ? 'ok' : 'unsupported')
                         }
+                        setTimeout(() => setVibrateResult('idle'), 2500)
                       }}
-                      className="text-xs px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+                      className={`text-xs px-3 py-1 rounded-lg transition-colors ${
+                        vibrateResult === 'ok' ? 'bg-green-100 text-green-700' :
+                        vibrateResult === 'unsupported' ? 'bg-red-100 text-red-700' :
+                        'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                      }`}
                     >
-                      測試震動
+                      {vibrateResult === 'ok' ? '✓ 已震動' : vibrateResult === 'unsupported' ? '✗ 不支援' : '測試震動'}
                     </button>
                   </div>
                 </div>
