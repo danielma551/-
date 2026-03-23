@@ -1,3 +1,9 @@
+// 【雲端同步後端】
+// 這個文件負責：處理「同步上傳」和「同步下載」的經點。
+// 上傳時：記錄你的資料存到雲端後，產生一個 4 位數密碼回傳給你。
+// 下載時：用戶輸入密碼，就能找到對應的雲端資料並下載。
+// 密碼 30 天內有效。
+
 import { NextRequest, NextResponse } from 'next/server'
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL

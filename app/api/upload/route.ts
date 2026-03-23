@@ -1,3 +1,10 @@
+// 【書籍上傳處理】
+// 這個文件負責：當用戶上傳一本書時，讀取檔案內容並切分成一句一句回傳。
+// 支援三種格式：
+//   - TXT：最簡單，直接按標點切句。
+//   - EPUB：電子書格式，拆解章節內容與圖片。
+//   - PDF：先嘗試直接讀取文字；如果是掃描圖片型的 PDF，則用 OCR 技術迺識圖中文字。
+
 import { NextRequest, NextResponse } from 'next/server'
 import EPub from 'epub2'
 import { writeFileSync, unlinkSync } from 'fs'

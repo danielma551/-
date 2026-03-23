@@ -1,3 +1,9 @@
+// 【字體儲存】
+// 這個文件負責：把用戶自己上傳的字體存到瀏覽器裡，讓下次打開頁面時不用重新上傳。
+// 提供三個功能：存字體、讀取字體、刪除字體。
+// 為什麼不用普通儲存方式？因為字體檔案比較大（普通方式只能存 5MB），
+// 所以改用瀏覽器的「大容量儲存空間」來存。
+
 const DB_NAME = 'reading_website_db'
 const STORE_NAME = 'fonts'
 const FONT_KEY = 'custom_font'

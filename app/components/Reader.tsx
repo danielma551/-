@@ -1,3 +1,14 @@
+// 【閱讀器畫面】
+// 這個文件負責：打開書後看到的主要閱讀頁面。
+// 功能一覽：
+//   - 一次顯示一句話（或一張圖片）
+//   - 上一句 / 下一句按鈕，也支援鍵盤按鍵
+//   - 頂部兩條進度條（每 13 句刷新一次）
+//   - 全文搜索功能
+//   - 到達今日目標後自動回首頁
+//   - 按上下一句時手機震動（強度可在「顯示」設定裡調）
+//   - 包含「顯示」「快捷鍵」「字體」三個設定入口
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -29,6 +40,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
   const [searchResultIdx, setSearchResultIdx] = useState(0)
+  const [vibrateInfo, setVibrateInfo] = useState<string | null>(null)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -145,9 +157,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const vibrate = (ms: number) => {
-    if (ms > 0 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate(ms)
+    if (typeof navigator === 'undefined' || !('vibrate' in navigator)) {
+      setVibrateInfo(`不支援 (intensity=${ms})`)
+    } else if (ms <= 0) {
+      setVibrateInfo(`強度=0，已關閉`)
+    } else {
+      const ok = navigator.vibrate(ms)
+      setVibrateInfo(`強度=${ms}ms, 回傳=${ok ? 'true' : 'false'}`)
     }
+    setTimeout(() => setVibrateInfo(null), 2500)
   }
 
   const goToNext = () => {
@@ -369,6 +387,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </p>
             )}
           </div>
+
+          {vibrateInfo && (
+            <div className="mt-4 text-center text-xs text-gray-400">
+              震動: {vibrateInfo}
+            </div>
+          )}
 
           <div className="mt-8 flex items-center justify-between">
             <button
