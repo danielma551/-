@@ -92,34 +92,43 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// 在字典 HTML 中查找詞語作為詞條標題的位置，返回該詞條的解釋
+// 找下一個詞條的起始位置（下一個「詞語 + 拼音」模式），用來截斷當前詞條
+function findNextEntry(text: string, from: number): number {
+  // 詞條模式：1-4 個中文字符後跟空格和拼音（含聲調字母）
+  const nextEntryRe = /[\u4e00-\u9fff]{1,4}\s{0,3}[a-z]*[\u00C0-\u024F][a-z\u00C0-\u024F·]*/g
+  nextEntryRe.lastIndex = from
+  const m = nextEntryRe.exec(text)
+  return m ? m.index : text.length
+}
+
+// 在字典純文字中查找詞語，使用「詞語 + 拼音聲調」作為詞條識別標準
 function lookupWord(html: string, word: string): string | null {
+  const plain = stripHtml(html)
   const esc = escapeRegex(word)
 
-  // 策略 1：詞條標題緊接在 HTML 標籤之後（如 <p>包括、<b>包括、>包括）
-  // 後面跟著空格 + 拼音或詞性標記，說明是真正的詞條起始
-  const afterTagRe = new RegExp('>' + esc + '[\\s\\u00C0-\\u024F{（〈①\\s]')
-  const m1 = afterTagRe.exec(html)
-  if (m1) {
-    // 從詞語本身開始截取，跳過前面的 '>'
-    const start = m1.index + 1
-    return stripHtml(html.slice(start, start + 700)).trim()
+  // 核心策略：詞條標題後面必定跟著拼音（包含聲調字母 ā á ǎ à ē é ě è 等）
+  // Unicode U+00C0-U+024F 涵蓋所有帶聲調的拼音字母
+  const headwordRe = new RegExp(
+    esc + '\\s{0,3}[a-z]*[\\u00C0-\\u024F][a-z\\u00C0-\\u024F·]*',
+    'g'
+  )
+
+  let bestMatch: string | null = null
+  let m: RegExpExecArray | null
+
+  while ((m = headwordRe.exec(plain)) !== null) {
+    const entryStart = m.index
+    // 找到下一個詞條的位置，用來截斷當前詞條（最多取 600 字符）
+    const nextEntry = findNextEntry(plain, entryStart + word.length + 5)
+    const entryEnd = Math.min(entryStart + 600, nextEntry)
+    const entryText = plain.slice(entryStart, entryEnd).trim()
+
+    // 優先返回第一個匹配（詞典按拼音排序，第一個最可能是正確詞條）
+    bestMatch = entryText
+    break
   }
 
-  // 策略 2：在純文字中，詞條前面是前一條的句號（。包括 拼音）
-  const plain = stripHtml(html)
-  const afterPeriodRe = new RegExp('。\\s*' + esc + '\\s+[\\u00C0-\\u024F]')
-  const m2 = afterPeriodRe.exec(plain)
-  if (m2) {
-    // 找到詞語在這段匹配中的位置
-    const wordStart = m2.index + m2[0].indexOf(word)
-    return plain.slice(wordStart, wordStart + 500).trim()
-  }
-
-  // 策略 3：後備——找純文字中任意出現的位置（原本的邏輯）
-  const idx = plain.indexOf(word)
-  if (idx === -1) return null
-  return plain.slice(idx, idx + 500).trim()
+  return bestMatch
 }
 
 export async function GET(request: NextRequest) {
