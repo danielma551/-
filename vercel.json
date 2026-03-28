@@ -2,6 +2,9 @@
   "functions": {
     "app/api/upload/route.ts": {
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/**,node_modules/@napi-rs/canvas*/**"
+    },
+    "app/api/dict/route.ts": {
+      "includeFiles": "[3_01]现代汉语词典.mobi"
     }
   }
 }

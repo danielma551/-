@@ -19,6 +19,7 @@ import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
 import DisplaySettingsPanel from './DisplaySettings'
+import DictionaryPanel from './DictionaryPanel'
 
 interface ReaderProps {
   sentences: string[]
@@ -40,7 +41,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
   const [searchResultIdx, setSearchResultIdx] = useState(0)
-  const [vibrateInfo, setVibrateInfo] = useState<string | null>(null)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -157,15 +157,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const vibrate = (ms: number) => {
-    if (typeof navigator === 'undefined' || !('vibrate' in navigator)) {
-      setVibrateInfo(`不支援 (intensity=${ms})`)
-    } else if (ms <= 0) {
-      setVibrateInfo(`強度=0，已關閉`)
-    } else {
-      const ok = navigator.vibrate(ms)
-      setVibrateInfo(`強度=${ms}ms, 回傳=${ok ? 'true' : 'false'}`)
+    if (ms > 0 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(ms)
     }
-    setTimeout(() => setVibrateInfo(null), 2500)
   }
 
   const goToNext = () => {
@@ -335,6 +329,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             )}
           </div>
           <div className="flex items-center space-x-1 sm:space-x-3">
+            <DictionaryPanel />
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
             <KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} />
             <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
@@ -387,12 +382,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </p>
             )}
           </div>
-
-          {vibrateInfo && (
-            <div className="mt-4 text-center text-xs text-gray-400">
-              震動: {vibrateInfo}
-            </div>
-          )}
 
           <div className="mt-8 flex items-center justify-between">
             <button
