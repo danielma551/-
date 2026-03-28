@@ -87,18 +87,39 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-// 在字典文字中查找詞語，返回包含解釋的段落
+// 將詞語轉為 RegExp 安全字串（避免特殊字符干擾）
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// 在字典 HTML 中查找詞語作為詞條標題的位置，返回該詞條的解釋
 function lookupWord(html: string, word: string): string | null {
-  // 搜尋詞語在 HTML 中的位置
-  const idx = html.indexOf(word)
+  const esc = escapeRegex(word)
+
+  // 策略 1：詞條標題緊接在 HTML 標籤之後（如 <p>包括、<b>包括、>包括）
+  // 後面跟著空格 + 拼音或詞性標記，說明是真正的詞條起始
+  const afterTagRe = new RegExp('>' + esc + '[\\s\\u00C0-\\u024F{（〈①\\s]')
+  const m1 = afterTagRe.exec(html)
+  if (m1) {
+    // 從詞語本身開始截取，跳過前面的 '>'
+    const start = m1.index + 1
+    return stripHtml(html.slice(start, start + 700)).trim()
+  }
+
+  // 策略 2：在純文字中，詞條前面是前一條的句號（。包括 拼音）
+  const plain = stripHtml(html)
+  const afterPeriodRe = new RegExp('。\\s*' + esc + '\\s+[\\u00C0-\\u024F]')
+  const m2 = afterPeriodRe.exec(plain)
+  if (m2) {
+    // 找到詞語在這段匹配中的位置
+    const wordStart = m2.index + m2[0].indexOf(word)
+    return plain.slice(wordStart, wordStart + 500).trim()
+  }
+
+  // 策略 3：後備——找純文字中任意出現的位置（原本的邏輯）
+  const idx = plain.indexOf(word)
   if (idx === -1) return null
-
-  // 往前找段落起始，往後找段落結尾，截取上下文
-  const contextStart = Math.max(0, idx - 100)
-  const contextEnd = Math.min(html.length, idx + 600)
-  const context = html.slice(contextStart, contextEnd)
-
-  return stripHtml(context).trim()
+  return plain.slice(idx, idx + 500).trim()
 }
 
 export async function GET(request: NextRequest) {
