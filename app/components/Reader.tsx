@@ -106,6 +106,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (e.key === shortcuts.nextSentence && currentIndex < sentences.length - 1) {
         e.preventDefault()
         setCurrentIndex(prev => prev + 1)
+        // 鍵盤翻頁也要記錄閱讀歷史（與按鈕的 goToNext 保持一致）
+        historyStorage.recordRead(1)
       } else if (e.key === shortcuts.previousSentence && currentIndex > 0) {
         e.preventDefault()
         setCurrentIndex(prev => prev - 1)
