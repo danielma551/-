@@ -5,6 +5,7 @@
 //   - 顯示設定（字體大小、背景顏色、文字顏色、震動強度等）
 //   - 目前使用的字體名稱
 //   - 書籍的格式定義（BookData）與 ID 產生方法
+//   - 每日閱讀記錄（用於 30 天趨勢圖）
 
 export interface BookData {
   id: string
@@ -222,5 +223,52 @@ export const fontStorage = {
     } catch (error) {
       console.error('Error clearing font:', error)
     }
+  }
+}
+
+// 每日閱讀記錄的 localStorage 鍵名
+const HISTORY_STORAGE_KEY = 'reading-history'
+
+// 每日閱讀記錄的格式：日期字串 → 當天讀了幾句
+// 例如 { "2026-03-28": 45, "2026-03-29": 23 }
+export type ReadingHistory = Record<string, number>
+
+export const historyStorage = {
+  // 取得全部閱讀記錄
+  getHistory(): ReadingHistory {
+    if (typeof window === 'undefined') return {}
+    try {
+      const data = localStorage.getItem(HISTORY_STORAGE_KEY)
+      return data ? JSON.parse(data) : {}
+    } catch {
+      return {}
+    }
+  },
+
+  // 記錄今天又讀了幾句（累計加上去）
+  recordRead(count: number): void {
+    if (typeof window === 'undefined') return
+    try {
+      const history = historyStorage.getHistory()
+      // 用當地時間的日期字串作為 key，例如 "2026-03-28"
+      const today = new Date().toLocaleDateString('en-CA')
+      history[today] = (history[today] ?? 0) + count
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history))
+    } catch {
+      // 寫入失敗時靜默忽略
+    }
+  },
+
+  // 取得最近 N 天的資料（含沒有閱讀的日子，補 0）
+  getLast30Days(): { date: string; count: number }[] {
+    const history = historyStorage.getHistory()
+    const result: { date: string; count: number }[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const key = d.toLocaleDateString('en-CA')
+      result.push({ date: key, count: history[key] ?? 0 })
+    }
+    return result
   }
 }

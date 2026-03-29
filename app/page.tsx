@@ -14,6 +14,7 @@ import { BookOpen, Trash2, Plus, Loader2, ImagePlus } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
+import ReadingTrend from './components/ReadingTrend'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
@@ -240,6 +241,9 @@ export default function Home() {
               <p className="text-sm text-red-700">{uploadError}</p>
             </div>
           )}
+
+          {/* 30天閱讀趨勢圖（有資料時才顯示） */}
+          <ReadingTrend />
 
           {/* Book Grid */}
           {savedBooks.length === 0 ? (

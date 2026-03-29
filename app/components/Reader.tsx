@@ -13,7 +13,7 @@
 
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
@@ -166,6 +166,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (currentIndex < sentences.length - 1) {
       setCurrentIndex(prev => prev + 1)
       vibrate(displaySettings.vibrationIntensity)
+      // 每次翻到下一句，記錄今天讀了 1 句（用於 30 天趨勢圖）
+      historyStorage.recordRead(1)
     }
   }
 
