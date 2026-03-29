@@ -12,17 +12,9 @@ export default function ReadingTrend() {
   // 最近 30 天的閱讀資料：每天的日期和句數
   const [days, setDays] = useState<{ date: string; count: number }[]>([])
 
-  // 原始 localStorage 資料（用於診斷）
-  const [rawData, setRawData] = useState<string>('讀取中...')
-
   // 頁面載入時從 localStorage 讀取記錄
   useEffect(() => {
     setDays(historyStorage.getLast30Days())
-    // 直接讀 localStorage 確認數據是否存在
-    const raw = typeof window !== 'undefined'
-      ? localStorage.getItem('reading-history') ?? '（空）'
-      : '（伺服器端）'
-    setRawData(raw)
   }, [])
 
   // 計算最大值，用於決定柱子的相對高度
@@ -51,9 +43,6 @@ export default function ReadingTrend() {
           </div>
         )}
       </div>
-
-      {/* 診斷行：顯示 localStorage 原始內容 */}
-      <p className="text-xs text-gray-300 mb-2 break-all">📦 {rawData}</p>
 
       {/* 沒有閱讀記錄時顯示提示 */}
       {totalSentences === 0 ? (

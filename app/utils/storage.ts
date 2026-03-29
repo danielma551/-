@@ -254,8 +254,8 @@ export const historyStorage = {
       const today = new Date().toLocaleDateString('en-CA')
       history[today] = (history[today] ?? 0) + count
       localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history))
-    } catch {
-      // 寫入失敗時靜默忽略
+    } catch (e) {
+      console.error('[historyStorage] recordRead failed:', e)
     }
   },
 

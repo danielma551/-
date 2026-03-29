@@ -9,19 +9,20 @@
 import { useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
-import { BookData, fontStorage, shortcutsStorage, displayStorage } from '../utils/storage'
+import { BookData, fontStorage, shortcutsStorage, displayStorage, historyStorage, ReadingHistory } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 
 const UPLOAD_FP_KEY = 'msw_last_upload_fp'
 const DOWNLOAD_FP_KEY = 'msw_last_download_fp'
 
-function makeFingerprint(data: { books: BookData[]; font: unknown; shortcuts: unknown; displaySettings: unknown }): string {
+function makeFingerprint(data: { books: BookData[]; font: unknown; shortcuts: unknown; displaySettings: unknown; readingHistory?: unknown }): string {
   return JSON.stringify({
     books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate })),
     font: data.font,
     shortcuts: data.shortcuts,
-    displaySettings: data.displaySettings
+    displaySettings: data.displaySettings,
+    readingHistory: data.readingHistory
   })
 }
 
@@ -46,7 +47,9 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         books: allBooks.map(({ coverImage: _ci, ...book }) => book),
         font: fontStorage.getFont(),
         shortcuts: shortcutsStorage.getShortcuts(),
-        displaySettings: displayStorage.getSettings()
+        displaySettings: displayStorage.getSettings(),
+        // 把每日閱讀記錄也一起上傳，讓其他裝置能看到趨勢圖
+        readingHistory: historyStorage.getHistory()
       }
 
       const fp = makeFingerprint(data)
@@ -112,6 +115,16 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       }
       if (data.shortcuts) shortcutsStorage.saveShortcuts(data.shortcuts)
       if (data.displaySettings) displayStorage.saveSettings(data.displaySettings)
+      // 合併閱讀記錄：同一天取兩者中較大的數值，避免覆蓋本地數據
+      if (data.readingHistory) {
+        const local = historyStorage.getHistory()
+        const remote = data.readingHistory as ReadingHistory
+        const merged: ReadingHistory = { ...local }
+        for (const [date, count] of Object.entries(remote)) {
+          merged[date] = Math.max(merged[date] ?? 0, count)
+        }
+        localStorage.setItem('reading-history', JSON.stringify(merged))
+      }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')
       setMessage(`同步成功！共 ${data.books?.length ?? 0} 本書`)
