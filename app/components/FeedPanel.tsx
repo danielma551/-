@@ -30,8 +30,8 @@ interface FeedData {
 }
 
 interface FeedPanelProps {
-  // 用戶點文章後，回傳句子陣列讓首頁開始閱讀
-  onReadArticle: (sentences: string[], title: string) => void
+  // 用戶點文章後，回傳句子陣列讓首頁開始閱讀（附文章原始連結將条更新已閱讀狀態）
+  onReadArticle: (sentences: string[], title: string, link: string) => void
 }
 
 export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
@@ -207,8 +207,7 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     if (article.content && article.content.length > 200) {
       const sentences = splitSentences(article.content)
       if (sentences.length > 0) {
-        markAsRead(article.link)
-        onReadArticle(sentences, article.title)
+        onReadArticle(sentences, article.title, article.link)
         return
       }
     }
@@ -218,8 +217,7 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
       const res = await fetch(`/api/rss?url=${encodeURIComponent(article.link)}&type=article`)
       const data = await res.json()
       if (data.sentences && data.sentences.length > 0) {
-        markAsRead(article.link)
-        onReadArticle(data.sentences, article.title)
+        onReadArticle(data.sentences, article.title, article.link)
       } else {
         alert('無法取得文章正文，請嘗試直接在瀏覽器開啟。')
       }

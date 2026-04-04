@@ -57,6 +57,7 @@ export default function Home() {
     index: number
   } | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
+  const [readingArticleLink, setReadingArticleLink] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -184,12 +185,24 @@ export default function Home() {
   }
 
   // 用戶從 RSS 訂閱點了一篇文章，直接開啟閱讀器（不需要目標設定）
-  const handleReadArticle = (articleSentences: string[], title: string) => {
+  const handleReadArticle = (articleSentences: string[], title: string, link: string) => {
+    setReadingArticleLink(link)
     setSentences(articleSentences)
     setBookTitle(title)
     setBookId('article-' + Date.now())
     setCurrentIndex(0)
     setReadingGoal(0)
+  }
+
+  // 用戶讀完文章最後一句：將文章連結寫入 localStorage，FeedPanel 再次挂載時讀取
+  const handleArticleFinished = () => {
+    if (!readingArticleLink) return
+    try {
+      const raw = localStorage.getItem('reading-feed-read')
+      const links: string[] = raw ? JSON.parse(raw) : []
+      if (!links.includes(readingArticleLink)) links.push(readingArticleLink)
+      localStorage.setItem('reading-feed-read', JSON.stringify(links))
+    } catch {}
   }
 
   const formatDate = (timestamp: number) => {
@@ -351,6 +364,7 @@ export default function Home() {
           initialIndex={currentIndex}
           readingGoal={readingGoal}
           onReset={handleReset}
+          onArticleFinished={readingArticleLink ? handleArticleFinished : undefined}
         />
       )}
     </main>

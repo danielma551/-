@@ -28,12 +28,14 @@ interface ReaderProps {
   initialIndex: number
   readingGoal: number
   onReset: () => void
+  onArticleFinished?: () => void
 }
 
-export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, onReset }: ReaderProps) {
+export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, onReset, onArticleFinished }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
+  const [articleCompleted, setArticleCompleted] = useState(false)
   const [fontFamily, setFontFamily] = useState('system-ui, -apple-system, sans-serif')
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
@@ -90,6 +92,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }
     }
   }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset])
+
+  // 文章讀到最後一句：觸發完成畫面
+  useEffect(() => {
+    if (onArticleFinished && sentences.length > 0 && currentIndex === sentences.length - 1 && !articleCompleted) {
+      setArticleCompleted(true)
+      onArticleFinished()
+    }
+  }, [currentIndex, sentences.length, onArticleFinished, articleCompleted])
 
   useEffect(() => {
     if (bookId) {
@@ -411,6 +421,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
               <p className="text-green-800 font-medium">🎉 恭喜！您已完成今天的閱讀目標</p>
               <p className="text-green-600 text-sm mt-1">3秒後自動返回首頁...</p>
+            </div>
+          )}
+          {articleCompleted && (
+            <div className="mt-6 p-6 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl text-center shadow-sm">
+              <p className="text-3xl mb-2">🎉</p>
+              <p className="text-green-800 font-semibold text-lg">恭喜！文章讀完了</p>
+              <p className="text-green-600 text-sm mt-1 mb-4">已記錄為已閱讀</p>
+              <button
+                onClick={onReset}
+                className="px-6 py-2.5 bg-green-500 text-white rounded-full text-sm font-medium hover:bg-green-600 transition-colors shadow"
+              >
+                返回書架
+              </button>
             </div>
           )}
         </div>
