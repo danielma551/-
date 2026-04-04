@@ -17,6 +17,7 @@ interface Article {
   link: string
   date: string
   summary: string
+  content: string  // 完整正文（純文字，已去 HTML 標籤），Wewe-RSS fulltext 模式會填入
 }
 
 // 一個 Feed 來源抓取回來的資料
@@ -104,8 +105,9 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
       if (!link) { const h = b.match(/<link[^>]+href="([^"]+)"/) ; link = h ? h[1] : '' }
       const date = fmtDate(getTag(b, 'pubDate') || getTag(b, 'published') || getTag(b, 'updated'))
       const raw = getTag(b, 'content:encoded') || getTag(b, 'content') || getTag(b, 'description') || getTag(b, 'summary')
-      const summary = stripHtml(raw).slice(0, 120) + (raw.length > 120 ? '…' : '')
-      if (title && link) items.push({ title, link, date, summary })
+      const plainContent = stripHtml(raw)
+      const summary = plainContent.slice(0, 120) + (plainContent.length > 120 ? '…' : '')
+      if (title && link) items.push({ title, link, date, summary, content: plainContent })
     }
     return { feedTitle, articles: items }
   }
@@ -190,8 +192,27 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     })
   }
 
-  // 點擊文章：抓取正文並進入閱讀器，成功後標記為已閱讀
+  // 把純文字切成句子（與 upload 路由一致）
+  const splitSentences = (text: string): string[] => {
+    const cleaned = text.replace(/\r\n/g, '\n').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
+    const matches = cleaned.match(/[^.!?。！？;；,，:：]+[.!?。！？;；,，:：]+/g) || []
+    return matches.length > 0
+      ? matches.map(s => s.trim()).filter(s => s.length > 0)
+      : cleaned.length > 0 ? [cleaned] : []
+  }
+
+  // 點擊文章：優先使用 feed 內建全文（Wewe-RSS fulltext 模式），否則再抓網頁
   const handleReadArticle = async (article: Article) => {
+    // 若 feed 已含完整正文（Wewe-RSS FEED_MODE=fulltext），直接使用，不需再抓 WeChat 網址
+    if (article.content && article.content.length > 200) {
+      const sentences = splitSentences(article.content)
+      if (sentences.length > 0) {
+        markAsRead(article.link)
+        onReadArticle(sentences, article.title)
+        return
+      }
+    }
+    // 備用：抓取文章原始網頁
     setLoadingArticle(article.link)
     try {
       const res = await fetch(`/api/rss?url=${encodeURIComponent(article.link)}&type=article`)
