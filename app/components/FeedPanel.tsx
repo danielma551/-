@@ -45,14 +45,33 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
   const [newUrl, setNewUrl] = useState('')
   // 正在抓取某篇文章的正文
   const [loadingArticle, setLoadingArticle] = useState<string | null>(null)
+  // 已閱讀的文章連結集合（存 localStorage）
+  const [readLinks, setReadLinks] = useState<Set<string>>(new Set())
+  // 是否隱藏已閱讀文章
+  const [hideRead, setHideRead] = useState(false)
 
   // 載入已儲存的訂閱來源
   useEffect(() => {
     const saved = feedStorage.getFeeds()
     setFeeds(saved)
+    // 載入已閱讀記錄
+    try {
+      const raw = localStorage.getItem('reading-feed-read')
+      if (raw) setReadLinks(new Set(JSON.parse(raw)))
+    } catch {}
     // 自動抓取每個 Feed 的最新文章
     saved.forEach(feed => fetchFeed(feed))
   }, [])
+
+  // 標記某篇文章為已閱讀並持久化
+  const markAsRead = (link: string) => {
+    setReadLinks(prev => {
+      const next = new Set(prev)
+      next.add(link)
+      try { localStorage.setItem('reading-feed-read', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
 
   // 判斷是否為本地 URL（localhost / 127.0.0.1），本地 URL 由瀏覽器直接抓取
   const isLocalUrl = (url: string) =>
@@ -78,7 +97,7 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     const items: Article[] = []
     const pat = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi
     let m
-    while ((m = pat.exec(xml)) !== null && items.length < 20) {
+    while ((m = pat.exec(xml)) !== null && items.length < 50) {
       const b = m[1]
       const title = stripHtml(getTag(b, 'title')) || '（無標題）'
       let link = getTag(b, 'link')
@@ -171,13 +190,14 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     })
   }
 
-  // 點擊文章：抓取正文並進入閱讀器
+  // 點擊文章：抓取正文並進入閱讀器，成功後標記為已閱讀
   const handleReadArticle = async (article: Article) => {
     setLoadingArticle(article.link)
     try {
       const res = await fetch(`/api/rss?url=${encodeURIComponent(article.link)}&type=article`)
       const data = await res.json()
       if (data.sentences && data.sentences.length > 0) {
+        markAsRead(article.link)
         onReadArticle(data.sentences, article.title)
       } else {
         alert('無法取得文章正文，請嘗試直接在瀏覽器開啟。')
@@ -223,6 +243,15 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
           <h2 className="text-base font-semibold text-blue-600">訂閱文章</h2>
         </div>
         <div className="flex items-center space-x-3">
+          {/* 隱藏已讀切換 */}
+          <button
+            onClick={() => setHideRead(v => !v)}
+            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+              hideRead ? 'bg-gray-100 text-gray-500 border-gray-200' : 'text-gray-300 border-gray-200 hover:text-gray-500'
+            }`}
+          >
+            {hideRead ? '顯示已讀' : '隱藏已讀'}
+          </button>
           {/* 刷新按鈕 */}
           <button onClick={refreshAll} className="text-gray-400 hover:text-gray-600" title="刷新所有訂閱">
             <RefreshCw className="w-4 h-4" />
@@ -318,40 +347,51 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
                   {!data?.loading && !data?.error && data?.articles?.length === 0 && (
                     <p className="px-4 py-3 text-sm text-gray-300">暫無文章</p>
                   )}
-                  {data?.articles?.map((article, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleReadArticle(article)}
-                      disabled={loadingArticle === article.link}
-                      className="w-full text-left px-4 py-3 border-t border-gray-50 hover:bg-blue-50 transition-colors disabled:opacity-50"
-                    >
-                      <div className="flex items-start justify-between space-x-2">
-                        <div className="flex-1 min-w-0">
-                          {/* 文章標題 */}
-                          <p className="text-sm text-gray-800 font-medium line-clamp-2 leading-snug">
-                            {article.title}
-                          </p>
-                          {/* 摘要 */}
-                          {article.summary && (
-                            <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                              {article.summary}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex-shrink-0 flex flex-col items-end space-y-1">
-                          {/* 發布日期 */}
-                          {article.date && (
-                            <span className="text-xs text-gray-300">{article.date}</span>
-                          )}
-                          {/* 載入指示 */}
-                          {loadingArticle === article.link
-                            ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                            : <span className="text-xs text-blue-400">閱讀</span>
-                          }
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                  {data?.articles
+                    ?.filter(a => !hideRead || !readLinks.has(a.link))
+                    ?.map((article, idx) => {
+                      const isRead = readLinks.has(article.link)
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleReadArticle(article)}
+                          disabled={loadingArticle === article.link}
+                          className={`w-full text-left px-4 py-3 border-t border-gray-50 transition-colors disabled:opacity-50 ${
+                            isRead ? 'hover:bg-gray-50 opacity-50' : 'hover:bg-blue-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between space-x-2">
+                            <div className="flex-1 min-w-0">
+                              {/* 文章標題 */}
+                              <p className={`text-sm font-medium line-clamp-2 leading-snug ${
+                                isRead ? 'text-gray-400' : 'text-gray-800'
+                              }`}>
+                                {article.title}
+                              </p>
+                              {/* 摘要 */}
+                              {article.summary && (
+                                <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                                  {article.summary}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0 flex flex-col items-end space-y-1">
+                              {/* 發布日期 */}
+                              {article.date && (
+                                <span className="text-xs text-gray-300">{article.date}</span>
+                              )}
+                              {/* 已讀 / 載入指示 */}
+                              {loadingArticle === article.link
+                                ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                                : isRead
+                                  ? <span className="text-xs text-green-400">✓ 已讀</span>
+                                  : <span className="text-xs text-blue-400">閱讀</span>
+                              }
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
                 </div>
               )}
             </div>

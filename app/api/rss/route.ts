@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     const articles: { title: string; link: string; date: string; summary: string }[] = []
 
     let match
-    while ((match = itemPattern.exec(text)) !== null && articles.length < 20) {
+    while ((match = itemPattern.exec(text)) !== null && articles.length < 50) {
       const block = match[1]
 
       // 取標題
