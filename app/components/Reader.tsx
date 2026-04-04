@@ -11,7 +11,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
@@ -40,6 +40,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
   const [showSearch, setShowSearch] = useState(false)
+  const [fadeVisible, setFadeVisible] = useState(true)
+  const [headerVisible, setHeaderVisible] = useState(true)
+  const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
   const [searchResultIdx, setSearchResultIdx] = useState(0)
@@ -49,6 +52,24 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setStartIndex(initialIndex)
     setGoalCompleted(false)
   }, [initialIndex])
+
+  useEffect(() => {
+    const resetTimer = () => {
+      setHeaderVisible(true)
+      if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
+      headerHideTimer.current = setTimeout(() => {
+        if (!showSearch) setHeaderVisible(false)
+      }, 3000)
+    }
+    resetTimer()
+    window.addEventListener('mousemove', resetTimer)
+    window.addEventListener('touchstart', resetTimer)
+    return () => {
+      window.removeEventListener('mousemove', resetTimer)
+      window.removeEventListener('touchstart', resetTimer)
+      if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
+    }
+  }, [showSearch])
 
   useEffect(() => {
     const loadSavedFont = async () => {
@@ -115,12 +136,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       
       if (e.key === shortcuts.nextSentence && currentIndex < sentences.length - 1) {
         e.preventDefault()
-        setCurrentIndex(prev => prev + 1)
-        // 鍵盤翻頁也要記錄閱讀歷史（與按鈕的 goToNext 保持一致）
         historyStorage.recordRead(1)
+        triggerFade(() => setCurrentIndex(prev => prev + 1))
       } else if (e.key === shortcuts.previousSentence && currentIndex > 0) {
         e.preventDefault()
-        setCurrentIndex(prev => prev - 1)
+        triggerFade(() => setCurrentIndex(prev => prev - 1))
       } else if (e.key === shortcuts.returnHome) {
         e.preventDefault()
         onReset()
@@ -174,19 +194,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }
 
+  const triggerFade = (action: () => void) => {
+    setFadeVisible(false)
+    setTimeout(() => {
+      action()
+      setFadeVisible(true)
+    }, 160)
+  }
+
   const goToNext = () => {
     if (currentIndex < sentences.length - 1) {
-      setCurrentIndex(prev => prev + 1)
       vibrate(displaySettings.vibrationIntensity)
-      // 每次翻到下一句，記錄今天讀了 1 句（用於 30 天趨勢圖）
       historyStorage.recordRead(1)
+      triggerFade(() => setCurrentIndex(prev => prev + 1))
     }
   }
 
   const goToPrevious = () => {
     if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1)
       vibrate(displaySettings.vibrationIntensity)
+      triggerFade(() => setCurrentIndex(prev => prev - 1))
     }
   }
 
@@ -253,7 +280,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden" style={{ backgroundColor: displaySettings.backgroundColor }}>
       <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div
+          className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between"
+          style={{
+            opacity: headerVisible ? 1 : 0,
+            transform: headerVisible ? 'translateY(0)' : 'translateY(-8px)',
+            transition: 'opacity 0.4s ease, transform 0.4s ease',
+            pointerEvents: headerVisible ? 'auto' : 'none'
+          }}
+        >
           <div className="flex items-center space-x-3">
             <BookOpen className="w-6 h-6 text-indigo-600" />
             {!showSearch && (
@@ -357,15 +392,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         </div>
         <div className="w-full">
-          <div className="w-full bg-gray-200 h-3">
+          <div className="w-full bg-gray-100 h-0.5 rounded-full overflow-hidden">
             <div
-              className="h-3 transition-all duration-300"
+              className="h-0.5 rounded-full transition-all duration-300"
               style={{ width: `${bar1Width}%`, backgroundColor: getProgressColor() }}
             />
           </div>
-          <div className="w-full bg-gray-200 h-3 mt-0.5">
+          <div className="w-full bg-gray-100 h-0.5 rounded-full overflow-hidden mt-px">
             <div
-              className="h-3 transition-all duration-300"
+              className="h-0.5 rounded-full transition-all duration-300"
               style={{ width: `${bar2Width}%`, backgroundColor: getProgressColor() }}
             />
           </div>
@@ -382,6 +417,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 src={sentences[currentIndex]}
                 alt="圖片"
                 className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                style={{ opacity: fadeVisible ? 1 : 0, transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out' }}
               />
             ) : (
               <p
@@ -389,7 +425,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 style={{
                   fontFamily: textFontFamily,
                   fontSize: `${displaySettings.fontSize}px`,
-                  color: displaySettings.textColor
+                  color: displaySettings.textColor,
+                  opacity: fadeVisible ? 1 : 0,
+                  transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'
                 }}
               >
                 {sentences[currentIndex]}
