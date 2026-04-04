@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     // 預設：解析 RSS / Atom Feed
     // 同時支援 RSS 2.0 的 <item> 和 Atom 的 <entry>
     const itemPattern = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi
-    const articles: { title: string; link: string; date: string; summary: string }[] = []
+    const articles: { title: string; link: string; date: string; summary: string; content: string }[] = []
 
     let match
     while ((match = itemPattern.exec(text)) !== null && articles.length < 50) {
@@ -119,15 +119,17 @@ export async function GET(req: NextRequest) {
         getTagContent(block, 'updated')
       )
 
-      // 取摘要：優先用 content:encoded，其次 description / summary
-      const rawSummary =
+      // 取完整正文：優先用 content:encoded / content，其次 description / summary
+      const rawContent =
         getTagContent(block, 'content:encoded') ||
+        getTagContent(block, 'content') ||
         getTagContent(block, 'description') ||
         getTagContent(block, 'summary')
-      const summary = stripHtml(rawSummary).slice(0, 120) + (rawSummary.length > 120 ? '…' : '')
+      const plainContent = stripHtml(rawContent)
+      const summary = plainContent.slice(0, 120) + (plainContent.length > 120 ? '…' : '')
 
       if (title && link) {
-        articles.push({ title, link, date, summary })
+        articles.push({ title, link, date, summary, content: plainContent })
       }
     }
 
