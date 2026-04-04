@@ -226,6 +226,42 @@ export const fontStorage = {
   }
 }
 
+// RSS 訂閱來源的格式：名稱 + RSS 網址
+export interface FeedSource {
+  id: string       // 唯一 ID，用 Date.now() 產生
+  name: string     // 用戶自訂的顯示名稱
+  url: string      // RSS 網址（支援任何 RSS 2.0 / Atom）
+}
+
+// RSS 訂閱的 localStorage 鍵名
+const FEED_STORAGE_KEY = 'reading-feeds'
+
+export const feedStorage = {
+  // 取得所有訂閱來源
+  getFeeds(): FeedSource[] {
+    if (typeof window === 'undefined') return []
+    try {
+      const data = localStorage.getItem(FEED_STORAGE_KEY)
+      return data ? JSON.parse(data) : []
+    } catch { return [] }
+  },
+
+  // 新增一個訂閱來源
+  addFeed(feed: FeedSource): void {
+    if (typeof window === 'undefined') return
+    const feeds = feedStorage.getFeeds()
+    feeds.push(feed)
+    localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(feeds))
+  },
+
+  // 刪除一個訂閱來源（by id）
+  removeFeed(id: string): void {
+    if (typeof window === 'undefined') return
+    const feeds = feedStorage.getFeeds().filter(f => f.id !== id)
+    localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(feeds))
+  }
+}
+
 // 每日閱讀記錄的 localStorage 鍵名
 const HISTORY_STORAGE_KEY = 'reading-history'
 

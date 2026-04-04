@@ -15,6 +15,7 @@ import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
+import FeedPanel from './components/FeedPanel'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
@@ -182,6 +183,15 @@ export default function Home() {
     getAllBooksFromIDB().then(setSavedBooks)
   }
 
+  // 用戶從 RSS 訂閱點了一篇文章，直接開啟閱讀器（不需要目標設定）
+  const handleReadArticle = (articleSentences: string[], title: string) => {
+    setSentences(articleSentences)
+    setBookTitle(title)
+    setBookId('article-' + Date.now())
+    setCurrentIndex(0)
+    setReadingGoal(0)
+  }
+
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp)
     const now = new Date()
@@ -241,6 +251,9 @@ export default function Home() {
               <p className="text-sm text-red-700">{uploadError}</p>
             </div>
           )}
+
+          {/* RSS 訂閱文章面板 */}
+          <FeedPanel onReadArticle={handleReadArticle} />
 
           {/* 30天閱讀趨勢圖（有資料時才顯示） */}
           <ReadingTrend />
