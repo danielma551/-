@@ -22,12 +22,24 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-// 把純文字切成句子陣列（按句號、換行等斷句）
+// 把純文字切成句子陣列（與上傳路由的分句邏輯保持一致）
 function splitIntoSentences(text: string): string[] {
-  return text
-    .split(/(?<=[。！？\n])|(?<=[\.\!\?]\s)/)
+  const cleaned = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const sentenceRegex = /[^.!?。！？;；,，:：]+[.!?。！？;；,，:：]+/g
+  const sentences = cleaned.match(sentenceRegex) || []
+
+  if (sentences.length === 0 && cleaned.length > 0) {
+    return [cleaned]
+  }
+
+  return sentences
     .map(s => s.trim())
-    .filter(s => s.length > 3)
+    .filter(s => s.length > 0)
 }
 
 // 從 RSS XML 字串中取出特定標籤的內容
