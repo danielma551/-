@@ -392,15 +392,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         </div>
         <div className="w-full">
-          <div className="w-full bg-gray-100 h-0.5 rounded-full overflow-hidden">
+          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
             <div
-              className="h-0.5 rounded-full transition-all duration-300"
+              className="h-2 rounded-full transition-all duration-300"
               style={{ width: `${bar1Width}%`, backgroundColor: getProgressColor() }}
             />
           </div>
-          <div className="w-full bg-gray-100 h-0.5 rounded-full overflow-hidden mt-px">
+          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden mt-0.5">
             <div
-              className="h-0.5 rounded-full transition-all duration-300"
+              className="h-2 rounded-full transition-all duration-300"
               style={{ width: `${bar2Width}%`, backgroundColor: getProgressColor() }}
             />
           </div>
