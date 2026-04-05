@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     // 抓取目標網址，設定合理的 timeout 和 User-Agent
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ReadingBot/1.0)' },
-      signal: AbortSignal.timeout(10000)
+      signal: AbortSignal.timeout(120000)
     })
 
     if (!res.ok) {

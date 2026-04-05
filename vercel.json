@@ -1,5 +1,8 @@
 {
   "functions": {
+    "app/api/rss/route.ts": {
+      "maxDuration": 120
+    },
     "app/api/upload/route.ts": {
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/**,node_modules/@napi-rs/canvas*/**"
     },
