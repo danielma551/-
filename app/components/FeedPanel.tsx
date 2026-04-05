@@ -8,7 +8,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Loader2, RefreshCw, ChevronDown, ChevronUp, Rss } from 'lucide-react'
+import { Plus, Trash2, Loader2, RefreshCw, ChevronDown, ChevronUp, Rss, Pencil } from 'lucide-react'
 import { feedStorage, FeedSource } from '../utils/storage'
 
 // 一篇文章的資料格式
@@ -50,6 +50,10 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
   const [readLinks, setReadLinks] = useState<Set<string>>(new Set())
   // 是否隱藏已閱讀文章
   const [hideRead, setHideRead] = useState(false)
+  // 正在編輯 URL 的 feed id
+  const [editingFeedId, setEditingFeedId] = useState<string | null>(null)
+  // 編輯中的 URL 輸入值
+  const [editingUrl, setEditingUrl] = useState('')
 
   // 載入已儲存的訂閱來源
   useEffect(() => {
@@ -178,6 +182,18 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     setNewName('')
     setNewUrl('')
     setShowAddForm(false)
+  }
+
+  // 更新某個訂閱的 URL
+  const handleUpdateUrl = (id: string) => {
+    const trimmed = editingUrl.trim()
+    if (!trimmed) return
+    feedStorage.updateFeedUrl(id, trimmed)
+    setFeeds(prev => prev.map(f => f.id === id ? { ...f, url: trimmed } : f))
+    setEditingFeedId(null)
+    setEditingUrl('')
+    const updated = feeds.find(f => f.id === id)
+    if (updated) fetchFeed({ ...updated, url: trimmed })
   }
 
   // 刪除一個訂閱來源
@@ -348,14 +364,48 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
                     : <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
                   }
                 </button>
+                {/* 編輯 URL */}
+                <button
+                  onClick={() => { setEditingFeedId(feed.id); setEditingUrl(feed.url) }}
+                  className="ml-2 text-gray-300 hover:text-blue-400"
+                  title="編輯訂閱網址"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
                 {/* 刪除訂閱 */}
                 <button
                   onClick={() => handleRemove(feed.id)}
-                  className="ml-2 text-gray-300 hover:text-red-400"
+                  className="ml-1 text-gray-300 hover:text-red-400"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* 編輯 URL 表單 */}
+              {editingFeedId === feed.id && (
+                <div className="px-4 py-3 bg-blue-50 border-t border-blue-100 flex items-center space-x-2">
+                  <input
+                    autoFocus
+                    type="url"
+                    value={editingUrl}
+                    onChange={e => setEditingUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleUpdateUrl(feed.id); if (e.key === 'Escape') setEditingFeedId(null) }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                  />
+                  <button
+                    onClick={() => handleUpdateUrl(feed.id)}
+                    className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                  >
+                    儲存
+                  </button>
+                  <button
+                    onClick={() => setEditingFeedId(null)}
+                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    取消
+                  </button>
+                </div>
+              )}
 
               {/* 文章列表（展開時顯示） */}
               {data?.expanded && (

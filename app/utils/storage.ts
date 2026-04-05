@@ -259,6 +259,13 @@ export const feedStorage = {
     if (typeof window === 'undefined') return
     const feeds = feedStorage.getFeeds().filter(f => f.id !== id)
     localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(feeds))
+  },
+
+  // 更新某個訂閱來源的 URL
+  updateFeedUrl(id: string, newUrl: string): void {
+    if (typeof window === 'undefined') return
+    const feeds = feedStorage.getFeeds().map(f => f.id === id ? { ...f, url: newUrl } : f)
+    localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(feeds))
   }
 }
 
