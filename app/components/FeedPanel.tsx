@@ -417,6 +417,7 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
                     <p className="px-4 py-3 text-sm text-gray-300">暫無文章</p>
                   )}
                   {data?.articles
+                    ?.slice(0, 10)
                     ?.filter(a => !hideRead || !readLinks.has(a.link))
                     ?.map((article, idx) => {
                       const isRead = readLinks.has(article.link)
