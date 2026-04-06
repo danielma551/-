@@ -18,7 +18,7 @@ const DOWNLOAD_FP_KEY = 'msw_last_download_fp'
 
 function makeFingerprint(data: { books: BookData[]; font: unknown; shortcuts: unknown; displaySettings: unknown; readingHistory?: unknown }): string {
   return JSON.stringify({
-    books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate })),
+    books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate, hasCover: !!b.coverImage })),
     font: data.font,
     shortcuts: data.shortcuts,
     displaySettings: data.displaySettings,
