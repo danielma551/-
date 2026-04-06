@@ -12,7 +12,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
@@ -43,6 +43,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [fadeVisible, setFadeVisible] = useState(true)
   const [headerVisible, setHeaderVisible] = useState(true)
   const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 下雨特效的開關狀態
+  const [rainEnabled, setRainEnabled] = useState(true)
+  // Canvas 元素的引用
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  // requestAnimationFrame 的 ID，用於清除動畫
+  const rainAnimRef = useRef<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
   const [searchResultIdx, setSearchResultIdx] = useState(0)
@@ -52,6 +58,69 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setStartIndex(initialIndex)
     setGoalCompleted(false)
   }, [initialIndex])
+
+  // 下雨特效動畫
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    // 關閉時清除畫布並停止動畫
+    if (!rainEnabled) {
+      if (rainAnimRef.current) cancelAnimationFrame(rainAnimRef.current)
+      const ctx = canvas.getContext('2d')
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
+      return
+    }
+    // 設定畫布尺寸為全螢幕
+    canvas.width = window.innerWidth
+    canvas.height = window.innerHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    // 初始化每一條雨滴（斜角線段，有遠近大小差異）
+    interface Drop { x: number; y: number; len: number; speed: number; width: number; opacity: number }
+    const angle = 0.25 // 斜角弧度（約 14 度）
+    const drops: Drop[] = Array.from({ length: Math.floor(canvas.width / 14) }, () => ({
+      x: Math.random() * (canvas.width + 200) - 100,
+      y: Math.random() * canvas.height - canvas.height,
+      len: Math.random() * 30 + 10,   // 長度差異模擬遠近感
+      speed: Math.random() * 5 + 3,
+      width: Math.random() * 1.2 + 0.4, // 粗細差異
+      opacity: Math.random() * 0.5 + 0.2
+    }))
+    // 每一幀：清除畫布，用漸變（頭亮尾透明）畫出斜向雨滴
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      for (const drop of drops) {
+        const dx = Math.sin(angle) * drop.len
+        const dy = Math.cos(angle) * drop.len
+        // 建立從頭（亮）到尾（透明）的線性漸變
+        const grad = ctx.createLinearGradient(drop.x, drop.y, drop.x + dx, drop.y + dy)
+        grad.addColorStop(0, `rgba(200, 230, 255, ${drop.opacity})`)
+        grad.addColorStop(1, 'rgba(200, 230, 255, 0)')
+        ctx.beginPath()
+        ctx.moveTo(drop.x, drop.y)
+        ctx.lineTo(drop.x + dx, drop.y + dy)
+        ctx.lineWidth = drop.width
+        ctx.strokeStyle = grad
+        ctx.stroke()
+        drop.x += Math.sin(angle) * drop.speed
+        drop.y += Math.cos(angle) * drop.speed
+        // 超出底部或右側後重置到頂部
+        if (drop.y > canvas.height || drop.x > canvas.width + 100) {
+          drop.y = -drop.len - Math.random() * 100
+          drop.x = Math.random() * (canvas.width + 200) - 200
+        }
+      }
+      rainAnimRef.current = requestAnimationFrame(draw)
+    }
+    draw()
+    // 視窗縮放時更新畫布尺寸
+    const handleResize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
+    window.addEventListener('resize', handleResize)
+    return () => {
+      if (rainAnimRef.current) cancelAnimationFrame(rainAnimRef.current)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [rainEnabled])
 
   useEffect(() => {
     const resetTimer = () => {
@@ -279,6 +348,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden" style={{ backgroundColor: displaySettings.backgroundColor }}>
+      {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件 */}
+      <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
       <header className="bg-white shadow-sm">
         <div
           className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between"
@@ -378,6 +449,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             )}
           </div>
           <div className="flex items-center space-x-1 sm:space-x-3">
+            {/* 下雨特效開關按鈕 */}
+            <button
+              onClick={() => setRainEnabled(v => !v)}
+              className={`p-1.5 rounded-lg transition-colors ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
+              title={rainEnabled ? '關閉雨聲' : '開啟下雨效果'}
+            >
+              <CloudRain className="w-4 h-4" />
+            </button>
             <DictionaryPanel />
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
             <KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} />
