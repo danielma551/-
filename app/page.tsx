@@ -99,7 +99,9 @@ export default function Home() {
         sentences: data.sentences,
         currentIndex: 0,
         uploadDate: Date.now(),
-        lastReadDate: Date.now()
+        lastReadDate: Date.now(),
+        // EPUB 自動提取的封面圖片（TXT/PDF 為 null，不覆蓋）
+        ...(data.coverImage ? { coverImage: data.coverImage } : {})
       }
       
       await saveBookToIDB(bookData)

@@ -135,10 +135,39 @@ async function parsePdf(buffer: Buffer): Promise<string[]> {
   return splitIntoSentences(allText.join(' '))
 }
 
-async function parseEpub(buffer: Buffer): Promise<string[]> {
+// 從 EPUB manifest 裡找封面圖片並回傳 base64 data URL
+async function getEpubCover(epub: EPub): Promise<string | null> {
+  const manifest = epub.manifest as Record<string, { id: string; href: string; mediaType: string }>
+  // 優先用 metadata.cover 欄位指定的 ID
+  const coverId = (epub.metadata as Record<string, string>).cover
+  if (coverId && manifest[coverId]) {
+    return new Promise((resolve) => {
+      epub.getImage(coverId, (err: Error, data?: Buffer, mimeType?: string) => {
+        if (err || !data || !mimeType) { resolve(null); return }
+        resolve(`data:${mimeType};base64,${Buffer.from(data).toString('base64')}`)
+      })
+    })
+  }
+  // 備用：找 manifest 中 id 或 href 含 'cover' 且是圖片的項目
+  const coverEntry = Object.values(manifest).find(
+    (item) => item.mediaType?.startsWith('image/') &&
+      (item.id.toLowerCase().includes('cover') || item.href.toLowerCase().includes('cover'))
+  )
+  if (coverEntry) {
+    return new Promise((resolve) => {
+      epub.getImage(coverEntry.id, (err: Error, data?: Buffer, mimeType?: string) => {
+        if (err || !data || !mimeType) { resolve(null); return }
+        resolve(`data:${mimeType};base64,${Buffer.from(data).toString('base64')}`)
+      })
+    })
+  }
+  return null
+}
+
+async function parseEpub(buffer: Buffer): Promise<{ sentences: string[]; coverImage: string | null }> {
   const tmpPath = join('/tmp', `epub-${randomUUID()}.epub`)
   writeFileSync(tmpPath, buffer)
-  return new Promise<string[]>((resolve, reject) => {
+  return new Promise<{ sentences: string[]; coverImage: string | null }>((resolve, reject) => {
     const epub = new EPub(tmpPath)
     epub.on('error', reject)
     epub.on('end', async () => {
@@ -148,7 +177,9 @@ async function parseEpub(buffer: Buffer): Promise<string[]> {
           const items = await processChapter(epub, chapter.id as string)
           allItems.push(...items)
         }
-        resolve(allItems)
+        // 提取封面圖片
+        const coverImage = await getEpubCover(epub)
+        resolve({ sentences: allItems, coverImage })
       } catch (err) {
         reject(err)
       }
@@ -171,11 +202,15 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const fileName = file.name.toLowerCase()
     let sentences: string[]
+    let coverImage: string | null = null
 
     if (fileName.endsWith('.txt')) {
       sentences = splitIntoSentences(buffer.toString('utf-8'))
     } else if (fileName.endsWith('.epub')) {
-      sentences = await parseEpub(buffer)
+      // EPUB：同時提取句子和封面圖片
+      const result = await parseEpub(buffer)
+      sentences = result.sentences
+      coverImage = result.coverImage
     } else if (fileName.endsWith('.pdf')) {
       sentences = await parsePdf(buffer)
     } else {
@@ -186,7 +221,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '無法從文件中提取句子' }, { status: 400 })
     }
 
-    return NextResponse.json({ sentences })
+    return NextResponse.json({ sentences, coverImage })
   } catch (error) {
     console.error('Error processing file:', error)
     const msg = error instanceof Error ? error.message : String(error)
