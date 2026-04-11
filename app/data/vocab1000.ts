@@ -1,0 +1,106 @@
+// 【每日練習詞庫】
+// 收錄 1000 個常用英文單詞，供拼寫練習使用。
+
+export const VOCAB_1000: string[] = [
+  // A
+  "able","about","above","accept","across","act","add","admit","afraid","after",
+  "again","age","agree","air","all","allow","almost","alone","along","already",
+  "also","always","among","ancient","angry","animal","another","answer","any","appear",
+  "apple","area","arm","around","arrive","ask","attack","aunt","avoid","away",
+  // B
+  "baby","back","bad","ball","bank","base","battle","bear","beat","beautiful",
+  "become","before","begin","behind","believe","below","best","better","between","big",
+  "bird","black","blood","blow","blue","body","book","born","both","bottom",
+  "brain","break","bring","brother","brown","build","burn","busy","button","buy",
+  // C
+  "call","calm","camera","camp","capital","care","carry","catch","cause","cell",
+  "chair","chance","change","check","child","choose","circle","city","claim","class",
+  "clean","clear","climb","clock","close","cloud","cold","collect","color","come",
+  "common","complete","computer","consider","continue","control","cool","corner","cost","count",
+  // D
+  "dark","data","daughter","dead","deal","death","decide","deep","describe","design",
+  "desk","detail","die","different","difficult","dinner","discover","disease","distance","doctor",
+  "does","door","down","draw","dream","dress","drink","drive","drop","during",
+  "dust","duty","each","early","earth","east","easy","edge","either","else",
+  // E
+  "energy","enjoy","enough","enter","equal","escape","even","event","every","example",
+  "exist","expect","experience","explain","extra","eye","face","fact","fail","fall",
+  "family","famous","far","fast","father","fear","feel","fight","fill","finally",
+  "find","fire","first","fish","floor","flower","fly","follow","food","force",
+  // F
+  "forest","forget","form","found","free","fresh","friend","from","front","fruit",
+  "full","game","garden","general","give","glass","goal","gold","good","grass",
+  "great","green","ground","group","grow","guess","guide","hair","half","happen",
+  "happy","hard","have","head","heart","heat","heavy","help","here","high",
+  // H
+  "hill","hold","home","hope","hour","house","huge","human","hundred","hunt",
+  "hurt","idea","important","include","increase","inside","instead","into","iron","island",
+  "join","journey","jump","just","keep","kill","kind","king","know","large",
+  "last","late","laugh","lead","learn","leave","level","life","light","like",
+  // L
+  "likely","line","list","live","long","look","lose","love","lucky","machine",
+  "main","make","many","mark","match","matter","mean","meet","memory","middle",
+  "might","mind","miss","moment","money","month","more","most","mother","mountain",
+  "move","much","music","name","near","need","never","news","next","night",
+  // M-N
+  "north","note","nothing","number","object","often","once","open","order","other",
+  "outside","over","page","paper","part","past","path","pattern","peace","people",
+  "perhaps","picture","piece","place","plan","plant","play","point","poor","possible",
+  "power","pretty","problem","process","produce","protect","pull","push","question","quick",
+  // P-Q
+  "quiet","race","reach","read","ready","real","reason","receive","record","remember",
+  "return","right","rise","river","road","rock","role","room","rule","safe",
+  "same","save","school","search","seem","send","sense","serve","share","short",
+  "show","side","sign","since","size","skill","small","smell","smile","snow",
+  // R-S
+  "song","soon","sorry","sound","south","speak","special","speed","stand","start",
+  "stay","still","stone","stop","store","story","strong","study","sudden","summer",
+  "support","sure","surface","sweet","swim","system","table","take","talk","tall",
+  "task","teach","team","tell","than","that","their","them","then","there",
+  // T
+  "think","this","thought","throw","time","today","together","tomorrow","tonight","tool",
+  "toward","town","trade","train","tree","turn","type","under","until","upon",
+  "usually","value","very","view","visit","voice","wait","walk","wall","want",
+  "watch","water","wave","wear","week","well","west","wide","wild","window",
+  // W
+  "wish","within","without","wonder","word","work","world","worry","write","wrong",
+  "year","yellow","young","zero","above","achieve","across","active","activity","adapt",
+  "address","advance","advice","affect","afford","afternoon","against","ahead","aid","aim",
+  "alive","amazing","amount","apply","approach","arrow","article","artist","aspect","assume",
+  // Additional words
+  "attach","attitude","attract","audience","author","autumn","aware","balance","basic","basket",
+  "bath","battle","beach","bedroom","behavior","belong","benefit","beside","beyond","bicycle",
+  "blank","blast","blend","block","blood","board","bone","border","borrow","brave",
+  "bread","breakfast","bridge","brief","bright","broken","budget","burden","calculate","cancel",
+  "capture","career","careful","castle","center","century","certain","challenge","chapter","character",
+  "charge","chart","choice","choose","citizen","clothes","coffee","collect","column","comfort",
+  "commit","communicate","compare","compete","complex","concept","connect","contain","contest","contrast",
+  "copy","correct","courage","cover","create","creative","crime","cross","crowd","current",
+  "curve","customer","cycle","damage","danger","decide","decision","defeat","defend","degree",
+  "delay","demand","depend","deposit","desert","desire","develop","device","diamond","direct",
+  "discuss","divide","double","doubt","energy","engine","enjoy","entire","entry","except",
+  "exercise","exist","expect","explore","express","extend","extreme","factory","failure","feature",
+  "fiction","finally","finish","focus","follow","forest","formal","forward","freedom","future",
+  "gather","gender","gesture","global","golden","grade","grant","ground","handle","happen",
+  "hardly","harvest","health","heavy","height","history","honest","hunger","ideal","ignore",
+  "image","impact","improve","income","indeed","industry","influence","inform","inherit","initial",
+  "injury","inner","install","instant","interact","interest","introduce","invent","invest","involve",
+  "issue","itself","judge","justice","knowledge","language","launch","layer","leader","length",
+  "letter","limit","listen","locate","logical","lonely","lower","manage","manner","market",
+  "marriage","master","match","meaning","measure","medical","mention","method","military","million",
+  "mirror","mobile","modern","moral","motion","mystery","narrow","natural","nature","necessary",
+  "neither","normal","notice","novel","obtain","obvious","ocean","offer","office","operate",
+  "opinion","option","original","outcome","output","overall","owner","painful","paragraph","parent",
+  "patient","perfect","perform","period","personal","physical","planet","plenty","poem","policy",
+  "politics","popular","position","positive","practice","prefer","prepare","present","press","prevent",
+  "primary","prince","private","produce","program","progress","project","promise","prove","provide",
+  "public","purpose","quality","quarter","range","rather","reaction","recent","reduce","relate",
+  "release","remain","remove","repeat","replace","report","require","research","respond","result",
+  "reveal","review","reward","rhythm","sample","scene","science","section","select","series",
+  "settle","several","similar","simple","single","social","solar","solve","source","square",
+  "stage","standard","status","steel","strength","stress","stretch","strike","string","struggle",
+  "subject","success","suggest","supply","survive","symbol","target","temperature","terrible","theory",
+  "therefore","thousand","through","throughout","tissue","title","total","touch","tourist","towards",
+  "tradition","trouble","trust","tunnel","typical","unique","upper","useful","various","version",
+  "village","vision","volume","voyage","weapon","weather","whether","winter","wisdom","within"
+]

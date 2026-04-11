@@ -16,6 +16,7 @@ import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
 import FeedPanel from './components/FeedPanel'
+import VocabPractice from './components/VocabPractice'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
@@ -58,6 +59,8 @@ export default function Home() {
   } | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
   const [readingArticleLink, setReadingArticleLink] = useState<string>('')
+  // 控制是否顯示每日練習畫面
+  const [showVocab, setShowVocab] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -219,6 +222,11 @@ export default function Home() {
     return date.toLocaleDateString('zh-TW')
   }
 
+  // 顯示每日練習畫面時，整頁渲染 VocabPractice
+  if (showVocab) {
+    return <VocabPractice onExit={() => setShowVocab(false)} />
+  }
+
   return (
     <main className="min-h-screen bg-white">
       {showGoalModal && pendingBook && (
@@ -272,6 +280,22 @@ export default function Home() {
 
           {/* 30天閱讀趨勢圖（有資料時才顯示） */}
           <ReadingTrend />
+
+          {/* 每日練習入口卡片 */}
+          <div className="mb-6">
+            <button
+              onClick={() => setShowVocab(true)}
+              className="group flex items-center space-x-4 w-full px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl hover:from-indigo-100 hover:to-purple-100 transition-all"
+            >
+              <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white text-lg flex-shrink-0">
+                📝
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-semibold text-indigo-800">每日練習</p>
+                <p className="text-xs text-indigo-500">1000 個常用英文單詞拼寫練習</p>
+              </div>
+            </button>
+          </div>
 
           {/* Book Grid */}
           {savedBooks.length === 0 ? (
