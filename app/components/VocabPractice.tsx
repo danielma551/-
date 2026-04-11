@@ -21,26 +21,20 @@ const LETTER_NAMES: Record<string, string> = {
   x:'ex', y:'why', z:'zee'
 }
 
-// 根據今天的日期，計算出今日的 13 個單詞，並隨機排序
-function getTodayWords(): string[] {
-  const today = new Date().toISOString().slice(0, 10)
-  let hash = 0
-  for (let i = 0; i < today.length; i++) {
-    hash = (hash * 31 + today.charCodeAt(i)) | 0
-  }
-  const start = Math.abs(hash) % (VOCAB_1000.length - 13)
-  const words = VOCAB_1000.slice(start, start + 13)
-  // Fisher-Yates shuffle
-  for (let i = words.length - 1; i > 0; i--) {
+// 每次進入時從詞庫完全隨機取 13 個不重複單詞
+function getRandomWords(): string[] {
+  const pool = [...VOCAB_1000]
+  // Fisher-Yates shuffle 整個詞庫後取前 13 個
+  for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[words[i], words[j]] = [words[j], words[i]]
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
-  return words
+  return pool.slice(0, 13)
 }
 
 export default function VocabPractice({ onExit }: VocabPracticeProps) {
-  // 今日 13 個固定單詞
-  const [words] = useState<string[]>(getTodayWords)
+  // 每次進入隨機產生 13 個單詞
+  const [words] = useState<string[]>(getRandomWords)
   // 目前題目索引
   const [index, setIndex] = useState(0)
   // 用戶已輸入的字母陣列（直接顯示在橫線上）
