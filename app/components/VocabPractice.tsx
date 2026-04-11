@@ -61,11 +61,22 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
   const [selectedVoiceName, setSelectedVoiceName] = useState<string>('')
   // 隱藏 input，用來接收鍵盤輸入（在橫線區域直接輸入）
   const inputRef = useRef<HTMLInputElement>(null)
+  // Android Chrome TTS bug：引擎會自動暫停，需周期呼叫 resume()
+  const resumeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const currentWord = words[index] ?? ''
 
+  // 元件卸載時清理資源
+  useEffect(() => {
+    return () => {
+      if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
+      window.speechSynthesis?.cancel()
+    }
+  }, [])
+
   // 切換題目時清空輸入、重置 shake 版本並聚焦隱藏 input
   useEffect(() => {
+    if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
     setTypedLetters([])
     setFeedback(null)
     setSpeaking(false)
@@ -116,34 +127,48 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
   // 念一次某個字母名稱（每輸錯觸發一次，不循環）
   const speakOnce = useCallback((letterName: string) => {
     if (!('speechSynthesis' in window)) return
-    window.speechSynthesis.cancel()
+    const synth = window.speechSynthesis
+    synth.cancel()
     const utt = new SpeechSynthesisUtterance(letterName)
     utt.lang = 'en-US'
     utt.rate = 0.8
     utt.pitch = 1.1
     const voice = getVoice()
     if (voice) utt.voice = voice
-    window.speechSynthesis.speak(utt)
+    utt.onerror = () => {}
+    synth.speak(utt)
+    // Android Chrome 對策：和 speak() 同步呼叫不會破壞 iOS 手勢上下文
+    synth.resume()
   }, [getVoice])
 
   // 播放完整拼讀（逐個念字母）
-  // iOS 要求所有 speak() 必須在同一個用戶手勢呼叫棧內執行，不能用 setTimeout
   const handleSpeak = useCallback(() => {
     if (!('speechSynthesis' in window) || speaking) return
-    window.speechSynthesis.cancel()
+    const synth = window.speechSynthesis
+    synth.cancel()
+    if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
     setSpeaking(true)
     const voice = getVoice()
     const letters = currentWord.toLowerCase().split('')
-    // 一次性把所有字母排入佇列，瀏覽器會依序播放
     letters.forEach((letter, i) => {
       const utt = new SpeechSynthesisUtterance(LETTER_NAMES[letter] || letter)
       utt.lang = 'en-US'
       utt.rate = 0.8
       utt.pitch = 1.1
       if (voice) utt.voice = voice
-      if (i === letters.length - 1) utt.onend = () => setSpeaking(false)
-      window.speechSynthesis.speak(utt)
+      utt.onerror = (e) => { if ((e as SpeechSynthesisErrorEvent).error !== 'interrupted') setSpeaking(false) }
+      if (i === letters.length - 1) {
+        utt.onend = () => {
+          if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
+          setSpeaking(false)
+        }
+      }
+      synth.speak(utt)
     })
+    // Android Chrome bug：引擎在播放中會自動暫停，周期呼叫 resume() 修復
+    resumeIntervalRef.current = setInterval(() => {
+      if (synth.paused) synth.resume()
+    }, 200)
   }, [currentWord, speaking, getVoice])
 
   // 提交答案
