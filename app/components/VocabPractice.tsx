@@ -75,24 +75,35 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
   }, [index])
 
   // 載入瀏覽器可用的英文聲源，並自動選擇最佳美式聲源
+  // Android 上 voiceschanged 可能不觸發，加入多次延遲重試
   useEffect(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    const priority = ['Google US English','Samantha','Alex',
+      'Microsoft Guy Online (Natural) - English (United States)',
+      'Microsoft Zira - English (United States)',
+      'Microsoft David - English (United States)']
     const load = () => {
       const all = window.speechSynthesis.getVoices()
       const en = all.filter(v => v.lang.startsWith('en'))
+      if (en.length === 0) return false
       setAvailableVoices(en)
-      if (!selectedVoiceName && en.length > 0) {
-        // 自動選最佳美式聲源
-        const priority = ['Google US English','Samantha','Alex',
-          'Microsoft Guy Online (Natural) - English (United States)',
-          'Microsoft Zira - English (United States)',
-          'Microsoft David - English (United States)']
+      setSelectedVoiceName(prev => {
+        if (prev) return prev
         const best = priority.map(n => en.find(v => v.name === n)).find(Boolean)
           || en.find(v => v.lang === 'en-US') || en[0]
-        if (best) setSelectedVoiceName(best.name)
+        return best?.name ?? ''
+      })
+      return true
+    }
+    // 立即嘗試，再以 100ms / 500ms / 1s / 2s 重試（Android 需要延遲）
+    if (!load()) {
+      const timers = [100, 500, 1000, 2000].map(ms => setTimeout(load, ms))
+      window.speechSynthesis.addEventListener('voiceschanged', load)
+      return () => {
+        timers.forEach(clearTimeout)
+        window.speechSynthesis.removeEventListener('voiceschanged', load)
       }
     }
-    load()
     window.speechSynthesis.addEventListener('voiceschanged', load)
     return () => window.speechSynthesis.removeEventListener('voiceschanged', load)
   }, [])
@@ -292,21 +303,22 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
           <span className="text-sm">{speaking ? '拼讀中...' : '播放拼讀'}</span>
         </button>
 
-        {/* 聲源選擇器 */}
-        {availableVoices.length > 0 && (
-          <div className="flex items-center space-x-2 w-full max-w-xs">
-            <span className="text-xs text-gray-400 flex-shrink-0">聲源</span>
-            <select
-              value={selectedVoiceName}
-              onChange={e => setSelectedVoiceName(e.target.value)}
-              className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 outline-none focus:border-indigo-300"
-            >
-              {availableVoices.map(v => (
-                <option key={v.name} value={v.name}>{v.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* 聲源選擇器（總是顯示，聲源載入前顯示預設） */}
+        <div className="flex items-center space-x-2 w-full max-w-xs">
+          <span className="text-xs text-gray-400 flex-shrink-0">聲源</span>
+          <select
+            value={selectedVoiceName}
+            onChange={e => setSelectedVoiceName(e.target.value)}
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 outline-none focus:border-indigo-300"
+          >
+            {availableVoices.length === 0
+              ? <option value="">（裝置預設）</option>
+              : availableVoices.map(v => (
+                  <option key={v.name} value={v.name}>{v.name}</option>
+                ))
+            }
+          </select>
+        </div>
 
         {/* 操作按鈕區 */}
         <div className="w-full max-w-xs space-y-3">
