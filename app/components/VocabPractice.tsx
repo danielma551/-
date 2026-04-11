@@ -116,23 +116,22 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
   }, [getVoice])
 
   // 播放完整拼讀（逐個念字母）
+  // iOS 要求所有 speak() 必須在同一個用戶手勢呼叫棧內執行，不能用 setTimeout
   const handleSpeak = useCallback(() => {
     if (!('speechSynthesis' in window) || speaking) return
     window.speechSynthesis.cancel()
     setSpeaking(true)
     const voice = getVoice()
     const letters = currentWord.toLowerCase().split('')
+    // 一次性把所有字母排入佇列，瀏覽器會依序播放
     letters.forEach((letter, i) => {
-      const name = LETTER_NAMES[letter] || letter
-      setTimeout(() => {
-        const utt = new SpeechSynthesisUtterance(name)
-        utt.lang = 'en-US'
-        utt.rate = 0.8
-        utt.pitch = 1.1
-        if (voice) utt.voice = voice
-        if (i === letters.length - 1) utt.onend = () => setSpeaking(false)
-        window.speechSynthesis.speak(utt)
-      }, i * 700)
+      const utt = new SpeechSynthesisUtterance(LETTER_NAMES[letter] || letter)
+      utt.lang = 'en-US'
+      utt.rate = 0.8
+      utt.pitch = 1.1
+      if (voice) utt.voice = voice
+      if (i === letters.length - 1) utt.onend = () => setSpeaking(false)
+      window.speechSynthesis.speak(utt)
     })
   }, [currentWord, speaking, getVoice])
 
