@@ -41,8 +41,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
   const [showSearch, setShowSearch] = useState(false)
   const [fadeVisible, setFadeVisible] = useState(true)
-  const [headerVisible, setHeaderVisible] = useState(true)
+  const [headerVisible, setHeaderVisible] = useState(false)
   const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const headerRef = useRef<HTMLElement>(null)
   // 下雨特效的開關狀態
   const [rainEnabled, setRainEnabled] = useState(true)
   // Canvas 元素的引用
@@ -123,19 +124,32 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }, [rainEnabled])
 
   useEffect(() => {
-    const resetTimer = () => {
+    // 桌面：鼠標在頂部 80px 內，或在頭部元素上（含下拉菜單），就保持顯示
+    const handleMouseMove = (e: MouseEvent) => {
+      const atTop = e.clientY < 80
+      const overHeader = headerRef.current?.contains(e.target as Node) ?? false
+      setHeaderVisible(atTop || overHeader || showSearch)
+    }
+    // 鼠標離開視窗時隱藏（除非搜索框開著）
+    const handleMouseLeave = () => {
+      if (!showSearch) setHeaderVisible(false)
+    }
+    // 手機觸控：顯示 3 秒後自動隱藏
+    const handleTouch = () => {
       setHeaderVisible(true)
       if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
-      headerHideTimer.current = setTimeout(() => {
-        if (!showSearch) setHeaderVisible(false)
-      }, 3000)
+      if (!showSearch) {
+        headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 3000)
+      }
     }
-    resetTimer()
-    window.addEventListener('mousemove', resetTimer)
-    window.addEventListener('touchstart', resetTimer)
+
+    window.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseleave', handleMouseLeave)
+    window.addEventListener('touchstart', handleTouch)
     return () => {
-      window.removeEventListener('mousemove', resetTimer)
-      window.removeEventListener('touchstart', resetTimer)
+      window.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseleave', handleMouseLeave)
+      window.removeEventListener('touchstart', handleTouch)
       if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
     }
   }, [showSearch])
@@ -350,7 +364,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     <div className="min-h-screen flex flex-col overflow-x-hidden" style={{ backgroundColor: displaySettings.backgroundColor }}>
       {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件 */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
-      <header className="bg-white shadow-sm">
+      <header ref={headerRef} className="bg-white shadow-sm">
         <div
           className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between"
           style={{
