@@ -233,9 +233,16 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
 
                 {/* Vibration */}
                 <div className="space-y-3">
-                  <label className="block text-sm font-medium text-gray-700">
-                    震動強度（手機）
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">
+                      震動強度（手機）
+                    </label>
+                    {typeof navigator !== 'undefined' && !('vibrate' in navigator) && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                        iOS 不支援
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center space-x-4">
                     <input
                       type="range"

@@ -529,15 +529,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
 
           <div className="mt-8 flex items-center justify-between">
-            <button
-              onClick={goToPrevious}
-              disabled={currentIndex === 0}
-              className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              <span>上一句</span>
-            </button>
-
+            {/* 下一句放左邊：方便左手大拇指點擊 */}
             <button
               onClick={goToNext}
               disabled={currentIndex === sentences.length - 1}
@@ -545,6 +537,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             >
               <span>下一句</span>
               <ChevronRight className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={goToPrevious}
+              disabled={currentIndex === 0}
+              className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft className="w-5 h-5" />
+              <span>上一句</span>
             </button>
           </div>
           
