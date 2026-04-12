@@ -514,14 +514,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             />
           </div>
           {/* 目標 / 全書總進度薄條 */}
-          <div className="flex justify-between text-xs mt-1 mb-0.5 px-0.5 text-green-500">
-            <span>{goalLabel}</span>
-            <span className="tabular-nums">{goalProgressPct.toFixed(0)}%</span>
-          </div>
-          <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden">
+          <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden mt-1">
             <div
               className="h-1 rounded-full transition-all duration-500"
-              style={{ width: `${goalProgressPct}%`, backgroundColor: '#22c55e' }}
+              style={{ width: `${goalProgressPct}%`, backgroundColor: '#00A3E0' }}
             />
           </div>
         </div>
