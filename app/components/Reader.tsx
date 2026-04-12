@@ -134,12 +134,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const handleMouseLeave = () => {
       if (!showSearch) setHeaderVisible(false)
     }
-    // 手機觸控：顯示 3 秒後自動隱藏
-    const handleTouch = () => {
-      setHeaderVisible(true)
-      if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
-      if (!showSearch) {
-        headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 3000)
+    // 手機觸控：只有觸碰頂部 80px 才顯示頭部，其他地方觸碰不觸發
+    const handleTouch = (e: TouchEvent) => {
+      const touch = e.touches[0]
+      if (!touch) return
+      if (touch.clientY < 80) {
+        setHeaderVisible(true)
+        if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
+        if (!showSearch) {
+          headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 3000)
+        }
       }
     }
 
@@ -532,6 +536,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 下一句放左邊：方便左手大拇指點擊 */}
             <button
               onClick={goToNext}
+              onTouchStart={() => vibrate(displaySettings.vibrationIntensity)}
               disabled={currentIndex === sentences.length - 1}
               className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
@@ -541,6 +546,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             <button
               onClick={goToPrevious}
+              onTouchStart={() => vibrate(displaySettings.vibrationIntensity)}
               disabled={currentIndex === 0}
               className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
