@@ -336,25 +336,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const sentencesRead = currentIndex - startIndex + 1
-  const CYCLE_SIZE = 13
+  const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
+
+  // 方向 B：自適應循環大小 —— 循環 ≈ 書長 ÷ 20（最少 5 句）
+  // 這樣無論短文（20句）或長書（500句），每個循環的視覺填充體驗都一致
+  const CYCLE_SIZE = Math.max(5, Math.round(totalForProgress / 20))
 
   const completedCycles = Math.floor((sentencesRead - 1) / CYCLE_SIZE)
-  const cycleRatio = ((sentencesRead - 1) % CYCLE_SIZE + 1) / CYCLE_SIZE
+  const HALF_CYCLE = Math.ceil(CYCLE_SIZE / 2)
+  const posInCycle = (sentencesRead - 1) % CYCLE_SIZE + 1
 
-  const overallProgress = sentences.length > 1 ? currentIndex / (sentences.length - 1) : 0
+  // 循環條永遠填滿到 100%，不再與書長掛鉤
+  const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * 100
+  const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (CYCLE_SIZE - HALF_CYCLE), 0) * 100
 
-  // Max fill per cycle = CYCLE_SIZE / remaining sentences
-  // e.g. 100 sentences: cycle1→13/100=13%, cycle2→13/87≈15%, cycle3→13/74≈18%...
-  const sentencesAtCycleStart = completedCycles * CYCLE_SIZE
-  const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
-  const remaining = Math.max(totalForProgress - sentencesAtCycleStart, CYCLE_SIZE)
-  const maxProgress = Math.min(CYCLE_SIZE / remaining, 1)
-
-  const HALF_CYCLE = Math.ceil(CYCLE_SIZE / 2) // 7
-  const posInCycle = (sentencesRead - 1) % CYCLE_SIZE + 1 // 1–13
-
-  const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxProgress * 100
-  const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (CYCLE_SIZE - HALF_CYCLE), 0) * maxProgress * 100
+  // 薄條：有目標時顯示目標進度，無目標時顯示全書總進度
+  const goalProgressPct = readingGoal > 0
+    ? Math.min(sentencesRead / readingGoal * 100, 100)
+    : sentences.length > 1 ? currentIndex / (sentences.length - 1) * 100 : 100
+  const goalLabel = readingGoal > 0
+    ? `目標 ${Math.min(sentencesRead, readingGoal)}/${readingGoal} 句`
+    : `全書`
 
   const getProgressColor = () => {
     if (goalCompleted) return '#22c55e'
@@ -489,16 +491,37 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         </div>
         <div className="w-full">
+          {/* 循環進度條 1（前半循環） */}
+          <div className="flex justify-between text-xs mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
+            <span>進度 1</span>
+            <span className="tabular-nums">{bar1Width.toFixed(0)}%</span>
+          </div>
           <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
             <div
               className="h-2 rounded-full transition-all duration-300"
               style={{ width: `${bar1Width}%`, backgroundColor: getProgressColor() }}
             />
           </div>
-          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden mt-0.5">
+          {/* 循環進度條 2（後半循環） */}
+          <div className="flex justify-between text-xs mt-1 mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
+            <span>進度 2</span>
+            <span className="tabular-nums">{bar2Width.toFixed(0)}%</span>
+          </div>
+          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
             <div
               className="h-2 rounded-full transition-all duration-300"
               style={{ width: `${bar2Width}%`, backgroundColor: getProgressColor() }}
+            />
+          </div>
+          {/* 目標 / 全書總進度薄條 */}
+          <div className="flex justify-between text-xs mt-1 mb-0.5 px-0.5 text-green-500">
+            <span>{goalLabel}</span>
+            <span className="tabular-nums">{goalProgressPct.toFixed(0)}%</span>
+          </div>
+          <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden">
+            <div
+              className="h-1 rounded-full transition-all duration-500"
+              style={{ width: `${goalProgressPct}%`, backgroundColor: '#22c55e' }}
             />
           </div>
         </div>
