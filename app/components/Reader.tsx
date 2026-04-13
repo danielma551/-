@@ -354,19 +354,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       return s / 0xFFFFFFFF
     }
 
-    // 循環數量：隨機 5–12 個
-    const count = Math.floor(rng() * 8) + 5
+    // 每個循環固定在 13–49 句之間
+    const MIN_CY = 13, MAX_CY = 49
+    const minCount = Math.ceil(total / MAX_CY)
+    const maxCount = Math.floor(total / MIN_CY)
+    if (maxCount < 1) return { sizes: [total], boundaries: [0, total], count: 1 }
 
-    // 每個循環的隨機權重（0.3 ~ 1.0，避免出現極小循環）
+    // 在可行範圍內隨機決定循環數
+    const count = minCount + Math.floor(rng() * Math.max(1, maxCount - minCount + 1))
+
+    // 隨機權重 → 轉句數 → 夾在 [13, 49]
     const weights = Array.from({ length: count }, () => rng() * 0.7 + 0.3)
     const totalWeight = weights.reduce((a, b) => a + b, 0)
+    const sizes = weights.map(w => Math.min(MAX_CY, Math.max(MIN_CY, Math.round(w / totalWeight * total))))
 
-    // 轉換為句數（每個循環至少 2 句）
-    const sizes = weights.map(w => Math.max(2, Math.round(w / totalWeight * total)))
-
-    // 確保總和等於目標句數
-    const diff = total - sizes.reduce((a, b) => a + b, 0)
-    sizes[sizes.length - 1] = Math.max(2, sizes[sizes.length - 1] + diff)
+    // 逐步分配餘數，保持每個循環在 [13, 49]
+    let diff = total - sizes.reduce((a, b) => a + b, 0)
+    for (let iter = 0; diff !== 0 && iter < 200; iter++) {
+      for (let j = 0; j < sizes.length && diff !== 0; j++) {
+        if (diff > 0 && sizes[j] < MAX_CY) { sizes[j]++; diff-- }
+        else if (diff < 0 && sizes[j] > MIN_CY) { sizes[j]--; diff++ }
+      }
+    }
 
     // 計算累積邊界
     const boundaries = [0]
