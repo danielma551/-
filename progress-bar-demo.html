@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>進度條 — 漸進隨機循環 Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+    .page { max-width: 680px; margin: 0 auto; padding: 32px 20px 60px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 14px; color: #64748b; margin-bottom: 28px; }
+
+    .card { background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+
+    .label-row { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+    .bar-track { width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-bottom: 10px; }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.3s cubic-bezier(.4,0,.2,1); }
+    .bar-track.thin { height: 4px; margin-bottom: 0; }
+
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+    .btn { padding: 8px 18px; border-radius: 999px; border: 2px solid #e2e8f0; font-size: 13px; font-weight: 600; cursor: pointer; background: white; color: #475569; transition: all .15s; }
+    .btn:hover { border-color: #6366f1; color: #6366f1; }
+    .btn.active { background: #6366f1; color: white; border-color: #6366f1; }
+    .btn.danger { border-color: #fecaca; color: #dc2626; }
+    .btn.danger:hover { background: #fee2e2; }
+
+    .slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .slider-row label { font-size: 13px; color: #64748b; white-space: nowrap; min-width: 80px; }
+    input[type=range] { flex: 1; accent-color: #6366f1; }
+    .slider-val { font-size: 14px; font-weight: 700; color: #6366f1; width: 50px; text-align: right; }
+
+    .cycle-viz { display: flex; gap: 3px; margin-top: 14px; flex-wrap: wrap; }
+    .cycle-block {
+      height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: white; transition: all .2s; flex-shrink: 0;
+    }
+    .info { background: #eff6ff; border-left: 3px solid #6366f1; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #1e40af; margin-top: 14px; line-height: 1.6; }
+    .stat-row { display: flex; gap: 16px; margin-top: 14px; }
+    .stat { background: #f8fafc; border-radius: 8px; padding: 10px 14px; flex: 1; }
+    .stat-label { font-size: 11px; color: #94a3b8; }
+    .stat-value { font-size: 17px; font-weight: 700; color: #1e293b; margin-top: 2px; }
+    .green { color: #22c55e; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>🎲 漸進隨機循環進度條</h1>
+  <p class="subtitle">目標句數被分成若干隨機大小的循環，每個循環填充高度遞增，最後一個填滿 100%</p>
+
+  <div class="card">
+    <div class="slider-row">
+      <label>今日目標</label>
+      <input type="range" id="goalSlider" min="10" max="200" step="5" value="50" oninput="onGoalChange(this.value)" />
+      <span class="slider-val" id="goalVal">50 句</span>
+    </div>
+    <div class="slider-row">
+      <label>已讀句數</label>
+      <input type="range" id="readSlider" min="0" max="50" step="1" value="0" oninput="onReadChange(this.value)" />
+      <span class="slider-val" id="readVal">0 句</span>
+    </div>
+    <div class="controls">
+      <button class="btn active" id="playBtn" onclick="togglePlay()">▶ 自動播放</button>
+      <button class="btn" onclick="step(1)">下一句</button>
+      <button class="btn" onclick="step(-1)">上一句</button>
+      <button class="btn danger" onclick="reset()">↺ 重置</button>
+      <select id="speedSel" onchange="updateSpeed()" style="font-size:12px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:8px;color:#475569;">
+        <option value="600">慢速</option>
+        <option value="300" selected>正常</option>
+        <option value="100">快速</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label-row">
+      <span id="bar1label">進度 1</span>
+      <span id="bar1pct">0%</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="bar1fill" style="width:0%;background:#6366f1"></div>
+    </div>
+    <div class="label-row">
+      <span id="bar2label">進度 2</span>
+      <span id="bar2pct">0%</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="bar2fill" style="width:0%;background:#6366f1"></div>
+    </div>
+    <div class="bar-track thin" style="margin-top:6px;">
+      <div class="bar-fill" id="overallfill" style="width:0%;background:#00A3E0"></div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-label">當前循環</div>
+        <div class="stat-value" id="statCycle">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">本循環大小</div>
+        <div class="stat-value" id="statCycleSize">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">最大填充</div>
+        <div class="stat-value" id="statMaxFill">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">目標進度</div>
+        <div class="stat-value green" id="statGoal">0%</div>
+      </div>
+    </div>
+
+    <!-- 循環視覺化 -->
+    <div style="margin-top:16px;font-size:12px;color:#94a3b8;margin-bottom:6px;">各循環大小（顏色越深 = 填充越高）</div>
+    <div class="cycle-viz" id="cycleViz"></div>
+
+    <div class="info" id="infoBox"></div>
+  </div>
+</div>
+
+<script>
+  let goal = 50, read = 0, playing = false, interval = null, speed = 300
+  let cycles = []
+
+  // XorShift32 偽隨機
+  function seededRandom(seed) {
+    let s = (seed ^ 0x12345678) >>> 0
+    return () => { s ^= s<<13; s ^= s>>17; s ^= s<<5; s = s>>>0; return s/0xFFFFFFFF }
+  }
+
+  function generateCycles(total) {
+    if (total <= 0) return [total]
+    const seed = 'demo'.split('').reduce((a,c) => (a*31+c.charCodeAt(0))>>>0, total*0x9e3779b9>>>0)
+    const rng = seededRandom(seed)
+    const count = Math.floor(rng()*8)+5
+    const weights = Array.from({length:count}, () => rng()*0.7+0.3)
+    const tw = weights.reduce((a,b)=>a+b,0)
+    const sizes = weights.map(w => Math.max(2, Math.round(w/tw*total)))
+    const diff = total - sizes.reduce((a,b)=>a+b,0)
+    sizes[sizes.length-1] = Math.max(2, sizes[sizes.length-1]+diff)
+    return sizes
+  }
+
+  function boundaries(sizes) {
+    const b = [0]
+    for (const s of sizes) b.push(b[b.length-1]+s)
+    return b
+  }
+
+  function render() {
+    const b = boundaries(cycles)
+    const count = cycles.length
+    const capped = Math.min(read, goal)
+
+    // Find cycle
+    let ci = count-1
+    for (let i=0; i<b.length-1; i++) {
+      if (capped > b[i] && capped <= b[i+1]) { ci=i; break }
+      if (capped===0) { ci=0; break }
+    }
+
+    const cycleStart = b[ci]
+    const cycleSize = cycles[ci]
+    const pos = Math.min(capped - cycleStart, cycleSize)
+    const half = Math.ceil(cycleSize/2)
+    const maxFill = (ci+1)/count
+
+    const bar1 = Math.min(pos/half,1)*maxFill*100
+    const bar2 = Math.max((pos-half)/(cycleSize-half),0)*maxFill*100
+    const overall = goal>0 ? Math.min(read/goal*100,100) : 0
+
+    document.getElementById('bar1fill').style.width = bar1.toFixed(1)+'%'
+    document.getElementById('bar2fill').style.width = bar2.toFixed(1)+'%'
+    document.getElementById('overallfill').style.width = overall.toFixed(1)+'%'
+    document.getElementById('bar1pct').textContent = bar1.toFixed(1)+'%'
+    document.getElementById('bar2pct').textContent = bar2.toFixed(1)+'%'
+    document.getElementById('readSlider').value = read
+    document.getElementById('readVal').textContent = read+' 句'
+
+    document.getElementById('statCycle').textContent = `第 ${ci+1} / ${count} 個`
+    document.getElementById('statCycleSize').textContent = cycleSize+' 句'
+    document.getElementById('statMaxFill').textContent = (maxFill*100).toFixed(0)+'%'
+    document.getElementById('statGoal').textContent = overall.toFixed(0)+'%'
+
+    // Cycle visualization
+    const viz = document.getElementById('cycleViz')
+    viz.innerHTML = ''
+    cycles.forEach((sz, i) => {
+      const alpha = (i+1)/count
+      const isCurrent = i===ci
+      const isDone = capped >= b[i+1]
+      const el = document.createElement('div')
+      el.className = 'cycle-block'
+      const w = Math.max(24, Math.round(sz/goal*300))
+      el.style.width = w+'px'
+      el.style.background = isDone
+        ? `rgba(99,102,241,${0.3+alpha*0.7})`
+        : isCurrent
+        ? `rgba(99,102,241,${0.3+alpha*0.7})`
+        : '#e2e8f0'
+      el.style.border = isCurrent ? '2px solid #6366f1' : '2px solid transparent'
+      el.style.color = (isDone||isCurrent) ? 'white' : '#94a3b8'
+      el.textContent = sz
+      viz.appendChild(el)
+    })
+
+    document.getElementById('infoBox').innerHTML =
+      `目前在第 <strong>${ci+1}</strong> 個循環（共 ${count} 個），本循環 <strong>${cycleSize}</strong> 句，` +
+      `已讀 <strong>${pos}</strong>/${cycleSize} 句。` +
+      `條條最高可填到 <strong>${(maxFill*100).toFixed(0)}%</strong>，` +
+      (ci===count-1 ? '🎉 這是最後一個循環，填滿即完成目標！' : `再完成 <strong>${count-1-ci}</strong> 個循環後條條會填滿 100%。`)
+  }
+
+  function init() {
+    cycles = generateCycles(goal)
+    document.getElementById('goalVal').textContent = goal+' 句'
+    document.getElementById('goalSlider').value = goal
+    document.getElementById('readSlider').max = goal
+    render()
+  }
+
+  function onGoalChange(v) { goal=parseInt(v); read=0; cycles=generateCycles(goal); document.getElementById('goalVal').textContent=v+' 句'; document.getElementById('readSlider').max=v; render() }
+  function onReadChange(v) { read=parseInt(v); render() }
+  function step(d) { read=Math.max(0,Math.min(goal,read+d)); render() }
+  function reset() { read=0; stopPlay(); render() }
+  function togglePlay() { playing?stopPlay():startPlay() }
+  function startPlay() {
+    playing=true; document.getElementById('playBtn').textContent='⏸ 暫停'
+    interval=setInterval(()=>{ if(read>=goal){stopPlay();return}; read++; render() }, speed)
+  }
+  function stopPlay() { playing=false; document.getElementById('playBtn').textContent='▶ 自動播放'; clearInterval(interval) }
+  function updateSpeed() { speed=parseInt(document.getElementById('speedSel').value); if(playing){stopPlay();startPlay()} }
+
+  init()
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@
 
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
@@ -338,25 +338,68 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const sentencesRead = currentIndex - startIndex + 1
   const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
 
-  // 方向 B：自適應循環大小 —— 循環 ≈ 書長 ÷ 20（最少 5 句）
-  // 這樣無論短文（20句）或長書（500句），每個循環的視覺填充體驗都一致
-  const CYCLE_SIZE = Math.max(5, Math.round(totalForProgress / 20))
+  // ── 隨機循環生成（用 bookId + 目標數作種子，保證同一閱讀會話每次一致）──
+  // 概念：把目標句數分成若干個隨機大小的循環
+  //   - 每個循環的最大填充高度遞增（第 1 個填一點，最後一個填滿 100%）
+  //   - 循環大小隨機，讀者不知道下一個循環何時結束，製造驚喜感
+  const cycleData = useMemo(() => {
+    const total = totalForProgress
+    if (total <= 0) return { sizes: [1], boundaries: [0, 1], count: 1 }
 
-  const completedCycles = Math.floor((sentencesRead - 1) / CYCLE_SIZE)
-  const HALF_CYCLE = Math.ceil(CYCLE_SIZE / 2)
-  const posInCycle = (sentencesRead - 1) % CYCLE_SIZE + 1
+    // XorShift32 偽隨機（用 bookId + goal 作種子確保一致性）
+    const seedStr = bookId + String(total)
+    let s = seedStr.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 0x12345678)
+    const rng = () => {
+      s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0
+      return s / 0xFFFFFFFF
+    }
 
-  // 循環條永遠填滿到 100%，不再與書長掛鉤
-  const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * 100
-  const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (CYCLE_SIZE - HALF_CYCLE), 0) * 100
+    // 循環數量：隨機 5–12 個
+    const count = Math.floor(rng() * 8) + 5
 
-  // 薄條：有目標時顯示目標進度，無目標時顯示全書總進度
+    // 每個循環的隨機權重（0.3 ~ 1.0，避免出現極小循環）
+    const weights = Array.from({ length: count }, () => rng() * 0.7 + 0.3)
+    const totalWeight = weights.reduce((a, b) => a + b, 0)
+
+    // 轉換為句數（每個循環至少 2 句）
+    const sizes = weights.map(w => Math.max(2, Math.round(w / totalWeight * total)))
+
+    // 確保總和等於目標句數
+    const diff = total - sizes.reduce((a, b) => a + b, 0)
+    sizes[sizes.length - 1] = Math.max(2, sizes[sizes.length - 1] + diff)
+
+    // 計算累積邊界
+    const boundaries = [0]
+    for (const sz of sizes) boundaries.push(boundaries[boundaries.length - 1] + sz)
+
+    return { sizes, boundaries, count }
+  }, [bookId, totalForProgress])
+
+  // 找出當前在第幾個循環
+  const currentCycleIdx = useMemo(() => {
+    const capped = Math.min(sentencesRead, totalForProgress)
+    for (let i = 0; i < cycleData.boundaries.length - 1; i++) {
+      if (capped > cycleData.boundaries[i] && capped <= cycleData.boundaries[i + 1]) return i
+    }
+    return cycleData.count - 1
+  }, [sentencesRead, totalForProgress, cycleData])
+
+  const cycleStart  = cycleData.boundaries[currentCycleIdx]
+  const cycleSize   = cycleData.sizes[currentCycleIdx]
+  const posInCycle  = Math.min(sentencesRead - cycleStart, cycleSize)
+  const HALF_CYCLE  = Math.ceil(cycleSize / 2)
+
+  // 當前循環的最大填充高度（線性遞增，最後一個循環 = 100%）
+  const maxFill = (currentCycleIdx + 1) / cycleData.count
+
+  // 兩條條：前半 / 後半循環，永遠從 0 填到 maxFill
+  const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxFill * 100
+  const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (cycleSize - HALF_CYCLE), 0) * maxFill * 100
+
+  // 薄條：目標進度 或 全書進度
   const goalProgressPct = readingGoal > 0
     ? Math.min(sentencesRead / readingGoal * 100, 100)
     : sentences.length > 1 ? currentIndex / (sentences.length - 1) * 100 : 100
-  const goalLabel = readingGoal > 0
-    ? `目標 ${Math.min(sentencesRead, readingGoal)}/${readingGoal} 句`
-    : `全書`
 
   const getProgressColor = () => {
     if (goalCompleted) return '#22c55e'
