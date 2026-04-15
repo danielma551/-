@@ -388,7 +388,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const boundaries = [0]
     for (const sz of sizes) boundaries.push(boundaries[boundaries.length - 1] + sz)
 
-    return { sizes, boundaries, count }
+    return { sizes, boundaries, count: sizes.length }
   }, [bookId, totalForProgress])
 
   // 找出當前在第幾個循環
