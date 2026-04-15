@@ -359,26 +359,29 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
 
     // 每個循環固定在 13–49 句之間
+    // 做法：逐個切出循環，直到目標句數用完——不預先決定循環數量
+    // 這樣每個循環大小才是真正在 13–49 之間自由浮動，不會被數量擠壓到下限
     const MIN_CY = 13, MAX_CY = 49
-    const minCount = Math.ceil(total / MAX_CY)
-    const maxCount = Math.floor(total / MIN_CY)
-    if (maxCount < 1) return { sizes: [total], boundaries: [0, total], count: 1 }
+    const sizes: number[] = []
+    let remaining = total
 
-    // 在可行範圍內隨機決定循環數
-    const count = minCount + Math.floor(rng() * Math.max(1, maxCount - minCount + 1))
-
-    // 隨機權重 → 轉句數 → 夾在 [13, 49]
-    const weights = Array.from({ length: count }, () => rng() * 0.7 + 0.3)
-    const totalWeight = weights.reduce((a, b) => a + b, 0)
-    const sizes = weights.map(w => Math.min(MAX_CY, Math.max(MIN_CY, Math.round(w / totalWeight * total))))
-
-    // 逐步分配餘數，保持每個循環在 [13, 49]
-    let diff = total - sizes.reduce((a, b) => a + b, 0)
-    for (let iter = 0; diff !== 0 && iter < 200; iter++) {
-      for (let j = 0; j < sizes.length && diff !== 0; j++) {
-        if (diff > 0 && sizes[j] < MAX_CY) { sizes[j]++; diff-- }
-        else if (diff < 0 && sizes[j] > MIN_CY) { sizes[j]--; diff++ }
+    while (remaining > 0) {
+      // 剩餘句數可以直接作為最後一個循環
+      if (remaining <= MAX_CY) {
+        sizes.push(remaining)
+        break
       }
+      // 本循環最大取 MAX_CY，但必須給後面至少留 MIN_CY 句
+      const maxForThis = Math.min(MAX_CY, remaining - MIN_CY)
+      if (maxForThis < MIN_CY) {
+        // 剩餘太少，無法再切出一個合規循環，全部併入最後
+        sizes.push(remaining)
+        break
+      }
+      // 在 [MIN_CY, maxForThis] 之間隨機取一個大小
+      const size = MIN_CY + Math.floor(rng() * (maxForThis - MIN_CY + 1))
+      sizes.push(size)
+      remaining -= size
     }
 
     // 計算累積邊界
