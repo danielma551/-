@@ -53,6 +53,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
   const [searchResultIdx, setSearchResultIdx] = useState(0)
+  // 循環提示：進入新循環時短暫顯示
+  const [cycleToast, setCycleToast] = useState<string | null>(null)
+  const cycleToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevCycleIdxRef = useRef<number>(-1)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -393,6 +397,21 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return cycleData.count - 1
   }, [sentencesRead, totalForProgress, cycleData])
 
+  // 偵測循環切換，顯示提示
+  useEffect(() => {
+    if (prevCycleIdxRef.current === -1) {
+      prevCycleIdxRef.current = currentCycleIdx
+      return
+    }
+    if (currentCycleIdx !== prevCycleIdxRef.current) {
+      prevCycleIdxRef.current = currentCycleIdx
+      const sz = cycleData.sizes[currentCycleIdx]
+      setCycleToast(`第 ${currentCycleIdx + 1} 循環 · ${sz} 句`)
+      if (cycleToastTimer.current) clearTimeout(cycleToastTimer.current)
+      cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
+    }
+  }, [currentCycleIdx, cycleData.sizes])
+
   const cycleStart  = cycleData.boundaries[currentCycleIdx]
   const cycleSize   = cycleData.sizes[currentCycleIdx]
   const posInCycle  = Math.min(sentencesRead - cycleStart, cycleSize)
@@ -574,6 +593,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         </div>
       </header>
+
+      {/* 循環開始提示 Toast */}
+      <div
+        className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-500"
+        style={{ opacity: cycleToast ? 1 : 0, transform: `translateX(-50%) translateY(${cycleToast ? '0px' : '-8px'})` }}
+      >
+        <div className="px-4 py-2 bg-gray-800/80 backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap">
+          🔄 {cycleToast}
+        </div>
+      </div>
 
       <main className="flex-1 flex items-center justify-center p-4 md:p-6">
         <div className="max-w-4xl w-full">
