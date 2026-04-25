@@ -114,21 +114,36 @@ function escapeRegex(s: string): string {
 function lookupChineseWord(plainText: string, word: string): string | null {
   const esc = escapeRegex(word)
 
-  // 策略：詞條標題後面必定緊跟拼音（含聲調字母，Unicode U+00C0-U+024F）
-  // 不強制行首，因為 MOBI 格式不保證詞條一定在新行開始
-  const headRe = new RegExp(
-    esc + '\\s{0,3}[a-z]*[\\u00C0-\\u024F][a-z\\u00C0-\\u024F·]*',
-    'g'
+  // ── 第一優先：行首嚴格匹配 ──
+  // 使用多行模式 (m flag) 加 ^ 錨定行首，確保只匹配真正的詞條標題，
+  // 而不會誤中其他詞條的定義內文或例句中出現的相同字符。
+  // 詞條格式：行首 中文詞 [空白] 拼音（含聲調字母 U+00C0-U+024F）
+  const strictHeadRe = new RegExp(
+    '^' + esc + '\\s{0,3}[a-zü]*[\\u00C0-\\u024F][a-zü\\u00C0-\\u024F·]*',
+    'gm'
   )
 
-  const m = headRe.exec(plainText)
-  if (!m) return null
+  let m = strictHeadRe.exec(plainText)
+
+  // ── 第二優先：降級為全文搜索（保底）──
+  // 若行首嚴格搜索無結果（可能是 MOBI 解析後格式不整齊），
+  // 降級為全文匹配，提高命中率。
+  if (!m) {
+    const looseHeadRe = new RegExp(
+      esc + '\\s{0,3}[a-zü]*[\\u00C0-\\u024F][a-zü\\u00C0-\\u024F·]*',
+      'g'
+    )
+    m = looseHeadRe.exec(plainText)
+    if (!m) return null
+  }
 
   const entryStart = m.index
 
-  // 尋找下一個詞條的起始位置（中文字符 + 拼音聲調）
-  const nextHeadRe = /[\u4e00-\u9fff]{1,4}\s{0,3}[a-z]*[\u00C0-\u024F][a-z\u00C0-\u024F·]*/g
-  nextHeadRe.lastIndex = entryStart + word.length + 5
+  // 尋找下一個詞條的起始位置：同樣使用行首錨定，
+  // 避免誤把定義內文中的中文字符當作下一詞條，導致詞條被提前截斷。
+  // lastIndex 跳過整個匹配頭（而非固定 +5），確保不會在詞條自身行內重新匹配。
+  const nextHeadRe = /^[\u4e00-\u9fff]{1,4}\s{0,3}[a-zü]*[\u00C0-\u024F][a-zü\u00C0-\u024F·]*/gm
+  nextHeadRe.lastIndex = entryStart + m[0].length + 1
 
   const nextM = nextHeadRe.exec(plainText)
   // 最多取 800 個字符，避免返回過長的文字
