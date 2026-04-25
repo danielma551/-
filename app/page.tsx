@@ -17,6 +17,7 @@ import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
 import FeedPanel from './components/FeedPanel'
 import VocabPractice from './components/VocabPractice'
+import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
@@ -189,6 +190,17 @@ export default function Home() {
     getAllBooksFromIDB().then(setSavedBooks)
   }
 
+  // 從搜索結果直接跳到某本書的某句（不需要顯示目標設定視窗）
+  const handleOpenBookAtSentence = (book: BookData, sentenceIndex: number) => {
+    setSentences(book.sentences)
+    setBookTitle(book.title)
+    setBookId(book.id)
+    setCurrentIndex(sentenceIndex)
+    setReadingGoal(0)
+    setShowGoalModal(false)
+    setPendingBook(null)
+  }
+
   // 用戶從 RSS 訂閱點了一篇文章，直接開啟閱讀器（不需要目標設定）
   const handleReadArticle = (articleSentences: string[], title: string, link: string) => {
     setReadingArticleLink(link)
@@ -246,6 +258,7 @@ export default function Home() {
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
             <div className="flex items-center space-x-3">
+              <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
               <label
                 htmlFor="file-upload"
