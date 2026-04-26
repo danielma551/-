@@ -22,6 +22,7 @@ import DisplaySettingsPanel from './DisplaySettings'
 import DictionaryPanel from './DictionaryPanel'
 import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
+import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 
 interface ReaderProps {
   sentences: string[]
@@ -43,6 +44,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
   const [showSearch, setShowSearch] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [headerVisible, setHeaderVisible] = useState(false)
   const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -438,7 +440,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     : `"${fontFamily}", system-ui, -apple-system, sans-serif`
 
   return (
-    <div className="min-h-screen flex flex-col overflow-x-hidden" style={{ backgroundColor: displaySettings.backgroundColor }}>
+    <div
+      className="min-h-screen flex flex-col overflow-x-hidden transition-all duration-300"
+      style={{
+        backgroundColor: displaySettings.backgroundColor,
+        paddingRight: showSidebar ? SIDEBAR_WIDTH : 0,
+      }}
+    >
       {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件 */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
       <header ref={headerRef} className="bg-white shadow-sm">
@@ -528,9 +536,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 )}
               </div>
             ) : (
-              <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-                <Search className="w-4 h-4 text-gray-500" />
-              </button>
+              <div className="flex items-center space-x-1">
+                {/* 書內搜索 */}
+                <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="書內搜索">
+                  <Search className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
             )}
           </div>
           <div className="flex items-center space-x-1 sm:space-x-3">
@@ -672,7 +683,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </main>
 
-      {/* 搜索上下文預覽彈窗 */}
+      {/* 書內搜索的上下文預覽彈窗 */}
       {contextPreviewIndex !== null && (
         <ContextModal
           sentences={sentences}
@@ -683,6 +694,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           onJump={handleJumpFromContext}
         />
       )}
+
+      {/* 右側跨書搜索側欄 */}
+      <SearchSidebar
+        isOpen={showSidebar}
+        onToggle={() => setShowSidebar(v => !v)}
+        currentBookId={bookId}
+        onOpenBook={(book, idx) => {
+          if (onOpenBook) onOpenBook(book, idx)
+        }}
+      />
     </div>
   )
 }
