@@ -1,13 +1,15 @@
 // 【全文搜索面板】
 // 搜索所有書籍的句子內容，結果以多欄卡片顯示（每本書一張）
-// 設計參照：多個並排卡片，每張卡片有書名標頭 + 命中句子列表
+// 點擊某句 → 彈出 ContextModal（前後各 5 句段落預覽）→ 再決定是否跳書
 
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, X, BookOpen, Loader2, ChevronRight } from 'lucide-react'
 import { getAllBooksFromIDB } from '../utils/bookDB'
 import { BookData } from '../utils/storage'
+import ContextModal from './ContextModal'
 
 interface SearchMatch {
   sentence: string
@@ -19,14 +21,21 @@ interface SearchResult {
   matches: SearchMatch[]
 }
 
+interface ContextPreview {
+  book: BookData
+  matchIndex: number
+  keyword: string
+}
+
 interface SearchPanelProps {
   onOpenBook: (book: BookData, sentenceIndex: number) => void
 }
 
-// 高亮關鍵字（把關鍵字用黃底標出來）
+// 高亮關鍵字
 function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
   if (!keyword.trim()) return <span>{text}</span>
-  const parts = text.split(new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
   return (
     <span>
       {parts.map((part, i) =>
@@ -40,8 +49,8 @@ function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
   )
 }
 
-// 書封顏色（與首頁保持一致）
-function getBookStyle(title: string): string {
+// 書封漸層（與首頁保持一致）
+function getBookGradient(title: string): string {
   const gradients = [
     'linear-gradient(160deg,#1a1a2e,#16213e)',
     'linear-gradient(160deg,#134e4a,#065f46)',
@@ -57,16 +66,8 @@ function getBookStyle(title: string): string {
     'linear-gradient(160deg,#0c4a6e,#0369a1)',
   ]
   let hash = 0
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash)
-  }
+  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash)
   return gradients[Math.abs(hash) % gradients.length]
-}
-
-// 從漸層字串提取第一個顏色作為純色（用於卡片標頭）
-function extractGradientColor(gradient: string): string {
-  const match = gradient.match(/#[0-9a-fA-F]{6}/)
-  return match ? match[0] : '#1f2937'
 }
 
 export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
@@ -76,55 +77,45 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [books, setBooks] = useState<BookData[]>([])
+  const [contextPreview, setContextPreview] = useState<ContextPreview | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 預先載入所有書籍到 state（避免每次搜索都重新讀 IDB）
   useEffect(() => {
-    if (isOpen && books.length === 0) {
-      getAllBooksFromIDB().then(setBooks)
-    }
+    if (isOpen && books.length === 0) getAllBooksFromIDB().then(setBooks)
   }, [isOpen, books.length])
 
-  // 打開時自動 focus 輸入框
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100)
-    }
+    if (isOpen) setTimeout(() => inputRef.current?.focus(), 100)
   }, [isOpen])
 
-  // ESC 關閉面板
+  // ESC 關閉面板（只在沒有上下文預覽時生效；有預覽時由 ContextModal 自己處理 ESC）
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !contextPreview) handleClose()
     }
-    if (isOpen) window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [isOpen])
+    if (isOpen) window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isOpen, contextPreview])
 
   const handleSearch = useCallback(async () => {
     const trimmed = query.trim()
     if (!trimmed) return
-
     setLoading(true)
     setSearched(false)
-
-    // 短暫延遲讓 loading 狀態先渲染出來
+    setContextPreview(null)
     await new Promise(r => setTimeout(r, 50))
 
     const allBooks = books.length > 0 ? books : await getAllBooksFromIDB()
     if (books.length === 0) setBooks(allBooks)
 
     const searchResults: SearchResult[] = allBooks
-      .map(book => {
-        const matches: SearchMatch[] = book.sentences
+      .map(book => ({
+        book,
+        matches: book.sentences
           .map((sentence, index) => ({ sentence, index }))
-          .filter(({ sentence }) =>
-            sentence.toLowerCase().includes(trimmed.toLowerCase())
-          )
-          // 每本書最多顯示 20 條命中，避免卡片過長
-          .slice(0, 20)
-        return { book, matches }
-      })
+          .filter(({ sentence }) => sentence.toLowerCase().includes(trimmed.toLowerCase()))
+          .slice(0, 20),
+      }))
       .filter(r => r.matches.length > 0)
 
     setResults(searchResults)
@@ -141,16 +132,24 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
     setQuery('')
     setResults([])
     setSearched(false)
+    setContextPreview(null)
   }
 
+  // 點擊搜索結果 → 顯示上下文預覽
   const handleClickResult = (book: BookData, index: number) => {
-    onOpenBook(book, index)
+    setContextPreview({ book, matchIndex: index, keyword: query })
+  }
+
+  // 從上下文預覽跳書
+  const handleJumpFromContext = (index: number) => {
+    if (!contextPreview) return
+    onOpenBook(contextPreview.book, index)
     handleClose()
   }
 
   return (
     <>
-      {/* 搜索按鈕（放在書架 header） */}
+      {/* 搜索按鈕 */}
       <button
         onClick={() => setIsOpen(true)}
         className="flex items-center space-x-1 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-full border border-gray-300 text-sm font-medium transition-colors"
@@ -160,9 +159,9 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
         <span className="hidden sm:inline">搜索</span>
       </button>
 
-      {/* 全屏搜索面板 */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-gray-50/95 backdrop-blur-sm flex flex-col">
+      {/* 全屏搜索面板：Portal 渲染到 body，跳出 Reader header 的 transform containing block */}
+      {isOpen && createPortal(
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
 
           {/* 頂部搜索欄 */}
           <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-4 flex items-center space-x-3 shadow-sm">
@@ -195,7 +194,6 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
           {/* 結果區域 */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
 
-            {/* 搜索前的提示 */}
             {!searched && !loading && (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 select-none">
                 <Search className="w-16 h-16 mb-4 opacity-30" />
@@ -204,7 +202,6 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
               </div>
             )}
 
-            {/* 無結果 */}
             {searched && results.length === 0 && !loading && (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 select-none">
                 <BookOpen className="w-16 h-16 mb-4 opacity-30" />
@@ -213,47 +210,27 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
               </div>
             )}
 
-            {/* 結果卡片：橫排，每本書一張 */}
             {searched && results.length > 0 && (
               <>
-                {/* 摘要行 */}
                 <p className="text-sm text-gray-500 mb-5">
                   在 <span className="font-semibold text-gray-800">{results.length}</span> 本書中找到「
                   <span className="font-semibold text-indigo-600">{query}</span>」
+                  <span className="text-gray-400 ml-2">· 點擊句子可預覽上下文</span>
                 </p>
 
-                {/* 卡片橫排（參照截圖的多面板設計） */}
-                <div
-                  className="grid gap-4"
-                  style={{
-                    gridTemplateColumns: `repeat(auto-fill, minmax(300px, 1fr))`
-                  }}
-                >
+                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
                   {results.map(({ book, matches }) => {
-                    const gradient = book.coverColor ?? getBookStyle(book.title)
-                    const headerColor = extractGradientColor(gradient)
+                    const gradient = book.coverColor ?? getBookGradient(book.title)
                     return (
-                      <div
-                        key={book.id}
-                        className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col"
-                      >
-                        {/* 卡片標頭（書名 + 命中數）*/}
-                        <div
-                          className="px-4 py-3 flex items-center justify-between"
-                          style={{ background: gradient }}
-                        >
+                      <div key={book.id} className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col">
+                        <div className="px-4 py-3 flex items-center justify-between" style={{ background: gradient }}>
                           <div className="flex items-center space-x-2 min-w-0">
                             <BookOpen className="w-4 h-4 text-white/80 flex-shrink-0" />
-                            <h3 className="text-white text-sm font-semibold truncate">
-                              {book.title}
-                            </h3>
+                            <h3 className="text-white text-sm font-semibold truncate">{book.title}</h3>
                           </div>
-                          <span className="text-white/70 text-xs ml-2 flex-shrink-0">
-                            {matches.length} 處
-                          </span>
+                          <span className="text-white/70 text-xs ml-2 flex-shrink-0">{matches.length} 處</span>
                         </div>
 
-                        {/* 命中句子列表 */}
                         <div className="divide-y divide-gray-50 flex-1 overflow-y-auto max-h-72">
                           {matches.map(({ sentence, index }) => (
                             <button
@@ -272,7 +249,6 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
                           ))}
                         </div>
 
-                        {/* 底部：跳到書本按鈕 */}
                         <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
                           <button
                             onClick={() => handleClickResult(book, matches[0].index)}
@@ -288,7 +264,21 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
               </>
             )}
           </div>
-        </div>
+
+          {/* 上下文預覽彈窗 */}
+          {contextPreview && (
+            <ContextModal
+              sentences={contextPreview.book.sentences}
+              bookTitle={contextPreview.book.title}
+              bookGradient={contextPreview.book.coverColor ?? getBookGradient(contextPreview.book.title)}
+              matchIndex={contextPreview.matchIndex}
+              keyword={contextPreview.keyword}
+              onClose={() => setContextPreview(null)}
+              onJump={handleJumpFromContext}
+            />
+          )}
+        </div>,
+        document.body
       )}
     </>
   )

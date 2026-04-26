@@ -404,6 +404,7 @@ export default function Home() {
           readingGoal={readingGoal}
           onReset={handleReset}
           onArticleFinished={readingArticleLink ? handleArticleFinished : undefined}
+          onOpenBook={handleOpenBookAtSentence}
         />
       )}
     </main>

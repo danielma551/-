@@ -13,13 +13,15 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
 import DisplaySettingsPanel from './DisplaySettings'
 import DictionaryPanel from './DictionaryPanel'
+import ContextModal from './ContextModal'
+import SearchPanel from './SearchPanel'
 
 interface ReaderProps {
   sentences: string[]
@@ -29,9 +31,10 @@ interface ReaderProps {
   readingGoal: number
   onReset: () => void
   onArticleFinished?: () => void
+  onOpenBook?: (book: BookData, sentenceIndex: number) => void
 }
 
-export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, onReset, onArticleFinished }: ReaderProps) {
+export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
@@ -52,7 +55,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const rainAnimRef = useRef<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
-  const [searchResultIdx, setSearchResultIdx] = useState(0)
+  // 上下文預覽：點擊搜索結果後顯示，不直接跳句
+  const [contextPreviewIndex, setContextPreviewIndex] = useState<number | null>(null)
   // 循環提示：進入新循環時短暫顯示
   const [cycleToast, setCycleToast] = useState<string | null>(null)
   const cycleToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -253,30 +257,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       return acc
     }, [])
     setSearchResults(results)
-    setSearchResultIdx(0)
-    if (results.length > 0) {
-      setCurrentIndex(results[0])
-      setStartIndex(results[0])
-      setGoalCompleted(false)
-    }
+    setContextPreviewIndex(null)
   }
 
-  const goToNextResult = () => {
-    if (searchResults.length === 0) return
-    const next = (searchResultIdx + 1) % searchResults.length
-    setSearchResultIdx(next)
-    setCurrentIndex(searchResults[next])
-    setStartIndex(searchResults[next])
-    setGoalCompleted(false)
+  // 點擊搜索結果 → 先顯示上下文預覽，不直接跳句
+  const handleClickSearchResult = (idx: number) => {
+    setContextPreviewIndex(idx)
   }
 
-  const goToPrevResult = () => {
-    if (searchResults.length === 0) return
-    const prev = (searchResultIdx - 1 + searchResults.length) % searchResults.length
-    setSearchResultIdx(prev)
-    setCurrentIndex(searchResults[prev])
-    setStartIndex(searchResults[prev])
+  // 從上下文預覽確認跳句
+  const handleJumpFromContext = (idx: number) => {
+    setCurrentIndex(idx)
+    setStartIndex(idx)
     setGoalCompleted(false)
+    setContextPreviewIndex(null)
+    setShowSearch(false)
+    setSearchQuery('')
+    setSearchResults([])
   }
 
   const vibrate = (ms: number) => {
@@ -488,10 +485,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     ) : (
                       <>
                         <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-50">
-                          共 {searchResults.length} 個結果
+                          共 {searchResults.length} 個結果 · 點擊預覽上下文
                         </div>
                         <ul className="max-h-64 overflow-y-auto">
-                          {searchResults.slice(0, 10).map((idx, i) => {
+                          {searchResults.slice(0, 10).map((idx) => {
                             const sentence = sentences[idx]
                             const lower = sentence.toLowerCase()
                             const qLower = searchQuery.toLowerCase()
@@ -499,26 +496,20 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                             const preview = sentence.length > 60
                               ? sentence.slice(Math.max(0, matchPos - 15), matchPos + searchQuery.length + 30) + '…'
                               : sentence
-                            const previewBefore = preview.slice(0, preview.toLowerCase().indexOf(qLower))
-                            const previewMatch = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
-                            const previewAfter = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                            const before = preview.slice(0, preview.toLowerCase().indexOf(qLower))
+                            const match = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                            const after = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
                             return (
                               <li key={idx}>
                                 <button
-                                  onClick={() => {
-                                    setCurrentIndex(idx)
-                                    setStartIndex(idx)
-                                    setGoalCompleted(false)
-                                    setSearchResultIdx(i)
-                                    setShowSearch(false)
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2 ${i === searchResultIdx ? 'bg-indigo-50' : ''}`}
+                                  onClick={() => handleClickSearchResult(idx)}
+                                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2"
                                 >
                                   <Search className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
                                   <span className="text-gray-600 leading-snug">
-                                    {previewBefore}
-                                    <strong className="text-indigo-600 font-semibold">{previewMatch}</strong>
-                                    {previewAfter}
+                                    {before}
+                                    <strong className="text-indigo-600 font-semibold">{match}</strong>
+                                    {after}
                                   </span>
                                   <span className="text-xs text-gray-300 flex-shrink-0 ml-auto pl-2">#{idx + 1}</span>
                                 </button>
@@ -551,6 +542,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             >
               <CloudRain className="w-4 h-4" />
             </button>
+            {onOpenBook && <SearchPanel onOpenBook={onOpenBook} />}
             <DictionaryPanel />
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
             <KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} />
@@ -679,6 +671,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           )}
         </div>
       </main>
+
+      {/* 搜索上下文預覽彈窗 */}
+      {contextPreviewIndex !== null && (
+        <ContextModal
+          sentences={sentences}
+          bookTitle={bookTitle}
+          matchIndex={contextPreviewIndex}
+          keyword={searchQuery}
+          onClose={() => setContextPreviewIndex(null)}
+          onJump={handleJumpFromContext}
+        />
+      )}
     </div>
   )
 }
