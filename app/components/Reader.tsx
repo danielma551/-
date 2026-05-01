@@ -435,6 +435,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (goalCompleted) return '#22c55e'
     return displaySettings.progressColor
   }
+
+  // 根據進度百分比插值計算單一顏色：紅(0%) → 黃(50%) → 瑞幸藍(100%)
+  const getBarColor = (pct: number): string => {
+    if (goalCompleted) return '#22c55e'
+    const stops = [
+      { p: 0,   r: 239, g: 68,  b: 68  },  // #EF4444 紅
+      { p: 50,  r: 234, g: 179, b: 8   },  // #EAB308 黃
+      { p: 100, r: 0,   g: 164, b: 228 },  // #00A4E4 瑞幸藍
+    ]
+    const capped = Math.min(Math.max(pct, 0), 100)
+    let from = stops[0], to = stops[1]
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (capped >= stops[i].p && capped <= stops[i + 1].p) {
+        from = stops[i]; to = stops[i + 1]; break
+      }
+    }
+    const t = (to.p === from.p) ? 0 : (capped - from.p) / (to.p - from.p)
+    const r = Math.round(from.r + (to.r - from.r) * t)
+    const g = Math.round(from.g + (to.g - from.g) * t)
+    const b = Math.round(from.b + (to.b - from.b) * t)
+    return `rgb(${r},${g},${b})`
+  }
   const textFontFamily = fontFamily.includes(',')
     ? fontFamily
     : `"${fontFamily}", system-ui, -apple-system, sans-serif`
@@ -568,29 +590,82 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         </div>
         <div className="w-full">
+          {/* ── 進度條共用：A發光尾端 + B里程碑缺口 + C漸層色進 ── */}
+          {/* 漸層：冷色(靛藍) → 紫 → 暖色(金)，隨進度條延伸自然色移 */}
+          {/* 完成後統一轉綠 */}
+
           {/* 循環進度條 1（前半循環） */}
           <div className="flex justify-between text-xs mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
             <span>進度 1</span>
             <span className="tabular-nums">{bar1Width.toFixed(0)}%</span>
           </div>
-          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+          {/* 相對定位容器：讓發光點和里程碑可以溢出 */}
+          <div className="w-full relative" style={{ height: 8 }}>
+            {/* 軌道底色 */}
+            <div className="absolute inset-0 rounded-full bg-gray-200" />
+            {/* C: 單色填充，顏色隨進度插值變化 */}
             <div
-              className="h-2 rounded-full transition-all duration-300"
-              style={{ width: `${bar1Width}%`, backgroundColor: getProgressColor() }}
+              className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+              style={{ width: `${bar1Width}%`, backgroundColor: getBarColor(bar1Width) }}
             />
+            {/* A: 發光尾端，顏色與填充同步 */}
+            {bar1Width > 0.5 && (
+              <div
+                className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
+                style={{
+                  left: `${bar1Width}%`,
+                  transform: 'translate(-50%,-50%)',
+                  width: 14, height: 14,
+                  backgroundColor: getBarColor(bar1Width),
+                  opacity: 0.5,
+                  boxShadow: `0 0 8px 5px ${getBarColor(bar1Width)}88`,
+                }}
+              />
+            )}
+            {/* B: 里程碑缺口（白色細線在 25 / 50 / 75%） */}
+            {[25, 50, 75].map(m => (
+              <div
+                key={m}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full z-10 pointer-events-none"
+                style={{ left: `${m}%`, width: 2, height: 14, background: 'white' }}
+              />
+            ))}
           </div>
+
           {/* 循環進度條 2（後半循環） */}
           <div className="flex justify-between text-xs mt-1 mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
             <span>進度 2</span>
             <span className="tabular-nums">{bar2Width.toFixed(0)}%</span>
           </div>
-          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+          <div className="w-full relative" style={{ height: 8 }}>
+            <div className="absolute inset-0 rounded-full bg-gray-200" />
             <div
-              className="h-2 rounded-full transition-all duration-300"
-              style={{ width: `${bar2Width}%`, backgroundColor: getProgressColor() }}
+              className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+              style={{ width: `${bar2Width}%`, backgroundColor: getBarColor(bar2Width) }}
             />
+            {bar2Width > 0.5 && (
+              <div
+                className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
+                style={{
+                  left: `${bar2Width}%`,
+                  transform: 'translate(-50%,-50%)',
+                  width: 14, height: 14,
+                  backgroundColor: getBarColor(bar2Width),
+                  opacity: 0.5,
+                  boxShadow: `0 0 8px 5px ${getBarColor(bar2Width)}88`,
+                }}
+              />
+            )}
+            {[25, 50, 75].map(m => (
+              <div
+                key={m}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full z-10 pointer-events-none"
+                style={{ left: `${m}%`, width: 2, height: 14, background: 'white' }}
+              />
+            ))}
           </div>
-          {/* 目標 / 全書總進度薄條 */}
+
+          {/* 目標 / 全書總進度薄條（不變） */}
           <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden mt-1">
             <div
               className="h-1 rounded-full transition-all duration-500"
