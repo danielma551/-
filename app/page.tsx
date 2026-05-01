@@ -343,12 +343,35 @@ export default function Home() {
                           {book.title}
                         </p>
                       </div>
-                      {/* Reading progress */}
-                      {book.currentIndex > 0 && (
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
-                          <div className="h-full bg-white/70" style={{ width: `${progress}%` }} />
-                        </div>
-                      )}
+                      {/* 圓形進度環（右下角徽章） */}
+                      {book.currentIndex > 0 && (() => {
+                        const r = 14
+                        const circ = 2 * Math.PI * r
+                        const offset = circ * (1 - progress / 100)
+                        return (
+                          <div className="absolute bottom-2 right-2 w-9 h-9 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                            <svg width="36" height="36" viewBox="0 0 36 36" style={{ position: 'absolute', inset: 0 }}>
+                              {/* 軌道 */}
+                              <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="3" />
+                              {/* 進度 */}
+                              <circle
+                                cx="18" cy="18" r={r}
+                                fill="none"
+                                stroke="rgba(255,255,255,0.85)"
+                                strokeWidth="3"
+                                strokeDasharray={circ}
+                                strokeDashoffset={offset}
+                                strokeLinecap="round"
+                                transform="rotate(-90 18 18)"
+                              />
+                            </svg>
+                            {/* 中間百分比文字 */}
+                            <span style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.9)', lineHeight: 1, position: 'relative', zIndex: 1 }}>
+                              {progress}%
+                            </span>
+                          </div>
+                        )
+                      })()}
                       {/* Cover image picker */}
                       <button
                         onClick={(e) => { e.stopPropagation(); document.getElementById(`cover-img-${book.id}`)?.click() }}
@@ -382,13 +405,21 @@ export default function Home() {
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
-                    {/* Title & date */}
+                    {/* 書名 */}
                     <p className="mt-2 text-xs text-gray-700 font-medium line-clamp-2 leading-snug">
                       {book.title}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {formatDate(book.lastReadDate)}
-                    </p>
+                    {/* 進度文字 + 最後閱讀日期 */}
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-xs text-gray-400">
+                        {formatDate(book.lastReadDate)}
+                      </p>
+                      {book.currentIndex > 0 && (
+                        <p className="text-[10px] text-gray-400 tabular-nums">
+                          {book.currentIndex + 1} / {book.sentences.length}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )
               })}
