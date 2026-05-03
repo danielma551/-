@@ -57,8 +57,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const rainAnimRef = useRef<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
-  // 手機/平板觸摸分區：點右邊下一句，點左邊上一句，短暫閃光作反饋
-  const [tapFlash, setTapFlash] = useState<'left' | 'right' | null>(null)
   // 上下文預覽：點擊搜索結果後顯示，不直接跳句
   const [contextPreviewIndex, setContextPreviewIndex] = useState<number | null>(null)
   // 循環提示：進入新循環時短暫顯示
@@ -251,21 +249,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }, [currentIndex, sentences.length, shortcuts, onReset])
 
   // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
-  // 過濾掉點按鈕、輸入框等互動元素的情況
+  // 過濾掉點按鈕、輸入框等互動元素的情況，反饋改用振動（無視覺閃光）
   const handleMainTap = (e: React.MouseEvent<HTMLElement>) => {
     const target = e.target as HTMLElement
     if (target.closest('button, input, textarea, a, [role="button"], select')) return
     const rect = e.currentTarget.getBoundingClientRect()
     const isRight = e.clientX - rect.left > rect.width / 2
     if (isRight && currentIndex < sentences.length - 1) {
-      setTapFlash('right')
-      setTimeout(() => setTapFlash(null), 180)
       historyStorage.recordRead(1)
       vibrate(displaySettings.vibrationIntensity)
       triggerFade(() => setCurrentIndex(prev => prev + 1))
     } else if (!isRight && currentIndex > 0) {
-      setTapFlash('left')
-      setTimeout(() => setTapFlash(null), 180)
       vibrate(displaySettings.vibrationIntensity)
       triggerFade(() => setCurrentIndex(prev => prev - 1))
     }
@@ -711,17 +705,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       {/* 手機/平板觸摸區：整個 main 都可點，右半下一句，左半上一句 */}
       <main className="flex-1 flex items-center justify-center p-4 md:p-6 relative" onClick={handleMainTap}>
 
-        {/* 觸摸閃光反饋（僅手機可見） */}
-        <div
-          className="md:hidden pointer-events-none fixed inset-y-0 left-0 w-1/2 transition-opacity duration-150"
-          style={{ background: 'rgba(0,0,0,0.06)', opacity: tapFlash === 'left' ? 1 : 0 }}
-        />
-        <div
-          className="md:hidden pointer-events-none fixed inset-y-0 right-0 w-1/2 transition-opacity duration-150"
-          style={{ background: 'rgba(0,0,0,0.06)', opacity: tapFlash === 'right' ? 1 : 0 }}
-        />
-
-        <div className="max-w-4xl w-full">
+<div className="max-w-4xl w-full">
           <div 
             className="rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40"
           >
