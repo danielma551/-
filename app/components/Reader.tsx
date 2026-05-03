@@ -57,6 +57,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const rainAnimRef = useRef<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<number[]>([])
+  // 手機/平板觸摸分區：點右邊下一句，點左邊上一句，短暫閃光作反饋
+  const [tapFlash, setTapFlash] = useState<'left' | 'right' | null>(null)
   // 上下文預覽：點擊搜索結果後顯示，不直接跳句
   const [contextPreviewIndex, setContextPreviewIndex] = useState<number | null>(null)
   // 循環提示：進入新循環時短暫顯示
@@ -247,6 +249,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentIndex, sentences.length, shortcuts, onReset])
+
+  // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
+  // 過濾掉點按鈕、輸入框等互動元素的情況
+  const handleMainTap = (e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, textarea, a, [role="button"], select')) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const isRight = e.clientX - rect.left > rect.width / 2
+    if (isRight && currentIndex < sentences.length - 1) {
+      setTapFlash('right')
+      setTimeout(() => setTapFlash(null), 180)
+      historyStorage.recordRead(1)
+      vibrate(displaySettings.vibrationIntensity)
+      triggerFade(() => setCurrentIndex(prev => prev + 1))
+    } else if (!isRight && currentIndex > 0) {
+      setTapFlash('left')
+      setTimeout(() => setTapFlash(null), 180)
+      vibrate(displaySettings.vibrationIntensity)
+      triggerFade(() => setCurrentIndex(prev => prev - 1))
+    }
+  }
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -685,7 +708,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </div>
 
-      <main className="flex-1 flex items-center justify-center p-4 md:p-6">
+      {/* 手機/平板觸摸區：整個 main 都可點，右半下一句，左半上一句 */}
+      <main className="flex-1 flex items-center justify-center p-4 md:p-6 relative" onClick={handleMainTap}>
+
+        {/* 觸摸閃光反饋（僅手機可見） */}
+        <div
+          className="md:hidden pointer-events-none fixed inset-y-0 left-0 w-1/2 transition-opacity duration-150"
+          style={{ background: 'rgba(0,0,0,0.06)', opacity: tapFlash === 'left' ? 1 : 0 }}
+        />
+        <div
+          className="md:hidden pointer-events-none fixed inset-y-0 right-0 w-1/2 transition-opacity duration-150"
+          style={{ background: 'rgba(0,0,0,0.06)', opacity: tapFlash === 'right' ? 1 : 0 }}
+        />
+
         <div className="max-w-4xl w-full">
           <div 
             className="rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40"
@@ -713,11 +748,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             )}
           </div>
 
-          <div className="mt-8 flex items-center justify-between">
-            {/* 下一句放左邊：方便左手大拇指點擊 */}
+          {/* 電腦：顯示按鈕；手機/平板：隱藏按鈕，改用觸摸分區 */}
+          <div className="mt-8 hidden md:flex items-center justify-between">
             <button
               onClick={goToNext}
-              onTouchStart={() => vibrate(displaySettings.vibrationIntensity)}
               disabled={currentIndex === sentences.length - 1}
               className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
@@ -727,13 +761,22 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             <button
               onClick={goToPrevious}
-              onTouchStart={() => vibrate(displaySettings.vibrationIntensity)}
               disabled={currentIndex === 0}
               className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               <ChevronLeft className="w-5 h-5" />
               <span>上一句</span>
             </button>
+          </div>
+
+          {/* 手機/平板：觸摸提示（非常淡，不打擾閱讀） */}
+          <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
+            <span className="text-xs text-gray-300 flex items-center gap-1">
+              <ChevronLeft className="w-3 h-3" /> 上一句
+            </span>
+            <span className="text-xs text-gray-300 flex items-center gap-1">
+              下一句 <ChevronRight className="w-3 h-3" />
+            </span>
           </div>
           
           {goalCompleted && (
