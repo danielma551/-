@@ -162,6 +162,12 @@ export default function Home() {
     }
   }
 
+  // 按 X 純關閉彈窗，不進入閱讀，回到書架
+  const handleCancelGoal = () => {
+    setShowGoalModal(false)
+    setPendingBook(null)
+  }
+
   const handleDeleteBook = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     if (confirm('確定要刪除這本書嗎？')) {
@@ -245,6 +251,7 @@ export default function Home() {
         <GoalModal
           onSetGoal={handleSetGoal}
           onSkip={handleSkipGoal}
+          onCancel={handleCancelGoal}
           maxSentences={pendingBook.sentences.length}
         />
       )}

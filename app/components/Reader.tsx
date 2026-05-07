@@ -358,46 +358,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const sentencesRead = currentIndex - startIndex + 1
   const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
 
-  // ── 隨機循環生成（用 bookId + 目標數作種子，保證同一閱讀會話每次一致）──
-  // 概念：把目標句數分成若干個隨機大小的循環
-  //   - 每個循環的最大填充高度遞增（第 1 個填一點，最後一個填滿 100%）
-  //   - 循環大小隨機，讀者不知道下一個循環何時結束，製造驚喜感
+  // ── 固定循環生成：每個循環固定 13 句，最後一個循環可能不足 13 句 ──
   const cycleData = useMemo(() => {
     const total = totalForProgress
     if (total <= 0) return { sizes: [1], boundaries: [0, 1], count: 1 }
 
-    // XorShift32 偽隨機（用 bookId + goal 作種子確保一致性）
-    const seedStr = bookId + String(total)
-    let s = seedStr.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 0x12345678)
-    const rng = () => {
-      s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0
-      return s / 0xFFFFFFFF
-    }
-
-    // 每個循環固定在 13–49 句之間
-    // 做法：逐個切出循環，直到目標句數用完——不預先決定循環數量
-    // 這樣每個循環大小才是真正在 13–49 之間自由浮動，不會被數量擠壓到下限
-    const MIN_CY = 13, MAX_CY = 49
+    const CYCLE_SIZE = 13
     const sizes: number[] = []
     let remaining = total
-
     while (remaining > 0) {
-      // 剩餘句數可以直接作為最後一個循環
-      if (remaining <= MAX_CY) {
-        sizes.push(remaining)
-        break
-      }
-      // 本循環最大取 MAX_CY，但必須給後面至少留 MIN_CY 句
-      const maxForThis = Math.min(MAX_CY, remaining - MIN_CY)
-      if (maxForThis < MIN_CY) {
-        // 剩餘太少，無法再切出一個合規循環，全部併入最後
-        sizes.push(remaining)
-        break
-      }
-      // 在 [MIN_CY, maxForThis] 之間隨機取一個大小
-      const size = MIN_CY + Math.floor(rng() * (maxForThis - MIN_CY + 1))
-      sizes.push(size)
-      remaining -= size
+      const sz = Math.min(CYCLE_SIZE, remaining)
+      sizes.push(sz)
+      remaining -= sz
     }
 
     // 計算累積邊界
@@ -405,7 +377,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     for (const sz of sizes) boundaries.push(boundaries[boundaries.length - 1] + sz)
 
     return { sizes, boundaries, count: sizes.length }
-  }, [bookId, totalForProgress])
+  }, [totalForProgress])
 
   // 找出當前在第幾個循環
   const currentCycleIdx = useMemo(() => {
