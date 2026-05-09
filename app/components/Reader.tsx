@@ -23,6 +23,7 @@ import DictionaryPanel from './DictionaryPanel'
 import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
+import ImagePopup from './ImagePopup'
 
 interface ReaderProps {
   sentences: string[]
@@ -47,6 +48,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [headerVisible, setHeaderVisible] = useState(false)
+  // 閱讀模式：'default'（現有樣式）或 'paper'（紙本質感）
+  const [readerMode, setReaderMode] = useState<'default' | 'paper'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('reader-mode') as 'default' | 'paper') || 'default'
+    }
+    return 'default'
+  })
   const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const headerRef = useRef<HTMLElement>(null)
   // 下雨特效的開關狀態
@@ -253,6 +261,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const handleMainTap = (e: React.MouseEvent<HTMLElement>) => {
     const target = e.target as HTMLElement
     if (target.closest('button, input, textarea, a, [role="button"], select')) return
+    // 用戶正在選字時，不觸發翻頁
+    const sel = window.getSelection()
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return
     const rect = e.currentTarget.getBoundingClientRect()
     const isRight = e.clientX - rect.left > rect.width / 2
     if (isRight && currentIndex < sentences.length - 1) {
@@ -450,16 +461,36 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     ? fontFamily
     : `"${fontFamily}", system-ui, -apple-system, sans-serif`
 
+  // ── Paper 模式主題 ──
+  const isPaper = readerMode === 'paper'
+  const paperTheme = {
+    bg: '#fdfaf3',
+    text: '#3a342b',
+    muted: '#a89d8a',
+    cardBg: '#fffef8',
+    cardShadow: '0 1px 0 #f0e9d8, 0 12px 32px rgba(120,90,40,.08)',
+    border: '#ebe2cd',
+    accentColor: '#a16207',
+    fontFamily: '"Noto Serif TC", STSong, "Songti TC", "宋體", Georgia, serif',
+  }
+
+  const toggleReaderMode = () => {
+    const next = readerMode === 'paper' ? 'default' : 'paper'
+    setReaderMode(next)
+    if (typeof window !== 'undefined') localStorage.setItem('reader-mode', next)
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col overflow-x-hidden transition-all duration-300"
       style={{
-        backgroundColor: displaySettings.backgroundColor,
+        backgroundColor: isPaper ? paperTheme.bg : displaySettings.backgroundColor,
         paddingRight: showSidebar ? SIDEBAR_WIDTH : 0,
       }}
     >
       {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件 */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
+
       <header ref={headerRef} className="bg-white shadow-sm">
         <div
           className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between"
@@ -569,6 +600,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
             <KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} />
             <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
+            {/* 閱讀模式切換 */}
+            <button
+              onClick={toggleReaderMode}
+              className="flex items-center space-x-1 px-2 sm:px-3 py-2 rounded-lg transition-colors"
+              style={{
+                color: isPaper ? '#a16207' : '#6b7280',
+                background: isPaper ? '#fef3c7' : 'transparent',
+              }}
+              title={isPaper ? '切換回預設模式' : '切換到紙本質感'}
+            >
+              <span className="text-sm">{isPaper ? '📖' : '🖥️'}</span>
+              <span className="hidden sm:inline text-sm">{isPaper ? '紙本質感' : '預設模式'}</span>
+            </button>
             <button
               onClick={onReset}
               className="flex items-center space-x-1 px-2 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -674,88 +718,212 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </div>
 
-      {/* 手機/平板觸摸區：整個 main 都可點，右半下一句，左半上一句 */}
+      {/* 主閱讀區：整個 main 都可點，右半下一句，左半上一句 */}
       <main className="flex-1 flex items-center justify-center p-4 md:p-6 relative" onClick={handleMainTap}>
 
-<div className="max-w-4xl w-full">
-          <div 
-            className="rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40"
-          >
-            {sentences[currentIndex]?.startsWith('data:image/') ? (
-              <img
-                src={sentences[currentIndex]}
-                alt="圖片"
-                className="max-w-full max-h-[60vh] object-contain rounded-lg"
-                style={{ opacity: fadeVisible ? 1 : 0, transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out' }}
-              />
-            ) : (
-              <p
-                className="leading-relaxed text-center"
-                style={{
-                  fontFamily: textFontFamily,
-                  fontSize: `${displaySettings.fontSize}px`,
-                  color: displaySettings.textColor,
-                  opacity: fadeVisible ? 1 : 0,
-                  transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'
-                }}
-              >
-                {sentences[currentIndex]}
-              </p>
-            )}
-          </div>
+        {isPaper ? (
+          /* ── Paper 紙本質感模式 ── */
+          <div style={{ position: 'relative', maxWidth: 680, width: '100%', margin: '0 auto' }}>
 
-          {/* 電腦：顯示按鈕；手機/平板：隱藏按鈕，改用觸摸分區 */}
-          <div className="mt-8 hidden md:flex items-center justify-between">
-            <button
-              onClick={goToNext}
-              disabled={currentIndex === sentences.length - 1}
-              className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              <span>下一句</span>
-              <ChevronRight className="w-5 h-5" />
-            </button>
-
-            <button
-              onClick={goToPrevious}
-              disabled={currentIndex === 0}
-              className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              <span>上一句</span>
-            </button>
-          </div>
-
-          {/* 手機/平板：觸摸提示（非常淡，不打擾閱讀） */}
-          <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
-            <span className="text-xs text-gray-300 flex items-center gap-1">
-              <ChevronLeft className="w-3 h-3" /> 上一句
-            </span>
-            <span className="text-xs text-gray-300 flex items-center gap-1">
-              下一句 <ChevronRight className="w-3 h-3" />
-            </span>
-          </div>
-          
-          {goalCompleted && (
-            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-              <p className="text-green-800 font-medium">🎉 恭喜！您已完成今天的閱讀目標</p>
-              <p className="text-green-600 text-sm mt-1">3秒後自動返回首頁...</p>
+            {/* 章節標題 */}
+            <div style={{ textAlign: 'center', marginBottom: 36, opacity: 0.55 }}>
+              <div style={{ fontSize: 11, letterSpacing: '.3em', color: paperTheme.muted, textTransform: 'uppercase', marginBottom: 4, fontFamily: paperTheme.fontFamily }}>
+                第一章
+              </div>
+              <div style={{ fontSize: 13, color: paperTheme.muted, fontFamily: paperTheme.fontFamily, fontStyle: 'italic' }}>
+                {bookTitle}
+              </div>
             </div>
-          )}
-          {articleCompleted && (
-            <div className="mt-6 p-6 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl text-center shadow-sm">
-              <p className="text-3xl mb-2">🎉</p>
-              <p className="text-green-800 font-semibold text-lg">恭喜！文章讀完了</p>
-              <p className="text-green-600 text-sm mt-1 mb-4">已記錄為已閱讀</p>
+
+            {/* 紙張卡片 */}
+            <div style={{
+              background: paperTheme.cardBg,
+              borderRadius: 4,
+              boxShadow: paperTheme.cardShadow,
+              border: `1px solid ${paperTheme.border}`,
+              padding: '64px 72px',
+              minHeight: 280,
+              position: 'relative',
+              backgroundImage: 'radial-gradient(rgba(160,120,60,.04) 1px, transparent 1px)',
+              backgroundSize: '14px 14px',
+            }}>
+              {/* 四角裝飾線 */}
+              <div style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderTop: `1px solid ${paperTheme.accentColor}66`, borderLeft: `1px solid ${paperTheme.accentColor}66`, borderTopLeftRadius: 4 }} />
+              <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderBottom: `1px solid ${paperTheme.accentColor}66`, borderRight: `1px solid ${paperTheme.accentColor}66`, borderBottomRightRadius: 4 }} />
+
+              {sentences[currentIndex]?.startsWith('data:image/') ? (
+                <img
+                  src={sentences[currentIndex]}
+                  alt="圖片"
+                  style={{
+                    maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 8,
+                    opacity: fadeVisible ? 1 : 0,
+                    transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
+                  }}
+                />
+              ) : (
+                <p style={{
+                  fontSize: `${displaySettings.fontSize}px`,
+                  color: paperTheme.text,
+                  textAlign: 'center',
+                  lineHeight: 1.85,
+                  margin: 0,
+                  fontFamily: paperTheme.fontFamily,
+                  opacity: fadeVisible ? 1 : 0,
+                  transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
+                }}>
+                  {sentences[currentIndex]}
+                </p>
+              )}
+            </div>
+
+            {/* 頁碼 */}
+            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, color: paperTheme.muted, fontFamily: paperTheme.fontFamily, fontStyle: 'italic' }}>
+              — {currentIndex + 1} —
+            </div>
+
+            {/* 完成訊息 */}
+            {goalCompleted && (
+              <div className="mt-6 p-4 rounded-lg text-center" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <p className="font-medium" style={{ color: '#166534' }}>🎉 恭喜！您已完成今天的閱讀目標</p>
+                <p className="text-sm mt-1" style={{ color: '#16a34a' }}>3秒後自動返回首頁...</p>
+              </div>
+            )}
+            {articleCompleted && (
+              <div className="mt-6 p-6 rounded-2xl text-center" style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '1px solid #bbf7d0' }}>
+                <p className="text-3xl mb-2">🎉</p>
+                <p className="font-semibold text-lg" style={{ color: '#166534' }}>恭喜！文章讀完了</p>
+                <button onClick={onReset} className="mt-4 px-6 py-2.5 bg-green-500 text-white rounded-full text-sm font-medium hover:bg-green-600 transition-colors shadow">
+                  返回書架
+                </button>
+              </div>
+            )}
+
+            {/* 桌面導航按鈕 */}
+            <div className="mt-8 hidden md:flex items-center justify-between">
               <button
-                onClick={onReset}
-                className="px-6 py-2.5 bg-green-500 text-white rounded-full text-sm font-medium hover:bg-green-600 transition-colors shadow"
+                onClick={goToNext}
+                disabled={currentIndex === sentences.length - 1}
+                className="flex items-center space-x-2 px-6 py-3 rounded-lg shadow hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                style={{ background: paperTheme.accentColor, color: '#fff' }}
               >
-                返回書架
+                <span>下一句</span>
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              <button
+                onClick={goToPrevious}
+                disabled={currentIndex === 0}
+                className="flex items-center space-x-2 px-6 py-3 rounded-lg shadow hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                style={{ background: paperTheme.cardBg, border: `1px solid ${paperTheme.border}`, color: paperTheme.text }}
+              >
+                <ChevronLeft className="w-5 h-5" />
+                <span>上一句</span>
               </button>
             </div>
-          )}
-        </div>
+
+            {/* 手機觸摸提示 */}
+            <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
+              <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
+                <ChevronLeft className="w-3 h-3" /> 上一句
+              </span>
+              <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
+                下一句 <ChevronRight className="w-3 h-3" />
+              </span>
+            </div>
+          </div>
+
+        ) : (
+          /* ── 預設模式（原有樣式）── */
+          <div className="max-w-4xl w-full">
+            <div
+              className="rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40"
+            >
+              {sentences[currentIndex]?.startsWith('data:image/') ? (
+                <img
+                  src={sentences[currentIndex]}
+                  alt="圖片"
+                  className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                  style={{ opacity: fadeVisible ? 1 : 0, transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out' }}
+                />
+              ) : (
+                <p
+                  className="leading-relaxed text-center"
+                  style={{
+                    fontFamily: textFontFamily,
+                    fontSize: `${displaySettings.fontSize}px`,
+                    color: displaySettings.textColor,
+                    opacity: fadeVisible ? 1 : 0,
+                    transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'
+                  }}
+                >
+                  {sentences[currentIndex]}
+                </p>
+              )}
+            </div>
+
+            {/* 電腦：顯示按鈕；手機/平板：隱藏按鈕，改用觸摸分區 */}
+            <div className="mt-8 hidden md:flex items-center justify-between">
+              <button
+                onClick={goToNext}
+                disabled={currentIndex === sentences.length - 1}
+                className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                <span>下一句</span>
+                <ChevronRight className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={goToPrevious}
+                disabled={currentIndex === 0}
+                className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                <span>上一句</span>
+              </button>
+            </div>
+
+            {/* 手機/平板：觸摸提示（非常淡，不打擾閱讀） */}
+            <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
+              <span className="text-xs text-gray-300 flex items-center gap-1">
+                <ChevronLeft className="w-3 h-3" /> 上一句
+              </span>
+              <span className="text-xs text-gray-300 flex items-center gap-1">
+                下一句 <ChevronRight className="w-3 h-3" />
+              </span>
+            </div>
+
+            {goalCompleted && (
+              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+                <p className="text-green-800 font-medium">🎉 恭喜！您已完成今天的閱讀目標</p>
+                <p className="text-green-600 text-sm mt-1">3秒後自動返回首頁...</p>
+              </div>
+            )}
+            {articleCompleted && (
+              <div className="mt-6 p-6 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl text-center shadow-sm">
+                <p className="text-3xl mb-2">🎉</p>
+                <p className="text-green-800 font-semibold text-lg">恭喜！文章讀完了</p>
+                <p className="text-green-600 text-sm mt-1 mb-4">已記錄為已閱讀</p>
+                <button
+                  onClick={onReset}
+                  className="px-6 py-2.5 bg-green-500 text-white rounded-full text-sm font-medium hover:bg-green-600 transition-colors shadow"
+                >
+                  返回書架
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </main>
+
+      {/* Paper 模式閒置提示 */}
+      {isPaper && !headerVisible && (
+        <div
+          className="fixed bottom-4 left-1/2 pointer-events-none select-none"
+          style={{ transform: 'translateX(-50%)', fontSize: 10, color: paperTheme.muted, opacity: 0.5, fontFamily: 'monospace', zIndex: 20 }}
+        >
+          移動滑鼠顯示控制　點擊兩側翻頁
+        </div>
+      )}
 
       {/* 書內搜索的上下文預覽彈窗 */}
       {contextPreviewIndex !== null && (
@@ -778,6 +946,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           if (onOpenBook) onOpenBook(book, idx)
         }}
       />
+
+      {/* 選字圖片彈窗 */}
+      <ImagePopup />
     </div>
   )
 }
