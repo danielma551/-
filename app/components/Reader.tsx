@@ -54,6 +54,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
     return 'default'
   })
+  // 墨水屏模式：關閉所有動畫、高對比黑白
+  const [einkMode, setEinkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('eink-mode') === 'true'
+    }
+    return false
+  })
   const headerRef = useRef<HTMLElement>(null)
   // 下雨特效的開關狀態
   const [rainEnabled, setRainEnabled] = useState(true)
@@ -76,12 +83,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setGoalCompleted(false)
   }, [initialIndex])
 
-  // 下雨特效動畫
+  // 下雨特效動畫（eink 模式下強制關閉）
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    // 關閉時清除畫布並停止動畫
-    if (!rainEnabled) {
+    // 關閉時清除畫布並停止動畫（eink 模式也視為關閉）
+    if (!rainEnabled || einkMode) {
       if (rainAnimRef.current) cancelAnimationFrame(rainAnimRef.current)
       const ctx = canvas.getContext('2d')
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -137,7 +144,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (rainAnimRef.current) cancelAnimationFrame(rainAnimRef.current)
       window.removeEventListener('resize', handleResize)
     }
-  }, [rainEnabled])
+  }, [rainEnabled, einkMode])
 
 
   useEffect(() => {
@@ -283,6 +290,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const triggerFade = (action: () => void) => {
+    // 墨水屏模式：跳過淡入淡出，直接切換（避免殘影）
+    if (einkMode) { action(); return }
     setFadeVisible(false)
     setTimeout(() => {
       action()
@@ -402,12 +411,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     : sentences.length > 1 ? currentIndex / (sentences.length - 1) * 100 : 100
 
   const getProgressColor = () => {
+    if (einkMode) return '#000000'
     if (goalCompleted) return '#22c55e'
     return displaySettings.progressColor
   }
 
   // 根據進度百分比插值計算單一顏色：紅(0%) → 黃(50%) → 瑞幸藍(100%)
   const getBarColor = (pct: number): string => {
+    if (einkMode) return '#000000'   // 墨水屏：純黑
     if (goalCompleted) return '#22c55e'
     const stops = [
       { p: 0,   r: 239, g: 68,  b: 68  },  // #EF4444 紅
@@ -430,6 +441,21 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const textFontFamily = fontFamily.includes(',')
     ? fontFamily
     : `"${fontFamily}", system-ui, -apple-system, sans-serif`
+
+  // ── E-ink 墨水屏模式 ──
+  const isEink = einkMode
+  const einkTheme = {
+    bg: '#ffffff',
+    text: '#000000',
+    muted: '#555555',
+    cardBorder: '#000000',
+    barColor: '#000000',
+  }
+  const toggleEinkMode = () => {
+    const next = !einkMode
+    setEinkMode(next)
+    if (typeof window !== 'undefined') localStorage.setItem('eink-mode', String(next))
+  }
 
   // ── Paper 模式主題 ──
   const isPaper = readerMode === 'paper'
@@ -454,14 +480,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     <div
       className="min-h-screen flex flex-col overflow-x-hidden transition-all duration-300"
       style={{
-        backgroundColor: isPaper ? paperTheme.bg : displaySettings.backgroundColor,
+        backgroundColor: isEink ? einkTheme.bg : isPaper ? paperTheme.bg : displaySettings.backgroundColor,
         paddingRight: showSidebar ? SIDEBAR_WIDTH : 0,
       }}
     >
-      {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件 */}
-      <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
+      {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件；eink 模式下隱藏 */}
+      <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1, display: isEink ? 'none' : 'block' }} />
 
-      <header ref={headerRef} className="bg-white shadow-sm">
+      <header ref={headerRef} className="bg-white" style={isEink ? { borderBottom: '2px solid #000', boxShadow: 'none' } : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}>
         <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <BookOpen className="w-6 h-6 text-indigo-600" />
@@ -564,19 +590,37 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 快捷鍵設定：手機隱藏（觸控設備用不上） */}
             <span className="hidden md:block"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
             <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
-            {/* 閱讀模式切換 */}
+            {/* 墨水屏模式切換 */}
             <button
-              onClick={toggleReaderMode}
-              className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors"
+              onClick={toggleEinkMode}
+              className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg"
               style={{
-                color: isPaper ? '#a16207' : '#6b7280',
-                background: isPaper ? '#fef3c7' : 'transparent',
+                color: isEink ? '#000000' : '#6b7280',
+                background: isEink ? '#e5e5e5' : 'transparent',
+                border: isEink ? '1.5px solid #000' : '1.5px solid transparent',
+                transition: 'none',
+                fontWeight: isEink ? 700 : 400,
               }}
-              title={isPaper ? '切換回預設模式' : '切換到紙本質感'}
+              title={isEink ? '關閉墨水屏模式' : '開啟墨水屏模式'}
             >
-              <span className="text-sm">{isPaper ? '📖' : '🖥️'}</span>
-              <span className="hidden sm:inline text-sm">{isPaper ? '紙本質感' : '預設模式'}</span>
+              <span className="text-sm">🖊️</span>
+              <span className="hidden sm:inline text-sm">{isEink ? '墨水屏' : '墨水屏'}</span>
             </button>
+            {/* 閱讀模式切換（eink 時隱藏，避免混淆） */}
+            {!isEink && (
+              <button
+                onClick={toggleReaderMode}
+                className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors"
+                style={{
+                  color: isPaper ? '#a16207' : '#6b7280',
+                  background: isPaper ? '#fef3c7' : 'transparent',
+                }}
+                title={isPaper ? '切換回預設模式' : '切換到紙本質感'}
+              >
+                <span className="text-sm">{isPaper ? '📖' : '🖥️'}</span>
+                <span className="hidden sm:inline text-sm">{isPaper ? '紙本質感' : '預設模式'}</span>
+              </button>
+            )}
             <button
               onClick={onReset}
               className="flex items-center space-x-1 px-1.5 sm:px-4 py-1.5 sm:py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -597,16 +641,22 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <span className="tabular-nums">{bar1Width.toFixed(0)}%</span>
           </div>
           {/* 相對定位容器：讓發光點和里程碑可以溢出 */}
-          <div className="w-full relative" style={{ height: 8 }}>
+          <div className="w-full relative" style={{ height: isEink ? 12 : 8 }}>
             {/* 軌道底色 */}
-            <div className="absolute inset-0 rounded-full bg-gray-200" />
+            <div className="absolute inset-0 rounded-full" style={{ background: isEink ? '#e0e0e0' : undefined }} data-role="track">
+              {!isEink && <div className="absolute inset-0 rounded-full bg-gray-200" />}
+            </div>
             {/* C: 單色填充，顏色隨進度插值變化 */}
             <div
-              className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-              style={{ width: `${bar1Width}%`, backgroundColor: getBarColor(bar1Width) }}
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{
+                width: `${bar1Width}%`,
+                backgroundColor: getBarColor(bar1Width),
+                transition: isEink ? 'none' : 'all 0.3s',
+              }}
             />
-            {/* A: 發光尾端，顏色與填充同步 */}
-            {bar1Width > 0.5 && (
+            {/* A: 發光尾端（eink 模式下不顯示） */}
+            {!isEink && bar1Width > 0.5 && (
               <div
                 className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
                 style={{
@@ -619,12 +669,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 }}
               />
             )}
-            {/* B: 里程碑缺口（白色細線在 25 / 50 / 75%） */}
+            {/* B: 里程碑缺口（eink 時改黑色刻度線） */}
             {[25, 50, 75].map(m => (
               <div
                 key={m}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: 2, height: 14, background: 'white' }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
+                style={{ left: `${m}%`, width: isEink ? 1 : 2, height: isEink ? '100%' : 14, background: isEink ? '#888' : 'white', borderRadius: 0 }}
               />
             ))}
           </div>
@@ -634,13 +684,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <span>進度 2</span>
             <span className="tabular-nums">{bar2Width.toFixed(0)}%</span>
           </div>
-          <div className="w-full relative" style={{ height: 8 }}>
-            <div className="absolute inset-0 rounded-full bg-gray-200" />
+          <div className="w-full relative" style={{ height: isEink ? 12 : 8 }}>
+            <div className="absolute inset-0 rounded-full" style={{ background: isEink ? '#e0e0e0' : '#e5e7eb' }} />
             <div
-              className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-              style={{ width: `${bar2Width}%`, backgroundColor: getBarColor(bar2Width) }}
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{
+                width: `${bar2Width}%`,
+                backgroundColor: getBarColor(bar2Width),
+                transition: isEink ? 'none' : 'all 0.3s',
+              }}
             />
-            {bar2Width > 0.5 && (
+            {!isEink && bar2Width > 0.5 && (
               <div
                 className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
                 style={{
@@ -656,17 +710,21 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {[25, 50, 75].map(m => (
               <div
                 key={m}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: 2, height: 14, background: 'white' }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
+                style={{ left: `${m}%`, width: isEink ? 1 : 2, height: isEink ? '100%' : 14, background: isEink ? '#888' : 'white', borderRadius: 0 }}
               />
             ))}
           </div>
 
-          {/* 目標 / 全書總進度薄條（不變） */}
-          <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden mt-1">
+          {/* 目標 / 全書總進度薄條 */}
+          <div className="w-full rounded-full overflow-hidden mt-1" style={{ height: isEink ? 4 : 4, background: isEink ? '#e0e0e0' : '#f3f4f6' }}>
             <div
-              className="h-1 rounded-full transition-all duration-500"
-              style={{ width: `${goalProgressPct}%`, backgroundColor: '#00A3E0' }}
+              className="h-full rounded-full"
+              style={{
+                width: `${goalProgressPct}%`,
+                backgroundColor: isEink ? '#000' : '#00A3E0',
+                transition: isEink ? 'none' : 'all 0.5s',
+              }}
             />
           </div>
         </div>
@@ -801,14 +859,25 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           /* ── 預設模式（原有樣式）── */
           <div className="max-w-4xl w-full">
             <div
-              className="rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40"
+              className={isEink ? 'flex items-center justify-center' : 'rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40'}
+              style={isEink ? {
+                borderRadius: 0,
+                boxShadow: 'none',
+                padding: '40px 32px',
+                border: '2px solid #000',
+                minHeight: 320,
+                background: '#fff',
+              } : {}}
             >
               {sentences[currentIndex]?.startsWith('data:image/') ? (
                 <img
                   src={sentences[currentIndex]}
                   alt="圖片"
                   className="max-w-full max-h-[60vh] object-contain rounded-lg"
-                  style={{ opacity: fadeVisible ? 1 : 0, transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out' }}
+                  style={{
+                    opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
+                    transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
+                  }}
                 />
               ) : (
                 <p
@@ -816,10 +885,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   style={{
                     fontFamily: textFontFamily,
                     fontSize: `${displaySettings.fontSize}px`,
-                    color: displaySettings.textColor,
+                    color: isEink ? einkTheme.text : displaySettings.textColor,
                     whiteSpace: 'pre-wrap',
-                    opacity: fadeVisible ? 1 : 0,
-                    transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'
+                    fontWeight: isEink ? 700 : undefined,
+                    letterSpacing: isEink ? '0.02em' : undefined,
+                    lineHeight: isEink ? 2.0 : undefined,
+                    opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
+                    transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
                   }}
                 >
                   {sentences[currentIndex]}
@@ -832,7 +904,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <button
                 onClick={goToNext}
                 disabled={currentIndex === sentences.length - 1}
-                className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={isEink
+                  ? { background: '#000', color: '#fff', border: '2px solid #000', borderRadius: 4, fontWeight: 700, boxShadow: 'none', transition: 'none' }
+                  : { background: '#4f46e5', color: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }
+                }
               >
                 <span>下一句</span>
                 <ChevronRight className="w-5 h-5" />
@@ -841,20 +917,30 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <button
                 onClick={goToPrevious}
                 disabled={currentIndex === 0}
-                className="flex items-center space-x-2 px-6 py-3 bg-white rounded-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={isEink
+                  ? { background: '#fff', color: '#000', border: '2px solid #000', borderRadius: 4, fontWeight: 700, boxShadow: 'none', transition: 'none' }
+                  : { background: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }
+                }
               >
                 <ChevronLeft className="w-5 h-5" />
                 <span>上一句</span>
               </button>
             </div>
 
-            {/* 手機/平板：觸摸提示（非常淡，不打擾閱讀） */}
+            {/* 手機/平板：觸摸提示；eink 模式下更明顯 */}
             <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
-              <span className="text-xs text-gray-300 flex items-center gap-1">
-                <ChevronLeft className="w-3 h-3" /> 上一句
+              <span
+                className="flex items-center gap-1"
+                style={{ fontSize: isEink ? 15 : 12, color: isEink ? '#333' : '#d1d5db', fontWeight: isEink ? 600 : 400 }}
+              >
+                <ChevronLeft className={isEink ? 'w-5 h-5' : 'w-3 h-3'} /> 上一句
               </span>
-              <span className="text-xs text-gray-300 flex items-center gap-1">
-                下一句 <ChevronRight className="w-3 h-3" />
+              <span
+                className="flex items-center gap-1"
+                style={{ fontSize: isEink ? 15 : 12, color: isEink ? '#333' : '#d1d5db', fontWeight: isEink ? 600 : 400 }}
+              >
+                下一句 <ChevronRight className={isEink ? 'w-5 h-5' : 'w-3 h-3'} />
               </span>
             </div>
 
