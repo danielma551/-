@@ -99,25 +99,27 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        // 將 iReader 實體按鍵轉換成 JavaScript 鍵盤事件注入 WebView
-        // 音量鍵會被 Android 系統攔截，這裡強制轉發給網頁
-        val jsKey = when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN  -> "VolumeDown"
-            KeyEvent.KEYCODE_VOLUME_UP    -> "VolumeUp"
-            KeyEvent.KEYCODE_PAGE_DOWN    -> "PageDown"
-            KeyEvent.KEYCODE_PAGE_UP      -> "PageUp"
-            KeyEvent.KEYCODE_DPAD_RIGHT   -> "ArrowRight"
-            KeyEvent.KEYCODE_DPAD_LEFT    -> "ArrowLeft"
-            else -> null
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // 在 WebView 搶先之前攔截實體按鍵，解決短按無反應問題
+        // dispatchKeyEvent 比 onKeyDown 更早執行，確保短按也能捕獲
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val jsKey = when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_DOWN -> "VolumeDown"
+                KeyEvent.KEYCODE_VOLUME_UP   -> "VolumeUp"
+                KeyEvent.KEYCODE_PAGE_DOWN   -> "PageDown"
+                KeyEvent.KEYCODE_PAGE_UP     -> "PageUp"
+                KeyEvent.KEYCODE_DPAD_RIGHT  -> "ArrowRight"
+                KeyEvent.KEYCODE_DPAD_LEFT   -> "ArrowLeft"
+                else -> null
+            }
+            if (jsKey != null) {
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new KeyboardEvent('keydown',{key:'$jsKey',bubbles:true,cancelable:true}))",
+                    null
+                )
+                return true  // 消耗事件，不讓系統調音量
+            }
         }
-        if (jsKey != null) {
-            webView.evaluateJavascript(
-                "window.dispatchEvent(new KeyboardEvent('keydown',{key:'$jsKey',bubbles:true,cancelable:true}))",
-                null
-            )
-            return true  // 不再讓系統處理（防止音量被調大/小）
-        }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 }
