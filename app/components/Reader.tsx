@@ -724,7 +724,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   textAlign: 'center',
                   lineHeight: 1.85,
                   margin: 0,
-                  fontFamily: paperTheme.fontFamily,
+                  fontFamily: textFontFamily,
                   opacity: fadeVisible ? 1 : 0,
                   transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
                 }}>
