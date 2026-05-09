@@ -47,7 +47,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSearch, setShowSearch] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
-  const [headerVisible, setHeaderVisible] = useState(false)
   // 閱讀模式：'default'（現有樣式）或 'paper'（紙本質感）
   const [readerMode, setReaderMode] = useState<'default' | 'paper'>(() => {
     if (typeof window !== 'undefined') {
@@ -55,7 +54,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
     return 'default'
   })
-  const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const headerRef = useRef<HTMLElement>(null)
   // 下雨特效的開關狀態
   const [rainEnabled, setRainEnabled] = useState(true)
@@ -141,40 +139,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }, [rainEnabled])
 
-  useEffect(() => {
-    // 桌面：鼠標在頂部 80px 內，或在頭部元素上（含下拉菜單），就保持顯示
-    const handleMouseMove = (e: MouseEvent) => {
-      const atTop = e.clientY < 80
-      const overHeader = headerRef.current?.contains(e.target as Node) ?? false
-      setHeaderVisible(atTop || overHeader || showSearch)
-    }
-    // 鼠標離開視窗時隱藏（除非搜索框開著）
-    const handleMouseLeave = () => {
-      if (!showSearch) setHeaderVisible(false)
-    }
-    // 手機觸控：只有觸碰頂部 80px 才顯示頭部，其他地方觸碰不觸發
-    const handleTouch = (e: TouchEvent) => {
-      const touch = e.touches[0]
-      if (!touch) return
-      if (touch.clientY < 80) {
-        setHeaderVisible(true)
-        if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
-        if (!showSearch) {
-          headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 3000)
-        }
-      }
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseleave', handleMouseLeave)
-    window.addEventListener('touchstart', handleTouch)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseleave', handleMouseLeave)
-      window.removeEventListener('touchstart', handleTouch)
-      if (headerHideTimer.current) clearTimeout(headerHideTimer.current)
-    }
-  }, [showSearch])
 
   useEffect(() => {
     const loadSavedFont = async () => {
@@ -492,15 +456,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
 
       <header ref={headerRef} className="bg-white shadow-sm">
-        <div
-          className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between"
-          style={{
-            opacity: headerVisible ? 1 : 0,
-            transform: headerVisible ? 'translateY(0)' : 'translateY(-8px)',
-            transition: 'opacity 0.4s ease, transform 0.4s ease',
-            pointerEvents: headerVisible ? 'auto' : 'none'
-          }}
-        >
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <BookOpen className="w-6 h-6 text-indigo-600" />
             {!showSearch && (
@@ -915,15 +871,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         )}
       </main>
 
-      {/* Paper 模式閒置提示 */}
-      {isPaper && !headerVisible && (
-        <div
-          className="fixed bottom-4 left-1/2 pointer-events-none select-none"
-          style={{ transform: 'translateX(-50%)', fontSize: 10, color: paperTheme.muted, opacity: 0.5, fontFamily: 'monospace', zIndex: 20 }}
-        >
-          移動滑鼠顯示控制　點擊兩側翻頁
-        </div>
-      )}
 
       {/* 書內搜索的上下文預覽彈窗 */}
       {contextPreviewIndex !== null && (

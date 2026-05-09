@@ -2,6 +2,13 @@
 // 接收關鍵字，優先查中文 Wikipedia，找不到才 fallback 英文
 // 圖片來源：REST summary thumbnail → pageimages API（更強）→ 無圖文字摘要
 
+interface WikiResult {
+  title: string
+  extract: string | null
+  imageUrl: string | null
+  lang: string
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const query = searchParams.get('q')?.trim() || ''
@@ -29,7 +36,7 @@ export async function GET(req: Request) {
 }
 
 // 用 REST API 直接查 Wikipedia 頁面 summary
-async function fetchWikiSummary(lang: string, title: string) {
+async function fetchWikiSummary(lang: string, title: string): Promise<WikiResult | null> {
   try {
     const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
     const res = await fetch(url, { headers: { 'User-Agent': 'ReadingApp/1.0' } })
@@ -37,8 +44,8 @@ async function fetchWikiSummary(lang: string, title: string) {
     const data = await res.json()
     return {
       title: data.title as string,
-      extract: data.extract ? data.extract.slice(0, 150) + (data.extract.length > 150 ? '…' : '') : null,
-      imageUrl: (data.thumbnail?.source as string) ?? null,
+      extract: data.extract ? (data.extract as string).slice(0, 150) + ((data.extract as string).length > 150 ? '…' : '') : null,
+      imageUrl: (data.thumbnail?.source as string | undefined) ?? null,
       lang,
     }
   } catch {
@@ -63,7 +70,7 @@ async function fetchPageImage(lang: string, title: string): Promise<string | nul
 }
 
 // 全文搜尋後取結果，優先有圖，再補 pageimages
-async function searchWiki(lang: string, query: string) {
+async function searchWiki(lang: string, query: string): Promise<WikiResult | null> {
   try {
     const searchUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&origin=*`
     const sRes = await fetch(searchUrl)
