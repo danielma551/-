@@ -587,8 +587,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {onOpenBook && <span className="hidden md:block"><SearchPanel onOpenBook={onOpenBook} /></span>}
             <DictionaryPanel />
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
-            {/* 快捷鍵設定：手機隱藏（觸控設備用不上） */}
-            <span className="hidden md:block"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
+            {/* 快捷鍵設定：手機隱藏，但墨水屏顯示（iReader 有實體翻頁鍵） */}
+            <span className={isEink ? 'block' : 'hidden md:block'}><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
             <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
             {/* 墨水屏模式切換 */}
             <button
