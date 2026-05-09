@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.KeyEvent
 import android.webkit.*
 import android.view.WindowManager
 
@@ -96,5 +97,27 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             super.onBackPressed()
         }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // 將 iReader 實體按鍵轉換成 JavaScript 鍵盤事件注入 WebView
+        // 音量鍵會被 Android 系統攔截，這裡強制轉發給網頁
+        val jsKey = when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN  -> "VolumeDown"
+            KeyEvent.KEYCODE_VOLUME_UP    -> "VolumeUp"
+            KeyEvent.KEYCODE_PAGE_DOWN    -> "PageDown"
+            KeyEvent.KEYCODE_PAGE_UP      -> "PageUp"
+            KeyEvent.KEYCODE_DPAD_RIGHT   -> "ArrowRight"
+            KeyEvent.KEYCODE_DPAD_LEFT    -> "ArrowLeft"
+            else -> null
+        }
+        if (jsKey != null) {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new KeyboardEvent('keydown',{key:'$jsKey',bubbles:true,cancelable:true}))",
+                null
+            )
+            return true  // 不再讓系統處理（防止音量被調大/小）
+        }
+        return super.onKeyDown(keyCode, event)
     }
 }

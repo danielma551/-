@@ -35,6 +35,11 @@ const KEY_DISPLAY_NAMES: Record<string, string> = {
   'Escape': 'Esc',
   'Tab': 'Tab',
   'Backspace': 'Backspace',
+  // 墨水屏 / iReader 實體按鍵
+  'VolumeDown': '🔉 音量下鍵',
+  'VolumeUp': '🔊 音量上鍵',
+  'PageDown': '📄 翻頁下鍵',
+  'PageUp': '📄 翻頁上鍵',
 }
 
 export default function KeyboardSettings({ shortcuts, onSave }: KeyboardSettingsProps) {
@@ -151,8 +156,11 @@ export default function KeyboardSettings({ shortcuts, onSave }: KeyboardSettings
                 ))}
 
                 <div className="pt-4 border-t border-gray-200">
-                  <p className="text-xs text-gray-500 mb-4">
+                  <p className="text-xs text-gray-500 mb-1">
                     💡 點擊按鈕後按下您想要的鍵來設定快捷鍵
+                  </p>
+                  <p className="text-xs text-gray-400 mb-4">
+                    🖊️ 墨水屏用戶：點擊後直接按實體翻頁鍵或音量鍵即可偵測
                   </p>
                   <div className="flex space-x-3">
                     <button
