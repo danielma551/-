@@ -462,7 +462,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} />
 
       <header ref={headerRef} className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <BookOpen className="w-6 h-6 text-indigo-600" />
             {!showSearch && (
@@ -548,24 +548,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-1 sm:space-x-3">
-            {/* 下雨特效開關按鈕 */}
+          <div className="flex items-center space-x-0.5 sm:space-x-2">
+            {/* 下雨特效：手機隱藏（省空間） */}
             <button
               onClick={() => setRainEnabled(v => !v)}
-              className={`p-1.5 rounded-lg transition-colors ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
+              className={`hidden sm:block p-1.5 rounded-lg transition-colors ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
               title={rainEnabled ? '關閉雨聲' : '開啟下雨效果'}
             >
               <CloudRain className="w-4 h-4" />
             </button>
-            {onOpenBook && <SearchPanel onOpenBook={onOpenBook} />}
+            {/* 跨書搜索：手機隱藏 */}
+            {onOpenBook && <span className="hidden md:block"><SearchPanel onOpenBook={onOpenBook} /></span>}
             <DictionaryPanel />
             <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
-            <KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} />
+            {/* 快捷鍵設定：手機隱藏（觸控設備用不上） */}
+            <span className="hidden md:block"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
             <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
             {/* 閱讀模式切換 */}
             <button
               onClick={toggleReaderMode}
-              className="flex items-center space-x-1 px-2 sm:px-3 py-2 rounded-lg transition-colors"
+              className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors"
               style={{
                 color: isPaper ? '#a16207' : '#6b7280',
                 background: isPaper ? '#fef3c7' : 'transparent',
@@ -577,7 +579,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </button>
             <button
               onClick={onReset}
-              className="flex items-center space-x-1 px-2 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center space-x-1 px-1.5 sm:px-4 py-1.5 sm:py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <Home className="w-5 h-5" />
               <span className="hidden sm:inline">返回首頁</span>
@@ -590,7 +592,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* 完成後統一轉綠 */}
 
           {/* 循環進度條 1（前半循環） */}
-          <div className="flex justify-between text-xs mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
+          <div className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
             <span>進度 1</span>
             <span className="tabular-nums">{bar1Width.toFixed(0)}%</span>
           </div>
@@ -628,7 +630,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
 
           {/* 循環進度條 2（後半循環） */}
-          <div className="flex justify-between text-xs mt-1 mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
+          <div className="hidden sm:flex justify-between text-xs mt-1 mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
             <span>進度 2</span>
             <span className="tabular-nums">{bar2Width.toFixed(0)}%</span>
           </div>
@@ -731,6 +733,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   lineHeight: 1.85,
                   margin: 0,
                   fontFamily: textFontFamily,
+                  whiteSpace: 'pre-wrap',
                   opacity: fadeVisible ? 1 : 0,
                   transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
                 }}>
@@ -814,6 +817,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     fontFamily: textFontFamily,
                     fontSize: `${displaySettings.fontSize}px`,
                     color: displaySettings.textColor,
+                    whiteSpace: 'pre-wrap',
                     opacity: fadeVisible ? 1 : 0,
                     transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'
                   }}
