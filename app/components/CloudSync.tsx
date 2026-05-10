@@ -9,19 +9,19 @@
 import { useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
-import { BookData, fontStorage, shortcutsStorage, displayStorage, historyStorage, ReadingHistory } from '../utils/storage'
+import { BookData, fontStorage, historyStorage, ReadingHistory } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 
 const UPLOAD_FP_KEY = 'msw_last_upload_fp'
 const DOWNLOAD_FP_KEY = 'msw_last_download_fp'
 
-function makeFingerprint(data: { books: BookData[]; font: unknown; shortcuts: unknown; displaySettings: unknown; readingHistory?: unknown }): string {
+// 只同步書籍、字體、閱讀記錄
+// 快捷鍵、字體大小、顯示設定等「裝置偏好」不參與同步，每台設備各自保存
+function makeFingerprint(data: { books: BookData[]; font: unknown; readingHistory?: unknown }): string {
   return JSON.stringify({
     books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate, hasCover: !!b.coverImage })),
     font: data.font,
-    shortcuts: data.shortcuts,
-    displaySettings: data.displaySettings,
     readingHistory: data.readingHistory
   })
 }
@@ -46,9 +46,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       const data = {
         books: allBooks,
         font: fontStorage.getFont(),
-        shortcuts: shortcutsStorage.getShortcuts(),
-        displaySettings: displayStorage.getSettings(),
-        // 把每日閱讀記錄也一起上傳，讓其他裝置能看到趨勢圖
+        // 快捷鍵、顯示設定（字體大小、背景色等）不上傳，屬於裝置本地偏好
         readingHistory: historyStorage.getHistory()
       }
 
@@ -113,8 +111,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         fontStorage.saveFont(data.font.fontFamily)
         if (data.font.fontData) saveFontToIDB(data.font.fontFamily, data.font.fontData).catch(console.error)
       }
-      if (data.shortcuts) shortcutsStorage.saveShortcuts(data.shortcuts)
-      if (data.displaySettings) displayStorage.saveSettings(data.displaySettings)
+      // 快捷鍵、顯示設定不從雲端覆蓋（保留本機各自設定）
       // 合併閱讀記錄：同一天取兩者中較大的數值，避免覆蓋本地數據
       if (data.readingHistory) {
         const local = historyStorage.getHistory()
