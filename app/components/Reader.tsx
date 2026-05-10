@@ -166,9 +166,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       ? fontFamily
       : `"${fontFamily}", system-ui, -apple-system, sans-serif`
 
-    // 可用寬高：扣掉 header + 進度條（約 110px）和左右 padding（48px）
-    const availW = window.innerWidth - 48
-    const availH = window.innerHeight - 115
+    // 可用寬高：動態量取 header 真實高度，再加 padding buffer
+    // main area: padding 8px top+bottom = 16px
+    // inner container: padding 24px top+bottom = 48px
+    // 額外 buffer: 20px 防止邊緣截字
+    const headerH = headerRef.current?.offsetHeight ?? 100
+    const availW = window.innerWidth - 64   // 左右 padding：main(12) + container(20) = 32px × 2
+    const availH = window.innerHeight - headerH - 84  // header + 16 + 48 + 20 buffer
 
     // 設定量尺樣式（與正式顯示一致）
     measure.style.width = `${availW}px`
@@ -183,8 +187,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     while (lo < hi - 1) {
       const mid = Math.floor((lo + hi) / 2)
       measure.style.fontSize = `${mid}px`
-      // 高度不超過可用高度的 88%（保留一點呼吸空間）
-      if (measure.scrollHeight <= availH * 0.88) {
+      // 高度不超過可用高度的 82%（保留呼吸空間，防止截字）
+      if (measure.scrollHeight <= availH * 0.82) {
         lo = mid
       } else {
         hi = mid
