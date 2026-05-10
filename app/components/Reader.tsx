@@ -914,15 +914,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
         ) : (
           /* ── 預設模式（原有樣式）── */
-          <div className="max-w-4xl w-full">
+          <div className={isEink ? 'w-full' : 'max-w-4xl w-full'}>
             <div
               className={isEink ? 'flex items-center justify-center' : 'rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40'}
               style={isEink ? {
                 borderRadius: 0,
                 boxShadow: 'none',
                 padding: '24px 20px',
-                border: '2px solid #000',
-                minHeight: 'calc(100vh - 120px)',
+                border: 'none',
+                minHeight: 'calc(100vh - 110px)',
                 background: '#fff',
                 width: '100%',
               } : {}}
