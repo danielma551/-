@@ -11,7 +11,7 @@
 
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
@@ -72,6 +72,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [searchResults, setSearchResults] = useState<number[]>([])
   // 上下文預覽：點擊搜索結果後顯示，不直接跳句
   const [contextPreviewIndex, setContextPreviewIndex] = useState<number | null>(null)
+  // 墨水屏自適應字體大小
+  const [einkAutoFontSize, setEinkAutoFontSize] = useState(80)
+  const measureDivRef = useRef<HTMLDivElement>(null)
   // 墨水屏模式：⋯ 設定選單
   const [showEinkMenu, setShowEinkMenu] = useState(false)
   // 循環提示：進入新循環時短暫顯示
@@ -148,6 +151,47 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }, [rainEnabled, einkMode])
 
+
+  // ── 墨水屏自適應字體大小：binary search ──
+  // 每次換句子就重新計算最大能填滿屏幕的字體大小
+  useLayoutEffect(() => {
+    if (!einkMode) return
+    const sentence = sentences[currentIndex]
+    if (!sentence || sentence.startsWith('data:image/')) return
+    const measure = measureDivRef.current
+    if (!measure) return
+
+    // textFontFamily 邏輯（與下方 const 保持一致）
+    const resolvedFont = fontFamily.includes(',')
+      ? fontFamily
+      : `"${fontFamily}", system-ui, -apple-system, sans-serif`
+
+    // 可用寬高：扣掉 header + 進度條（約 110px）和左右 padding（48px）
+    const availW = window.innerWidth - 48
+    const availH = window.innerHeight - 115
+
+    // 設定量尺樣式（與正式顯示一致）
+    measure.style.width = `${availW}px`
+    measure.style.fontFamily = resolvedFont
+    measure.style.whiteSpace = 'pre-wrap'
+    measure.style.wordBreak = 'break-word'
+    measure.style.lineHeight = '1.5'
+    measure.textContent = sentence
+
+    // Binary search：找最大符合的 px
+    let lo = 16, hi = 240
+    while (lo < hi - 1) {
+      const mid = Math.floor((lo + hi) / 2)
+      measure.style.fontSize = `${mid}px`
+      // 高度不超過可用高度的 88%（保留一點呼吸空間）
+      if (measure.scrollHeight <= availH * 0.88) {
+        lo = mid
+      } else {
+        hi = mid
+      }
+    }
+    setEinkAutoFontSize(lo)
+  }, [currentIndex, einkMode, sentences, fontFamily])
 
   useEffect(() => {
     const loadSavedFont = async () => {
@@ -488,6 +532,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     >
       {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件；eink 模式下隱藏 */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1, display: isEink ? 'none' : 'block' }} />
+      {/* 隱藏量尺：e-ink 自適應字體大小的 binary search 用 */}
+      <div
+        ref={measureDivRef}
+        aria-hidden="true"
+        style={{ position: 'fixed', top: 0, left: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}
+      />
 
       <header ref={headerRef} className="bg-white" style={isEink ? { borderBottom: '2px solid #000', boxShadow: 'none' } : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}>
         {isEink ? (
@@ -942,12 +992,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   className="leading-relaxed text-center"
                   style={{
                     fontFamily: textFontFamily,
-                    fontSize: `${displaySettings.fontSize}px`,
+                    fontSize: isEink ? `${einkAutoFontSize}px` : `${displaySettings.fontSize}px`,
                     color: isEink ? einkTheme.text : displaySettings.textColor,
                     whiteSpace: 'pre-wrap',
                     fontWeight: isEink ? 700 : undefined,
                     letterSpacing: isEink ? '0.02em' : undefined,
-                    lineHeight: isEink ? 2.0 : undefined,
+                    lineHeight: isEink ? 1.5 : undefined,
                     opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
                     transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
                   }}
