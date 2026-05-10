@@ -72,6 +72,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [searchResults, setSearchResults] = useState<number[]>([])
   // 上下文預覽：點擊搜索結果後顯示，不直接跳句
   const [contextPreviewIndex, setContextPreviewIndex] = useState<number | null>(null)
+  // 墨水屏模式：⋯ 設定選單
+  const [showEinkMenu, setShowEinkMenu] = useState(false)
   // 循環提示：進入新循環時短暫顯示
   const [cycleToast, setCycleToast] = useState<string | null>(null)
   const cycleToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -481,133 +483,176 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       className="min-h-screen flex flex-col overflow-x-hidden transition-all duration-300"
       style={{
         backgroundColor: isEink ? einkTheme.bg : isPaper ? paperTheme.bg : displaySettings.backgroundColor,
-        paddingRight: showSidebar ? SIDEBAR_WIDTH : 0,
+        paddingRight: (!isEink && showSidebar) ? SIDEBAR_WIDTH : 0,
       }}
     >
       {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件；eink 模式下隱藏 */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1, display: isEink ? 'none' : 'block' }} />
 
       <header ref={headerRef} className="bg-white" style={isEink ? { borderBottom: '2px solid #000', boxShadow: 'none' } : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}>
-        <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <BookOpen className="w-6 h-6 text-indigo-600" />
-            {!showSearch && (
-              <h1 className="text-base sm:text-xl font-semibold text-gray-800 max-w-[160px] sm:max-w-xs md:max-w-sm truncate" title={bookTitle}>{bookTitle}</h1>
-            )}
-            {showSearch ? (
-              <div className="relative">
-                <div className="flex items-center w-72 px-3 py-1.5 border-2 border-indigo-400 rounded-full bg-white shadow-sm">
-                  <Search className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
-                  <input
-                    autoFocus
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }
-                    }}
-                    placeholder="搜索句子..."
-                    className="flex-1 text-sm outline-none bg-transparent"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => { setSearchQuery(''); setSearchResults([]) }} className="ml-1 p-0.5 hover:bg-gray-100 rounded-full">
-                      <X className="w-3.5 h-3.5 text-gray-400" />
-                    </button>
-                  )}
+        {isEink ? (
+          /* ── 墨水屏極簡 Header：只剩書名、句數、⋯設定、🏠 ── */
+          <div className="px-3 py-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-bold text-black truncate max-w-[180px]" title={bookTitle}>{bookTitle}</span>
+              <span className="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
+                句 {currentIndex + 1}/{sentences.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 relative flex-shrink-0">
+              {/* ⋯ 設定選單按鈕 */}
+              <button
+                onClick={() => setShowEinkMenu(v => !v)}
+                className="px-2 py-1 text-sm font-bold"
+                style={{ border: '1.5px solid #000', borderRadius: 4 }}
+                title="設定"
+              >⋯</button>
+              {/* 返回首頁 */}
+              <button
+                onClick={onReset}
+                className="px-2 py-1 text-sm font-bold"
+                style={{ border: '1.5px solid #000', borderRadius: 4 }}
+                title="返回首頁"
+              >🏠</button>
+              {/* ⋯ 展開的設定浮窗 */}
+              {showEinkMenu && (
+                <div
+                  className="absolute top-full right-0 z-50 bg-white flex flex-col"
+                  style={{ border: '2px solid #000', minWidth: 160, marginTop: 4 }}
+                  onClick={() => setShowEinkMenu(false)}
+                >
+                  <div className="p-1" onClick={e => e.stopPropagation()}><FontSelector currentFont={fontFamily} onFontChange={handleFontChange} /></div>
+                  <div className="p-1" style={{ borderTop: '1px solid #ccc' }} onClick={e => e.stopPropagation()}><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></div>
+                  <div className="p-1" style={{ borderTop: '1px solid #ccc' }} onClick={e => e.stopPropagation()}><DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} /></div>
+                  <button
+                    onClick={toggleEinkMode}
+                    className="p-2 text-sm text-left font-medium"
+                    style={{ borderTop: '1px solid #ccc' }}
+                  >🖊️ 關閉墨水屏模式</button>
                 </div>
-
-                {searchQuery && (
-                  <div className="absolute top-full left-0 mt-1 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                    {searchResults.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-gray-400">無符合結果</div>
-                    ) : (
-                      <>
-                        <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-50">
-                          共 {searchResults.length} 個結果 · 點擊預覽上下文
-                        </div>
-                        <ul className="max-h-64 overflow-y-auto">
-                          {searchResults.slice(0, 10).map((idx) => {
-                            const sentence = sentences[idx]
-                            const lower = sentence.toLowerCase()
-                            const qLower = searchQuery.toLowerCase()
-                            const matchPos = lower.indexOf(qLower)
-                            const preview = sentence.length > 60
-                              ? sentence.slice(Math.max(0, matchPos - 15), matchPos + searchQuery.length + 30) + '…'
-                              : sentence
-                            const before = preview.slice(0, preview.toLowerCase().indexOf(qLower))
-                            const match = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
-                            const after = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
-                            return (
-                              <li key={idx}>
-                                <button
-                                  onClick={() => handleClickSearchResult(idx)}
-                                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2"
-                                >
-                                  <Search className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
-                                  <span className="text-gray-600 leading-snug">
-                                    {before}
-                                    <strong className="text-indigo-600 font-semibold">{match}</strong>
-                                    {after}
-                                  </span>
-                                  <span className="text-xs text-gray-300 flex-shrink-0 ml-auto pl-2">#{idx + 1}</span>
-                                </button>
-                              </li>
-                            )
-                          })}
-                          {searchResults.length > 10 && (
-                            <li className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
-                              還有 {searchResults.length - 10} 個結果…
-                            </li>
-                          )}
-                        </ul>
-                      </>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── 正常模式 Header ── */
+          <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <BookOpen className="w-6 h-6 text-indigo-600" />
+              {!showSearch && (
+                <h1 className="text-base sm:text-xl font-semibold text-gray-800 max-w-[160px] sm:max-w-xs md:max-w-sm truncate" title={bookTitle}>{bookTitle}</h1>
+              )}
+              {showSearch ? (
+                <div className="relative">
+                  <div className="flex items-center w-72 px-3 py-1.5 border-2 border-indigo-400 rounded-full bg-white shadow-sm">
+                    <Search className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                    <input
+                      autoFocus
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }
+                      }}
+                      placeholder="搜索句子..."
+                      className="flex-1 text-sm outline-none bg-transparent"
+                    />
+                    {searchQuery && (
+                      <button onClick={() => { setSearchQuery(''); setSearchResults([]) }} className="ml-1 p-0.5 hover:bg-gray-100 rounded-full">
+                        <X className="w-3.5 h-3.5 text-gray-400" />
+                      </button>
                     )}
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center space-x-1">
-                {/* 書內搜索 */}
-                <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="書內搜索">
-                  <Search className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center space-x-0.5 sm:space-x-2">
-            {/* 下雨特效：手機隱藏（省空間） */}
-            <button
-              onClick={() => setRainEnabled(v => !v)}
-              className={`hidden sm:block p-1.5 rounded-lg transition-colors ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
-              title={rainEnabled ? '關閉雨聲' : '開啟下雨效果'}
-            >
-              <CloudRain className="w-4 h-4" />
-            </button>
-            {/* 跨書搜索：手機隱藏 */}
-            {onOpenBook && <span className="hidden md:block"><SearchPanel onOpenBook={onOpenBook} /></span>}
-            <DictionaryPanel />
-            <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
-            {/* 快捷鍵設定：手機隱藏，但墨水屏顯示（iReader 有實體翻頁鍵） */}
-            <span className={isEink ? 'block' : 'hidden md:block'}><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
-            <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
-            {/* 墨水屏模式切換 */}
-            <button
-              onClick={toggleEinkMode}
-              className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg"
-              style={{
-                color: isEink ? '#000000' : '#6b7280',
-                background: isEink ? '#e5e5e5' : 'transparent',
-                border: isEink ? '1.5px solid #000' : '1.5px solid transparent',
-                transition: 'none',
-                fontWeight: isEink ? 700 : 400,
-              }}
-              title={isEink ? '關閉墨水屏模式' : '開啟墨水屏模式'}
-            >
-              <span className="text-sm">🖊️</span>
-              <span className="hidden sm:inline text-sm">{isEink ? '墨水屏' : '墨水屏'}</span>
-            </button>
-            {/* 閱讀模式切換（eink 時隱藏，避免混淆） */}
-            {!isEink && (
+
+                  {searchQuery && (
+                    <div className="absolute top-full left-0 mt-1 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                      {searchResults.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-gray-400">無符合結果</div>
+                      ) : (
+                        <>
+                          <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-50">
+                            共 {searchResults.length} 個結果 · 點擊預覽上下文
+                          </div>
+                          <ul className="max-h-64 overflow-y-auto">
+                            {searchResults.slice(0, 10).map((idx) => {
+                              const sentence = sentences[idx]
+                              const lower = sentence.toLowerCase()
+                              const qLower = searchQuery.toLowerCase()
+                              const matchPos = lower.indexOf(qLower)
+                              const preview = sentence.length > 60
+                                ? sentence.slice(Math.max(0, matchPos - 15), matchPos + searchQuery.length + 30) + '…'
+                                : sentence
+                              const before = preview.slice(0, preview.toLowerCase().indexOf(qLower))
+                              const match = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                              const after = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                              return (
+                                <li key={idx}>
+                                  <button
+                                    onClick={() => handleClickSearchResult(idx)}
+                                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2"
+                                  >
+                                    <Search className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
+                                    <span className="text-gray-600 leading-snug">
+                                      {before}
+                                      <strong className="text-indigo-600 font-semibold">{match}</strong>
+                                      {after}
+                                    </span>
+                                    <span className="text-xs text-gray-300 flex-shrink-0 ml-auto pl-2">#{idx + 1}</span>
+                                  </button>
+                                </li>
+                              )
+                            })}
+                            {searchResults.length > 10 && (
+                              <li className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
+                                還有 {searchResults.length - 10} 個結果…
+                              </li>
+                            )}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center space-x-1">
+                  {/* 書內搜索 */}
+                  <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="書內搜索">
+                    <Search className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center space-x-0.5 sm:space-x-2">
+              {/* 下雨特效：手機隱藏（省空間） */}
+              <button
+                onClick={() => setRainEnabled(v => !v)}
+                className={`hidden sm:block p-1.5 rounded-lg transition-colors ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
+                title={rainEnabled ? '關閉雨聲' : '開啟下雨效果'}
+              >
+                <CloudRain className="w-4 h-4" />
+              </button>
+              {/* 跨書搜索：手機隱藏 */}
+              {onOpenBook && <span className="hidden md:block"><SearchPanel onOpenBook={onOpenBook} /></span>}
+              <DictionaryPanel />
+              <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
+              {/* 快捷鍵設定：手機隱藏，但墨水屏顯示（iReader 有實體翻頁鍵） */}
+              <span className="hidden md:block"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
+              <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
+              {/* 墨水屏模式切換 */}
+              <button
+                onClick={toggleEinkMode}
+                className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg"
+                style={{
+                  color: '#6b7280',
+                  background: 'transparent',
+                  border: '1.5px solid transparent',
+                  transition: 'none',
+                }}
+                title="開啟墨水屏模式"
+              >
+                <span className="text-sm">🖊️</span>
+                <span className="hidden sm:inline text-sm">墨水屏</span>
+              </button>
+              {/* 閱讀模式切換 */}
               <button
                 onClick={toggleReaderMode}
                 className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors"
@@ -620,24 +665,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <span className="text-sm">{isPaper ? '📖' : '🖥️'}</span>
                 <span className="hidden sm:inline text-sm">{isPaper ? '紙本質感' : '預設模式'}</span>
               </button>
-            )}
-            <button
-              onClick={onReset}
-              className="flex items-center space-x-1 px-1.5 sm:px-4 py-1.5 sm:py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <Home className="w-5 h-5" />
-              <span className="hidden sm:inline">返回首頁</span>
-            </button>
+              <button
+                onClick={onReset}
+                className="flex items-center space-x-1 px-1.5 sm:px-4 py-1.5 sm:py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Home className="w-5 h-5" />
+                <span className="hidden sm:inline">返回首頁</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         <div className="w-full">
           {/* ── 進度條共用：A發光尾端 + B里程碑缺口 + C漸層色進 ── */}
           {/* 漸層：冷色(靛藍) → 紫 → 暖色(金)，隨進度條延伸自然色移 */}
           {/* 完成後統一轉綠 */}
 
           {/* 循環進度條 1（前半循環） */}
-          <div className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
-            <span>進度 1</span>
+          {/* e-ink 永遠顯示標籤；一般模式只在 sm 以上顯示 */}
+          <div
+            className={isEink ? 'flex justify-between mb-0.5 px-0.5' : 'hidden sm:flex justify-between text-xs mb-0.5 px-0.5'}
+            style={{ color: getProgressColor(), fontSize: isEink ? 13 : undefined, fontWeight: isEink ? 600 : undefined }}
+          >
+            <span>{isEink ? `第 ${currentCycleIdx + 1}/${cycleData.count} 循環 · 上半` : '進度 1'}</span>
             <span className="tabular-nums">{bar1Width.toFixed(0)}%</span>
           </div>
           {/* 相對定位容器：讓發光點和里程碑可以溢出 */}
@@ -680,8 +729,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
 
           {/* 循環進度條 2（後半循環） */}
-          <div className="hidden sm:flex justify-between text-xs mt-1 mb-0.5 px-0.5" style={{ color: getProgressColor() }}>
-            <span>進度 2</span>
+          <div
+            className={isEink ? 'flex justify-between mt-1 mb-0.5 px-0.5' : 'hidden sm:flex justify-between text-xs mt-1 mb-0.5 px-0.5'}
+            style={{ color: getProgressColor(), fontSize: isEink ? 13 : undefined, fontWeight: isEink ? 600 : undefined }}
+          >
+            <span>{isEink ? `第 ${currentCycleIdx + 1}/${cycleData.count} 循環 · 下半` : '進度 2'}</span>
             <span className="tabular-nums">{bar2Width.toFixed(0)}%</span>
           </div>
           <div className="w-full relative" style={{ height: isEink ? 12 : 8 }}>
@@ -741,7 +793,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       </div>
 
       {/* 主閱讀區：整個 main 都可點，右半下一句，左半上一句 */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-6 relative" onClick={handleMainTap}>
+      {/* eink 模式：去除 padding，讓文字佔滿整個可用高度 */}
+      <main
+        className={`flex-1 flex items-center justify-center relative ${isEink ? '' : 'p-4 md:p-6'}`}
+        style={isEink ? { padding: '8px 12px' } : {}}
+        onClick={handleMainTap}
+      >
 
         {isPaper ? (
           /* ── Paper 紙本質感模式 ── */
@@ -863,10 +920,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               style={isEink ? {
                 borderRadius: 0,
                 boxShadow: 'none',
-                padding: '40px 32px',
+                padding: '24px 20px',
                 border: '2px solid #000',
-                minHeight: 320,
+                minHeight: 'calc(100vh - 120px)',
                 background: '#fff',
+                width: '100%',
               } : {}}
             >
               {sentences[currentIndex]?.startsWith('data:image/') ? (
@@ -899,34 +957,30 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               )}
             </div>
 
-            {/* 電腦：顯示按鈕；手機/平板：隱藏按鈕，改用觸摸分區 */}
-            <div className="mt-8 hidden md:flex items-center justify-between">
-              <button
-                onClick={goToNext}
-                disabled={currentIndex === sentences.length - 1}
-                className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={isEink
-                  ? { background: '#000', color: '#fff', border: '2px solid #000', borderRadius: 4, fontWeight: 700, boxShadow: 'none', transition: 'none' }
-                  : { background: '#4f46e5', color: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }
-                }
-              >
-                <span>下一句</span>
-                <ChevronRight className="w-5 h-5" />
-              </button>
+            {/* 電腦：顯示按鈕；eink 模式下隱藏（用實體按鍵）；手機/平板：隱藏按鈕，改用觸摸分區 */}
+            {!isEink && (
+              <div className="mt-8 hidden md:flex items-center justify-between">
+                <button
+                  onClick={goToNext}
+                  disabled={currentIndex === sentences.length - 1}
+                  className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: '#4f46e5', color: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }}
+                >
+                  <span>下一句</span>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
 
-              <button
-                onClick={goToPrevious}
-                disabled={currentIndex === 0}
-                className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={isEink
-                  ? { background: '#fff', color: '#000', border: '2px solid #000', borderRadius: 4, fontWeight: 700, boxShadow: 'none', transition: 'none' }
-                  : { background: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }
-                }
-              >
-                <ChevronLeft className="w-5 h-5" />
-                <span>上一句</span>
-              </button>
-            </div>
+                <button
+                  onClick={goToPrevious}
+                  disabled={currentIndex === 0}
+                  className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }}
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                  <span>上一句</span>
+                </button>
+              </div>
+            )}
 
             {/* 手機/平板：觸摸提示；eink 模式下更明顯 */}
             <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
@@ -980,15 +1034,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         />
       )}
 
-      {/* 右側跨書搜索側欄 */}
-      <SearchSidebar
-        isOpen={showSidebar}
-        onToggle={() => setShowSidebar(v => !v)}
-        currentBookId={bookId}
-        onOpenBook={(book, idx) => {
-          if (onOpenBook) onOpenBook(book, idx)
-        }}
-      />
+      {/* 右側跨書搜索側欄（墨水屏模式下隱藏） */}
+      {!isEink && (
+        <SearchSidebar
+          isOpen={showSidebar}
+          onToggle={() => setShowSidebar(v => !v)}
+          currentBookId={bookId}
+          onOpenBook={(book, idx) => {
+            if (onOpenBook) onOpenBook(book, idx)
+          }}
+        />
+      )}
 
       {/* 選字圖片彈窗 */}
       <ImagePopup />

@@ -117,7 +117,7 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                     <input
                       type="range"
                       min="16"
-                      max="72"
+                      max="180"
                       step="2"
                       value={editingSettings.fontSize}
                       onChange={(e) => setEditingSettings(prev => ({
