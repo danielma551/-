@@ -15,6 +15,7 @@ import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 
 const UPLOAD_FP_KEY = 'msw_last_upload_fp'
 const DOWNLOAD_FP_KEY = 'msw_last_download_fp'
+const LAST_BLOB_URL_KEY = 'msw_last_blob_url'  // 記住上次的 blob URL，供下次上傳時清理
 
 // 只同步書籍、字體、閱讀記錄
 // 快捷鍵、字體大小、顯示設定等「裝置偏好」不參與同步，每台設備各自保存
@@ -57,6 +58,9 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         return
       }
 
+      // 記住舊 blob URL，等新版上傳成功後刪除
+      const oldBlobUrl = localStorage.getItem(LAST_BLOB_URL_KEY)
+
       // Upload directly to Vercel Blob (bypasses Vercel 4.5MB function body limit)
       const blob = await upload(`sync-${Date.now()}.json`, JSON.stringify(data), {
         access: 'public',
@@ -74,8 +78,18 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       if (!res.ok || !json.code) throw new Error(json.error || '上傳失敗')
       setSyncCode(json.code)
       localStorage.setItem(UPLOAD_FP_KEY, fp)
+      localStorage.setItem(LAST_BLOB_URL_KEY, blob.url)  // 記住本次 blob URL
       setStatus('success')
       setMessage('上傳成功！請記下同步碼，在其他設備輸入')
+
+      // 刪除上一次的舊 blob（不阻塞主流程，失敗也沒關係）
+      if (oldBlobUrl) {
+        fetch('/api/blob', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: oldBlobUrl })
+        }).catch(() => {})  // 靜默失敗
+      }
     } catch (e: unknown) {
       setStatus('error')
       setMessage(e instanceof Error ? e.message : '上傳失敗')

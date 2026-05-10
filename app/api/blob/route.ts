@@ -4,7 +4,22 @@
 // 這樣可以上傳很大的檔案，不會被大小限制擋住。
 
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
+import { del } from '@vercel/blob'
 import { NextRequest, NextResponse } from 'next/server'
+
+// 刪除指定的 blob（上傳新版本後清理舊版本用）
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
+  try {
+    const { url } = await request.json()
+    if (!url || typeof url !== 'string' || !url.startsWith('https://')) {
+      return NextResponse.json({ error: '無效的 URL' }, { status: 400 })
+    }
+    await del(url)
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 400 })
+  }
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody
