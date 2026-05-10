@@ -11,7 +11,7 @@
 
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
@@ -154,7 +154,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── 墨水屏自適應字體大小：binary search ──
   // 每次換句子就重新計算最大能填滿屏幕的字體大小
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!einkMode) return
     const sentence = sentences[currentIndex]
     if (!sentence || sentence.startsWith('data:image/')) return
