@@ -421,25 +421,34 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return { sizes, boundaries, count: sizes.length }
   }, [totalForProgress])
 
-  // ── 注釋偵測：當前是文字句，且下一句是圖片（注釋圖）時，收集注釋內容 ──
+  // ── 注釋偵測：當前是文字句，且下一句是圖片（注釋圖）時 ──
+  // 把注前文字 + 注後緊接的文字碎片拼合為完整句，供彈窗顯示
   const annotationBlock = useMemo(() => {
     const cur = sentences[currentIndex]
-    if (!cur || cur.startsWith('data:image/')) return null  // 當前已是圖，不偵測
+    if (!cur || cur.startsWith('data:image/')) return null
     const nextIdx = currentIndex + 1
     if (nextIdx >= sentences.length) return null
-    if (!sentences[nextIdx]?.startsWith('data:image/')) return null  // 下一句不是圖
+    if (!sentences[nextIdx]?.startsWith('data:image/')) return null
 
-    // 收集：注圖 + 緊接的注文字，直到遇到長文句（主內容）或另一張圖
-    const items: string[] = []
-    let i = nextIdx
-    while (i < sentences.length && items.length < 10) {
+    // 收集注圖後面的文字碎片（直到遇到另一張圖或明顯的長文句）
+    const afterFragments: string[] = []
+    let i = nextIdx + 1  // 跳過注圖本身
+    while (i < sentences.length && afterFragments.length < 6) {
       const s = sentences[i]
-      if (i > nextIdx && s.startsWith('data:image/')) break      // 另一張圖 = 新的注釋塊
-      if (i > nextIdx + 1 && !s.startsWith('data:image/') && s.length > 25) break  // 長文句 = 主內容回來了
-      items.push(s)
+      if (s.startsWith('data:image/')) break           // 另一張圖 = 結束
+      if (afterFragments.length > 0 && s.length > 30) break  // 長文句 = 主內容回來了
+      afterFragments.push(s)
       i++
     }
-    return items.length > 0 ? items : null
+
+    // 拼合：前半句 + 後半句碎片（去掉注圖，直接顯示文字）
+    const fullSentence = cur + afterFragments.join('')
+
+    return {
+      fullSentence,          // 拼合後的完整句（或盡量接近的版本）
+      afterFragments,        // 注後的文字碎片列表
+      annotationImage: sentences[nextIdx],  // 注圖本身（備用）
+    }
   }, [currentIndex, sentences])
 
   // 找出當前在第幾個循環
@@ -1121,20 +1130,22 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       }}
                     >關閉</button>
                   </div>
-                  {/* 注釋內容：圖 + 文字 */}
+                  {/* 注釋內容：顯示拼合後的完整句 */}
                   <div className="space-y-3">
-                    {annotationBlock.map((item, idx) =>
-                      item.startsWith('data:image/') ? (
-                        <img key={idx} src={item} alt="注圖" style={{ maxWidth: '100%', maxHeight: 120, objectFit: 'contain' }} />
-                      ) : (
-                        <p key={idx} style={{
-                          fontSize: isEink ? 20 : 15,
-                          color: isEink ? '#000' : '#374151',
-                          lineHeight: 1.7,
-                          fontFamily: textFontFamily,
-                          margin: 0,
-                        }}>{item}</p>
-                      )
+                    {/* 完整句（前後拼合） */}
+                    <p style={{
+                      fontSize: isEink ? 22 : 16,
+                      color: isEink ? '#000' : '#374151',
+                      lineHeight: 1.8,
+                      fontFamily: textFontFamily,
+                      margin: 0,
+                    }}>{annotationBlock.fullSentence}</p>
+                    {/* 若有注圖，小圖顯示在下方供參考 */}
+                    {annotationBlock.annotationImage && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                        <img src={annotationBlock.annotationImage} alt="注" style={{ height: 24, objectFit: 'contain' }} />
+                        <span style={{ fontSize: 12, color: isEink ? '#555' : '#9ca3af' }}>原文含注釋標記</span>
+                      </div>
                     )}
                   </div>
                 </div>
