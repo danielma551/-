@@ -10,7 +10,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -62,6 +62,8 @@ export default function Home() {
   const [readingArticleLink, setReadingArticleLink] = useState<string>('')
   // 控制是否顯示每日練習畫面
   const [showVocab, setShowVocab] = useState(false)
+  // 追加內容：記錄哪本書正在處理中
+  const [appendingBookId, setAppendingBookId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -194,6 +196,28 @@ export default function Home() {
 
   const handleSyncComplete = () => {
     getAllBooksFromIDB().then(setSavedBooks)
+  }
+
+  // 追加內容：把新文件的句子接在現有書本尾部
+  const handleAppendContent = async (book: BookData, file: File) => {
+    setAppendingBookId(book.id)
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const response = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!response.ok) throw new Error('上傳失敗')
+      const data = await response.json()
+      const newSentences: string[] = data.sentences
+      const updated: BookData = { ...book, sentences: [...book.sentences, ...newSentences] }
+      await saveBookToIDB(updated)
+      getAllBooksFromIDB().then(setSavedBooks)
+      // 若正在閱讀同一本書，即時更新 sentences（不影響閱讀進度）
+      if (bookId === book.id) setSentences(updated.sentences)
+    } catch {
+      alert('加入內容失敗，請確認文件格式（TXT、EPUB 或 PDF）')
+    } finally {
+      setAppendingBookId(null)
+    }
   }
 
   // 從搜索結果直接跳到某本書的某句（不需要顯示目標設定視窗）
@@ -402,6 +426,31 @@ export default function Home() {
                             saveBookToIDB(updated).then(() => getAllBooksFromIDB().then(setSavedBooks))
                           }
                           reader.readAsDataURL(file)
+                        }}
+                      />
+                      {/* 追加內容（下冊合併） */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); document.getElementById(`append-${book.id}`)?.click() }}
+                        className="absolute bottom-2 left-2 p-1.5 bg-black/40 hover:bg-green-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                        title="追加內容（合併下冊）"
+                      >
+                        {appendingBookId === book.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <FilePlus className="w-3 h-3" />
+                        }
+                      </button>
+                      <input
+                        type="file"
+                        id={`append-${book.id}`}
+                        accept=".txt,.epub,.pdf"
+                        className="hidden"
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation()
+                          const file = e.currentTarget.files?.[0]
+                          if (file) handleAppendContent(book, file)
+                          // 重置 input，下次還能選同一個檔案
+                          e.currentTarget.value = ''
                         }}
                       />
                       {/* Delete */}
