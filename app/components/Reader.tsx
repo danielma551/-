@@ -268,13 +268,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         return
       }
       
-      if (e.key === shortcuts.nextSentence && currentIndex < sentences.length - 1) {
+      if (e.key === shortcuts.nextSentence) {
         e.preventDefault()
-        historyStorage.recordRead(1)
-        triggerFade(() => setCurrentIndex(prev => prev + 1))
-      } else if (e.key === shortcuts.previousSentence && currentIndex > 0) {
+        goToNext()
+      } else if (e.key === shortcuts.previousSentence) {
         e.preventDefault()
-        triggerFade(() => setCurrentIndex(prev => prev - 1))
+        goToPrevious()
       } else if (e.key === shortcuts.returnHome) {
         e.preventDefault()
         onReset()
@@ -283,7 +282,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentIndex, sentences.length, shortcuts, onReset])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, sentences, shortcuts, onReset])
 
   // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
   // 過濾掉點按鈕、輸入框等互動元素的情況，反饋改用振動（無視覺閃光）
@@ -295,13 +295,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return
     const rect = e.currentTarget.getBoundingClientRect()
     const isRight = e.clientX - rect.left > rect.width / 2
-    if (isRight && currentIndex < sentences.length - 1) {
-      historyStorage.recordRead(1)
-      vibrate(displaySettings.vibrationIntensity)
-      triggerFade(() => setCurrentIndex(prev => prev + 1))
-    } else if (!isRight && currentIndex > 0) {
-      vibrate(displaySettings.vibrationIntensity)
-      triggerFade(() => setCurrentIndex(prev => prev - 1))
+    if (isRight) {
+      goToNext()
+    } else {
+      goToPrevious()
     }
   }
 
@@ -351,18 +348,33 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }, 160)
   }
 
+  // 找下一個非圖片句的 index（自動跳過注圖）
+  const nextTextIndex = (from: number) => {
+    let i = from + 1
+    while (i < sentences.length && sentences[i]?.startsWith('data:image/')) i++
+    return i < sentences.length ? i : -1
+  }
+  // 找上一個非圖片句的 index
+  const prevTextIndex = (from: number) => {
+    let i = from - 1
+    while (i >= 0 && sentences[i]?.startsWith('data:image/')) i--
+    return i >= 0 ? i : -1
+  }
+
   const goToNext = () => {
-    if (currentIndex < sentences.length - 1) {
+    const next = nextTextIndex(currentIndex)
+    if (next !== -1) {
       vibrate(displaySettings.vibrationIntensity)
       historyStorage.recordRead(1)
-      triggerFade(() => setCurrentIndex(prev => prev + 1))
+      triggerFade(() => setCurrentIndex(next))
     }
   }
 
   const goToPrevious = () => {
-    if (currentIndex > 0) {
+    const prev = prevTextIndex(currentIndex)
+    if (prev !== -1) {
       vibrate(displaySettings.vibrationIntensity)
-      triggerFade(() => setCurrentIndex(prev => prev - 1))
+      triggerFade(() => setCurrentIndex(prev))
     }
   }
 
