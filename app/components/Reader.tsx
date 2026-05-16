@@ -74,6 +74,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [contextPreviewIndex, setContextPreviewIndex] = useState<number | null>(null)
   // 墨水屏自適應字體大小
   const [einkAutoFontSize, setEinkAutoFontSize] = useState(80)
+  // 注釋彈窗
+  const [showAnnotation, setShowAnnotation] = useState(false)
   const measureDivRef = useRef<HTMLDivElement>(null)
   // 墨水屏模式：⋯ 設定選單
   const [showEinkMenu, setShowEinkMenu] = useState(false)
@@ -418,6 +420,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
     return { sizes, boundaries, count: sizes.length }
   }, [totalForProgress])
+
+  // ── 注釋偵測：當前是文字句，且下一句是圖片（注釋圖）時，收集注釋內容 ──
+  const annotationBlock = useMemo(() => {
+    const cur = sentences[currentIndex]
+    if (!cur || cur.startsWith('data:image/')) return null  // 當前已是圖，不偵測
+    const nextIdx = currentIndex + 1
+    if (nextIdx >= sentences.length) return null
+    if (!sentences[nextIdx]?.startsWith('data:image/')) return null  // 下一句不是圖
+
+    // 收集：注圖 + 緊接的注文字，直到遇到長文句（主內容）或另一張圖
+    const items: string[] = []
+    let i = nextIdx
+    while (i < sentences.length && items.length < 10) {
+      const s = sentences[i]
+      if (i > nextIdx && s.startsWith('data:image/')) break      // 另一張圖 = 新的注釋塊
+      if (i > nextIdx + 1 && !s.startsWith('data:image/') && s.length > 25) break  // 長文句 = 主內容回來了
+      items.push(s)
+      i++
+    }
+    return items.length > 0 ? items : null
+  }, [currentIndex, sentences])
 
   // 找出當前在第幾個循環
   const currentCycleIdx = useMemo(() => {
@@ -992,24 +1015,113 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <p
-                  className="leading-relaxed text-center"
-                  style={{
-                    fontFamily: textFontFamily,
-                    fontSize: isEink ? `${einkAutoFontSize}px` : `${displaySettings.fontSize}px`,
-                    color: isEink ? einkTheme.text : displaySettings.textColor,
-                    whiteSpace: 'pre-wrap',
-                    fontWeight: isEink ? 700 : undefined,
-                    letterSpacing: isEink ? '0.02em' : undefined,
-                    lineHeight: isEink ? 1.5 : undefined,
-                    opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
-                    transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
-                  }}
-                >
-                  {sentences[currentIndex]}
-                </p>
+                <div className="relative w-full flex items-center justify-center">
+                  <p
+                    className="leading-relaxed text-center"
+                    style={{
+                      fontFamily: textFontFamily,
+                      fontSize: isEink ? `${einkAutoFontSize}px` : `${displaySettings.fontSize}px`,
+                      color: isEink ? einkTheme.text : displaySettings.textColor,
+                      whiteSpace: 'pre-wrap',
+                      fontWeight: isEink ? 700 : undefined,
+                      letterSpacing: isEink ? '0.02em' : undefined,
+                      lineHeight: isEink ? 1.5 : undefined,
+                      opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
+                      transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
+                    }}
+                  >
+                    {sentences[currentIndex]}
+                  </p>
+                  {/* 注釋按鈕：當下一句是注圖時顯示 */}
+                  {annotationBlock && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowAnnotation(true) }}
+                      className="absolute bottom-0 right-0 flex items-center justify-center rounded-full select-none"
+                      style={isEink ? {
+                        width: 48, height: 48,
+                        background: '#000', color: '#fff',
+                        fontSize: 18, fontWeight: 700,
+                        border: 'none',
+                      } : {
+                        width: 36, height: 36,
+                        background: '#1a3a2a', color: '#fff',
+                        fontSize: 14, fontWeight: 700,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                      }}
+                      title="顯示注釋"
+                    >
+                      注
+                    </button>
+                  )}
+                </div>
               )}
             </div>
+
+            {/* ── 注釋彈窗 ── */}
+            {showAnnotation && annotationBlock && (
+              <div
+                className="fixed inset-0 z-50 flex items-end justify-center"
+                style={{ background: 'rgba(0,0,0,0.5)' }}
+                onClick={() => setShowAnnotation(false)}
+              >
+                <div
+                  className="w-full max-w-2xl"
+                  style={isEink ? {
+                    background: '#fff',
+                    border: '2px solid #000',
+                    borderBottom: 'none',
+                    padding: '24px 20px 32px',
+                    maxHeight: '60vh',
+                    overflowY: 'auto',
+                  } : {
+                    background: '#fff',
+                    borderRadius: '16px 16px 0 0',
+                    padding: '20px 20px 32px',
+                    maxHeight: '55vh',
+                    overflowY: 'auto',
+                    boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* 標題欄 */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="flex items-center justify-center rounded-full text-white text-sm font-bold"
+                        style={{ width: 28, height: 28, background: isEink ? '#000' : '#1a3a2a', flexShrink: 0 }}
+                      >注</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: isEink ? '#000' : '#374151' }}>注釋</span>
+                    </div>
+                    <button
+                      onClick={() => setShowAnnotation(false)}
+                      style={isEink ? {
+                        border: '1.5px solid #000', borderRadius: 4,
+                        padding: '4px 12px', fontSize: 13, fontWeight: 700, background: '#fff',
+                      } : {
+                        border: 'none', background: '#f3f4f6', borderRadius: 8,
+                        padding: '4px 12px', fontSize: 13, cursor: 'pointer',
+                      }}
+                    >關閉</button>
+                  </div>
+                  {/* 注釋內容：圖 + 文字 */}
+                  <div className="space-y-3">
+                    {annotationBlock.map((item, idx) =>
+                      item.startsWith('data:image/') ? (
+                        <img key={idx} src={item} alt="注圖" style={{ maxWidth: '100%', maxHeight: 120, objectFit: 'contain' }} />
+                      ) : (
+                        <p key={idx} style={{
+                          fontSize: isEink ? 20 : 15,
+                          color: isEink ? '#000' : '#374151',
+                          lineHeight: 1.7,
+                          fontFamily: textFontFamily,
+                          margin: 0,
+                        }}>{item}</p>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 電腦：顯示按鈕；eink 模式下隱藏（用實體按鍵）；手機/平板：隱藏按鈕，改用觸摸分區 */}
             {!isEink && (
