@@ -918,19 +918,37 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <p style={{
-                  fontSize: `${displaySettings.fontSize}px`,
-                  color: paperTheme.text,
-                  textAlign: 'center',
-                  lineHeight: 1.85,
-                  margin: 0,
-                  fontFamily: textFontFamily,
-                  whiteSpace: 'pre-wrap',
-                  opacity: fadeVisible ? 1 : 0,
-                  transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
-                }}>
-                  {sentences[currentIndex]}
-                </p>
+                <div style={{ position: 'relative' }}>
+                  <p style={{
+                    fontSize: `${displaySettings.fontSize}px`,
+                    color: paperTheme.text,
+                    textAlign: 'center',
+                    lineHeight: 1.85,
+                    margin: 0,
+                    fontFamily: textFontFamily,
+                    whiteSpace: 'pre-wrap',
+                    opacity: fadeVisible ? 1 : 0,
+                    transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
+                  }}>
+                    {sentences[currentIndex]}
+                  </p>
+                  {/* 注釋按鈕（紙本模式） */}
+                  {annotationBlock && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowAnnotation(true) }}
+                      style={{
+                        position: 'absolute', bottom: 0, right: 0,
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: '#1a3a2a', color: '#fff',
+                        fontSize: 13, fontWeight: 700,
+                        border: 'none', cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title="顯示注釋"
+                    >注</button>
+                  )}
+                </div>
               )}
             </div>
 
