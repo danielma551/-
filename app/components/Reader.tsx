@@ -156,6 +156,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── 墨水屏自適應字體大小：binary search ──
   // 每次換句子就重新計算最大能填滿屏幕的字體大小
+  // 使用 effectiveSentence（已合併注尾碎片），確保量尺字數與顯示字數一致
   useEffect(() => {
     if (!einkMode) return
     const sentence = sentences[currentIndex]
@@ -176,13 +177,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const availW = window.innerWidth - 64   // 左右 padding：main(12) + container(20) = 32px × 2
     const availH = window.innerHeight - headerH - 84  // header + 16 + 48 + 20 buffer
 
+    // 計算有效顯示文字（含注尾碎片）：與 effectiveSentence 邏輯保持一致
+    let displayText = sentence
+    const nextIdx = currentIndex + 1
+    if (nextIdx < sentences.length && sentences[nextIdx]?.startsWith('data:image/')) {
+      let tail = ''; let i = nextIdx + 1
+      while (i < sentences.length) {
+        const s = sentences[i]
+        if (s.startsWith('data:image/')) break
+        if (s.length > 8) break
+        tail += s; i++
+      }
+      displayText = sentence + tail
+    }
+
     // 設定量尺樣式（與正式顯示一致）
     measure.style.width = `${availW}px`
     measure.style.fontFamily = resolvedFont
     measure.style.whiteSpace = 'pre-wrap'
     measure.style.wordBreak = 'break-word'
     measure.style.lineHeight = '1.5'
-    measure.textContent = sentence
+    measure.textContent = displayText
 
     // Binary search：找最大符合的 px
     let lo = 16, hi = 240
@@ -348,16 +363,32 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }, 160)
   }
 
-  // 找下一個非圖片句的 index（自動跳過注圖）
+  // 短碎片判斷：注圖後緊接的短文字（≤8字）視為前句的尾巴，合併顯示
+  const isAnnotationTail = (idx: number) =>
+    idx >= 0 &&
+    idx < sentences.length &&
+    !sentences[idx]?.startsWith('data:image/') &&
+    sentences[idx].length <= 8 &&
+    sentences[idx - 1]?.startsWith('data:image/')
+
+  // 找下一個真正的「主句」index：跳過注圖 + 注尾碎片
   const nextTextIndex = (from: number) => {
     let i = from + 1
-    while (i < sentences.length && sentences[i]?.startsWith('data:image/')) i++
+    while (i < sentences.length) {
+      if (sentences[i]?.startsWith('data:image/')) { i++; continue }
+      if (isAnnotationTail(i)) { i++; continue }  // 跳過已合併的尾巴
+      break
+    }
     return i < sentences.length ? i : -1
   }
-  // 找上一個非圖片句的 index
+  // 找上一個主句 index：跳過注圖 + 注尾碎片
   const prevTextIndex = (from: number) => {
     let i = from - 1
-    while (i >= 0 && sentences[i]?.startsWith('data:image/')) i--
+    while (i >= 0) {
+      if (sentences[i]?.startsWith('data:image/')) { i--; continue }
+      if (isAnnotationTail(i)) { i--; continue }
+      break
+    }
     return i >= 0 ? i : -1
   }
 
@@ -461,6 +492,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       afterFragments,        // 注後的文字碎片列表
       annotationImage: sentences[nextIdx],  // 注圖本身（備用）
     }
+  }, [currentIndex, sentences])
+
+  // ── 有效顯示句：當前句 + 注圖後的短尾巴碎片（合併顯示，不讓「演。」成為孤立頁） ──
+  const effectiveSentence = useMemo(() => {
+    const cur = sentences[currentIndex]
+    if (!cur || cur.startsWith('data:image/')) return cur ?? ''
+    const nextIdx = currentIndex + 1
+    // 下一句不是注圖 → 直接返回原句
+    if (nextIdx >= sentences.length || !sentences[nextIdx]?.startsWith('data:image/')) return cur
+    // 收集注圖後面的短尾巴（≤8 字，遇到長句或另一張圖就停）
+    let tail = ''
+    let i = nextIdx + 1
+    while (i < sentences.length) {
+      const s = sentences[i]
+      if (s.startsWith('data:image/')) break  // 另一張圖 = 停
+      if (s.length > 8) break                  // 正常新句 = 停
+      tail += s
+      i++
+    }
+    return cur + tail
   }, [currentIndex, sentences])
 
   // 找出當前在第幾個循環
@@ -951,7 +1002,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     opacity: fadeVisible ? 1 : 0,
                     transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
                   }}>
-                    {sentences[currentIndex]}
+                    {effectiveSentence}
                   </p>
                   {/* 注釋按鈕（紙本模式） */}
                   {annotationBlock && (
@@ -1069,7 +1120,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
                     }}
                   >
-                    {sentences[currentIndex]}
+                    {effectiveSentence}
                   </p>
                   {/* 注釋按鈕：當下一句是注圖時顯示 */}
                   {annotationBlock && (
