@@ -177,18 +177,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const availW = window.innerWidth - 64   // 左右 padding：main(12) + container(20) = 32px × 2
     const availH = window.innerHeight - headerH - 84  // header + 16 + 48 + 20 buffer
 
-    // 計算有效顯示文字（含注尾碎片）：與 effectiveSentence 邏輯保持一致
+    // 計算有效顯示文字（含注頭 + 注尾碎片）：與 effectiveSentence 邏輯保持一致
     let displayText = sentence
-    const nextIdx = currentIndex + 1
-    if (nextIdx < sentences.length && sentences[nextIdx]?.startsWith('data:image/')) {
-      let tail = ''; let i = nextIdx + 1
-      while (i < sentences.length) {
-        const s = sentences[i]
+    let headsStr = '', imageFoundAt = -1
+    let i = currentIndex + 1
+    while (i < sentences.length) {
+      const s = sentences[i]
+      if (s.startsWith('data:image/')) { imageFoundAt = i; break }
+      if (s.length > 8) break
+      headsStr += s; i++
+    }
+    if (imageFoundAt !== -1) {
+      let tailStr = ''
+      let j = imageFoundAt + 1
+      while (j < sentences.length) {
+        const s = sentences[j]
         if (s.startsWith('data:image/')) break
         if (s.length > 8) break
-        tail += s; i++
+        tailStr += s; j++
       }
-      displayText = sentence + tail
+      displayText = sentence + headsStr + tailStr
     }
 
     // 設定量尺樣式（與正式顯示一致）
@@ -363,7 +371,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }, 160)
   }
 
-  // 短碎片判斷：注圖後緊接的短文字（≤8字）視為前句的尾巴，合併顯示
+  // 注尾碎片：注圖後緊接的短文字（≤8字），視為前句的尾巴
   const isAnnotationTail = (idx: number) =>
     idx >= 0 &&
     idx < sentences.length &&
@@ -371,22 +379,40 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     sentences[idx].length <= 8 &&
     sentences[idx - 1]?.startsWith('data:image/')
 
-  // 找下一個真正的「主句」index：跳過注圖 + 注尾碎片
+  // 注頭碎片：注圖前緊接的短文字（≤8字），視為前句被注圖切斷的後半段
+  // 條件：不是圖片、≤8字、前一句不是圖片（否則是 tail）、向前幾步能找到注圖
+  const isAnnotationHead = (idx: number): boolean => {
+    if (idx < 0 || idx >= sentences.length) return false
+    const s = sentences[idx]
+    if (!s || s.startsWith('data:image/')) return false
+    if (s.length > 8) return false
+    if (sentences[idx - 1]?.startsWith('data:image/')) return false  // 是 tail，不是 head
+    // 向前最多 3 步，看能否找到注圖（中間只允許短文字）
+    for (let j = idx + 1; j <= idx + 3 && j < sentences.length; j++) {
+      if (sentences[j]?.startsWith('data:image/')) return true
+      if ((sentences[j]?.length ?? 0) > 8) break
+    }
+    return false
+  }
+
+  // 找下一個真正的「主句」index：跳過注圖 + 注尾碎片 + 注頭碎片
   const nextTextIndex = (from: number) => {
     let i = from + 1
     while (i < sentences.length) {
       if (sentences[i]?.startsWith('data:image/')) { i++; continue }
-      if (isAnnotationTail(i)) { i++; continue }  // 跳過已合併的尾巴
+      if (isAnnotationTail(i)) { i++; continue }
+      if (isAnnotationHead(i)) { i++; continue }
       break
     }
     return i < sentences.length ? i : -1
   }
-  // 找上一個主句 index：跳過注圖 + 注尾碎片
+  // 找上一個主句 index：跳過注圖 + 注尾碎片 + 注頭碎片
   const prevTextIndex = (from: number) => {
     let i = from - 1
     while (i >= 0) {
       if (sentences[i]?.startsWith('data:image/')) { i--; continue }
       if (isAnnotationTail(i)) { i--; continue }
+      if (isAnnotationHead(i)) { i--; continue }
       break
     }
     return i >= 0 ? i : -1
@@ -464,54 +490,78 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return { sizes, boundaries, count: sizes.length }
   }, [totalForProgress])
 
-  // ── 注釋偵測：當前是文字句，且下一句是圖片（注釋圖）時 ──
-  // 把注前文字 + 注後緊接的文字碎片拼合為完整句，供彈窗顯示
+  // ── 注釋偵測：當前是文字句，附近有注圖時（允許注圖前有短碎片） ──
+  // 把「注前碎片 + 注後碎片」全部拼合為完整句，供彈窗顯示
   const annotationBlock = useMemo(() => {
     const cur = sentences[currentIndex]
     if (!cur || cur.startsWith('data:image/')) return null
-    const nextIdx = currentIndex + 1
-    if (nextIdx >= sentences.length) return null
-    if (!sentences[nextIdx]?.startsWith('data:image/')) return null
 
-    // 收集注圖後面的文字碎片（直到遇到另一張圖或明顯的長文句）
+    // 向後掃：允許注圖前有短碎片（≤8字），找到注圖
+    const headFragments: string[] = []
+    let annotationImageIdx = -1
+    let i = currentIndex + 1
+    while (i < sentences.length) {
+      const s = sentences[i]
+      if (s.startsWith('data:image/')) { annotationImageIdx = i; break }
+      if (s.length > 8) break  // 長句 = 不是碎片，停止
+      headFragments.push(s)
+      i++
+    }
+    if (annotationImageIdx === -1) return null  // 沒找到注圖
+
+    // 收集注圖後面的文字碎片
     const afterFragments: string[] = []
-    let i = nextIdx + 1  // 跳過注圖本身
+    i = annotationImageIdx + 1
     while (i < sentences.length && afterFragments.length < 6) {
       const s = sentences[i]
-      if (s.startsWith('data:image/')) break           // 另一張圖 = 結束
-      if (afterFragments.length > 0 && s.length > 30) break  // 長文句 = 主內容回來了
+      if (s.startsWith('data:image/')) break
+      if (afterFragments.length > 0 && s.length > 30) break
       afterFragments.push(s)
       i++
     }
 
-    // 拼合：前半句 + 後半句碎片（去掉注圖，直接顯示文字）
-    const fullSentence = cur + afterFragments.join('')
+    // 拼合：主句 + 注頭碎片 + 注尾碎片
+    const fullSentence = cur + headFragments.join('') + afterFragments.join('')
 
     return {
-      fullSentence,          // 拼合後的完整句（或盡量接近的版本）
-      afterFragments,        // 注後的文字碎片列表
-      annotationImage: sentences[nextIdx],  // 注圖本身（備用）
+      fullSentence,
+      afterFragments,
+      annotationImage: sentences[annotationImageIdx],
     }
   }, [currentIndex, sentences])
 
-  // ── 有效顯示句：當前句 + 注圖後的短尾巴碎片（合併顯示，不讓「演。」成為孤立頁） ──
+  // ── 有效顯示句：當前句 + 注頭碎片（注圖前）+ 注尾碎片（注圖後）──
+  // 解決：「是由小泽荣太郎主」[注圖]「演。」→ 全部合併為一句顯示
   const effectiveSentence = useMemo(() => {
     const cur = sentences[currentIndex]
     if (!cur || cur.startsWith('data:image/')) return cur ?? ''
-    const nextIdx = currentIndex + 1
-    // 下一句不是注圖 → 直接返回原句
-    if (nextIdx >= sentences.length || !sentences[nextIdx]?.startsWith('data:image/')) return cur
-    // 收集注圖後面的短尾巴（≤8 字，遇到長句或另一張圖就停）
-    let tail = ''
-    let i = nextIdx + 1
+
+    // 向後掃：收集短碎片直到找到注圖（或長句）
+    let headsStr = ''
+    let imageIdx = -1
+    let i = currentIndex + 1
     while (i < sentences.length) {
       const s = sentences[i]
-      if (s.startsWith('data:image/')) break  // 另一張圖 = 停
-      if (s.length > 8) break                  // 正常新句 = 停
-      tail += s
+      if (s.startsWith('data:image/')) { imageIdx = i; break }
+      if (s.length > 8) break  // 長句 = 不是碎片，停止
+      headsStr += s
       i++
     }
-    return cur + tail
+
+    if (imageIdx === -1) return cur + headsStr  // 沒有注圖，直接返回（含頭碎片）
+
+    // 注圖後：收集短尾巴碎片
+    let tailStr = ''
+    let j = imageIdx + 1
+    while (j < sentences.length) {
+      const s = sentences[j]
+      if (s.startsWith('data:image/')) break
+      if (s.length > 8) break
+      tailStr += s
+      j++
+    }
+
+    return cur + headsStr + tailStr
   }, [currentIndex, sentences])
 
   // 找出當前在第幾個循環
