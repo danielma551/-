@@ -21,6 +21,78 @@ import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
+// ── 客戶端句子切割（與 server splitIntoSentences 保持一致）──
+function splitSentencesClient(text: string): string[] {
+  const cleaned = text.replace(/\r\n/g, '\n').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
+  const sentenceRegex = /[^.!?。！？;；,，:：]+[.!?。！？;；,，:：]+/g
+  const sentences = cleaned.match(sentenceRegex) || []
+  if (sentences.length === 0 && cleaned.length > 0) return [cleaned]
+  return sentences.map(s => s.trim()).filter(s => s.length > 0)
+}
+
+// ── 瀏覽器端 PDF 處理：先提取文字，失敗則 OCR ──
+async function processPdfClientSide(
+  file: File,
+  onProgress: (msg: string) => void
+): Promise<string[]> {
+  onProgress('正在載入 PDF...')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfjsLib = await import('pdfjs-dist') as any
+  // 使用 unpkg CDN 作為 Worker（避免 Next.js 打包問題）
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const totalPages: number = pdf.numPages
+
+  onProgress(`正在提取文字（共 ${totalPages} 頁）...`)
+
+  // 第一步：嘗試直接提取文字（文字型 PDF，秒完成）
+  let fullText = ''
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fullText += content.items.map((item: any) => item.str ?? '').join(' ')
+  }
+  if (fullText.trim().length > 50) {
+    onProgress('')
+    return splitSentencesClient(fullText)
+  }
+
+  // 第二步：掃描圖片型 PDF → 瀏覽器端 OCR（tesseract.js）
+  onProgress('正在載入中文 OCR 模型（首次需下載約 20MB，請稍候）...')
+  const { createWorker } = await import('tesseract.js')
+  // chi_sim（簡體）+ chi_tra（繁體），自動從 CDN 下載語言包
+  const worker = await createWorker(['chi_sim', 'chi_tra'], 1, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    logger: (m: any) => {
+      if (m.status === 'loading tesseract core') onProgress('載入 OCR 引擎...')
+      if (m.status === 'loading language traineddata') onProgress('載入中文語言模型...')
+    }
+  })
+
+  const allSentences: string[] = []
+  for (let i = 1; i <= totalPages; i++) {
+    onProgress(`OCR 識別中... ${i} / ${totalPages} 頁`)
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale: 2.0 })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    const ctx = canvas.getContext('2d')!
+    await page.render({ canvasContext: ctx, viewport }).promise
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: { text } } = await (worker as any).recognize(canvas)
+    if (text.trim()) allSentences.push(...splitSentencesClient(text))
+  }
+
+  await worker.terminate()
+  onProgress('')
+  return allSentences
+}
+
 function getBookStyle(title: string): string {
   const gradients = [
     'linear-gradient(160deg,#1a1a2e,#16213e)',
@@ -64,6 +136,8 @@ export default function Home() {
   const [showVocab, setShowVocab] = useState(false)
   // 追加內容：記錄哪本書正在處理中
   const [appendingBookId, setAppendingBookId] = useState<string | null>(null)
+  // OCR 進度提示文字
+  const [ocrProgress, setOcrProgress] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -76,48 +150,51 @@ export default function Home() {
 
     setUploadError('')
     setIsUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
+    setOcrProgress('')
+
+    // 書名清理（去掉括號內的網站名等）
+    let title = file.name.replace(/\.(txt|epub|pdf)$/i, '').trim()
+    let prev = ''
+    while (prev !== title) {
+      prev = title
+      title = title.replace(/\s*(?:\([^()]*\)|（[^（）]*）|\[[^\[\]]*\])\s*$/, '').trim()
+    }
+    title = title || file.name.replace(/\.(txt|epub|pdf)$/i, '')
+    const id = generateBookId(title)
 
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
+      let sentences: string[] = []
+      let coverImage: string | null = null
 
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data?.error || '上傳失敗')
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        // PDF：瀏覽器端處理（支援 OCR），不需要經過 server
+        sentences = await processPdfClientSide(file, setOcrProgress)
+      } else {
+        // TXT / EPUB：送 server 處理（EPUB 需要解析章節+封面）
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await fetch('/api/upload', { method: 'POST', body: formData })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || '上傳失敗')
+        sentences = data.sentences
+        coverImage = data.coverImage ?? null
       }
-      let title = file.name.replace(/\.(txt|epub|pdf)$/i, '').trim()
-      let prev = ''
-      while (prev !== title) {
-        prev = title
-        title = title.replace(/\s*(?:\([^()]*\)|（[^（）]*）|\[[^\[\]]*\])\s*$/, '').trim()
-      }
-      title = title || file.name.replace(/\.(txt|epub|pdf)$/i, '')
-      const id = generateBookId(title)
-      
+
+      if (sentences.length === 0) throw new Error('無法從文件中提取句子，請確認文件格式')
+
       const bookData: BookData = {
         id,
         title,
-        sentences: data.sentences,
+        sentences,
         currentIndex: 0,
         uploadDate: Date.now(),
         lastReadDate: Date.now(),
-        // EPUB 自動提取的封面圖片（TXT/PDF 為 null，不覆蓋）
-        ...(data.coverImage ? { coverImage: data.coverImage } : {})
+        ...(coverImage ? { coverImage } : {})
       }
-      
+
       await saveBookToIDB(bookData)
       getAllBooksFromIDB().then(setSavedBooks)
-      
-      setPendingBook({
-        sentences: data.sentences,
-        title,
-        id,
-        index: 0
-      })
+      setPendingBook({ sentences, title, id, index: 0 })
       setShowGoalModal(true)
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -125,7 +202,7 @@ export default function Home() {
       setUploadError(msg)
     } finally {
       setIsUploading(false)
-      // Reset file input so same file can be selected again
+      setOcrProgress('')
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -201,22 +278,29 @@ export default function Home() {
   // 追加內容：把新文件的句子接在現有書本尾部
   const handleAppendContent = async (book: BookData, file: File) => {
     setAppendingBookId(book.id)
-    const formData = new FormData()
-    formData.append('file', file)
+    setOcrProgress('')
     try {
-      const response = await fetch('/api/upload', { method: 'POST', body: formData })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data?.error || '上傳失敗')
-      const newSentences: string[] = data.sentences
+      let newSentences: string[] = []
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        // PDF：瀏覽器端 OCR
+        newSentences = await processPdfClientSide(file, setOcrProgress)
+      } else {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await fetch('/api/upload', { method: 'POST', body: formData })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || '上傳失敗')
+        newSentences = data.sentences
+      }
       const updated: BookData = { ...book, sentences: [...book.sentences, ...newSentences] }
       await saveBookToIDB(updated)
       getAllBooksFromIDB().then(setSavedBooks)
-      // 若正在閱讀同一本書，即時更新 sentences（不影響閱讀進度）
       if (bookId === book.id) setSentences(updated.sentences)
     } catch (err) {
       alert(err instanceof Error ? err.message : '加入內容失敗，請確認文件格式（TXT、EPUB 或 PDF）')
     } finally {
       setAppendingBookId(null)
+      setOcrProgress('')
     }
   }
 
@@ -316,6 +400,14 @@ export default function Home() {
           {uploadError && (
             <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-700">{uploadError}</p>
+            </div>
+          )}
+
+          {/* OCR / PDF 處理進度 */}
+          {ocrProgress && (
+            <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" />
+              <p className="text-sm text-blue-700">{ocrProgress}</p>
             </div>
           )}
 
