@@ -131,8 +131,28 @@ async function processPdfClientSide(
     for (let i = 1; i <= totalPages; i++) {
       onProgress(`${providerName} OCR 識別中... ${i} / ${totalPages} 頁`)
       const canvas = await renderPage(i)
-      const text = await processPageWithVisionOCR(canvas, visionOcr)
+      // 自動重試：遇到 rate limit 最多等待 3 次（2s → 5s → 10s）
+      let text = ''
+      const delays = [2000, 5000, 10000]
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        try {
+          text = await processPageWithVisionOCR(canvas, visionOcr)
+          break
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          const isRateLimit = msg.toLowerCase().includes('rate') || msg.includes('429')
+          if (isRateLimit && attempt < delays.length) {
+            const wait = delays[attempt]
+            onProgress(`Rate limit，等待 ${wait / 1000} 秒後重試... (第 ${attempt + 1} 次)`)
+            await new Promise(r => setTimeout(r, wait))
+          } else {
+            throw err
+          }
+        }
+      }
       if (text.trim()) allSentences.push(...splitSentencesClient(text))
+      // 每頁之間固定等待 1.5 秒，避免觸發 rate limit
+      if (i < totalPages) await new Promise(r => setTimeout(r, 1500))
     }
   } else {
     // ── 路徑 B：Tesseract.js 備選（免 API key，準確率較低）──
