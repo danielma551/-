@@ -85,11 +85,10 @@ export default function Home() {
         body: formData,
       })
 
-      if (!response.ok) {
-        throw new Error('上傳失敗')
-      }
-
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || '上傳失敗')
+      }
       let title = file.name.replace(/\.(txt|epub|pdf)$/i, '').trim()
       let prev = ''
       while (prev !== title) {
@@ -122,7 +121,8 @@ export default function Home() {
       setShowGoalModal(true)
     } catch (error) {
       console.error('Error uploading file:', error)
-      setUploadError('上傳失敗，請確認文件格式（TXT、EPUB 或 PDF）並重試')
+      const msg = error instanceof Error ? error.message : '上傳失敗，請確認文件格式（TXT、EPUB 或 PDF）並重試'
+      setUploadError(msg)
     } finally {
       setIsUploading(false)
       // Reset file input so same file can be selected again
@@ -205,16 +205,16 @@ export default function Home() {
     formData.append('file', file)
     try {
       const response = await fetch('/api/upload', { method: 'POST', body: formData })
-      if (!response.ok) throw new Error('上傳失敗')
       const data = await response.json()
+      if (!response.ok) throw new Error(data?.error || '上傳失敗')
       const newSentences: string[] = data.sentences
       const updated: BookData = { ...book, sentences: [...book.sentences, ...newSentences] }
       await saveBookToIDB(updated)
       getAllBooksFromIDB().then(setSavedBooks)
       // 若正在閱讀同一本書，即時更新 sentences（不影響閱讀進度）
       if (bookId === book.id) setSentences(updated.sentences)
-    } catch {
-      alert('加入內容失敗，請確認文件格式（TXT、EPUB 或 PDF）')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '加入內容失敗，請確認文件格式（TXT、EPUB 或 PDF）')
     } finally {
       setAppendingBookId(null)
     }

@@ -93,16 +93,44 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
 }
 
 async function parsePdf(buffer: Buffer): Promise<string[]> {
+  // Node.js 環境缺少 DOMMatrix（瀏覽器 API），pdfjs 需要它，先 polyfill
+  if (typeof globalThis.DOMMatrix === 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).DOMMatrix = class DOMMatrix {
+      a=1;b=0;c=0;d=1;e=0;f=0
+      m11=1;m12=0;m13=0;m14=0;m21=0;m22=1;m23=0;m24=0
+      m31=0;m32=0;m33=1;m34=0;m41=0;m42=0;m43=0;m44=1
+      is2D=true;isIdentity=true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructor(_init?: any) {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      translate(_x?: any,_y?: any,_z?: any) { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      scale(_x?: any,_y?: any,_z?: any) { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rotate(_a?: any,_b?: any,_c?: any) { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      multiply(_m?: any) { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      inverse() { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      static fromMatrix(_m?: any) { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      static fromFloat32Array(_a?: any) { return new (globalThis as any).DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      static fromFloat64Array(_a?: any) { return new (globalThis as any).DOMMatrix() }
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
-  // Set absolute workerSrc so pdfjs can find the file at runtime (included via vercel.json includeFiles)
   const workerPath = join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
   pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`
 
   const cmapUrl = join(process.cwd(), 'node_modules/pdfjs-dist/cmaps/')
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), cMapUrl: cmapUrl, cMapPacked: true }).promise
 
-  // Fast path: text-based PDF
+  // 嘗試直接提取文字（文字型 PDF）
   let fullText = ''
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
@@ -114,9 +142,20 @@ async function parsePdf(buffer: Buffer): Promise<string[]> {
     return splitIntoSentences(fullText)
   }
 
-  // OCR path: image-based PDF (e.g. scanned books)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createCanvas } = require('@napi-rs/canvas') as { createCanvas: (w: number, h: number) => { getContext: (t: string) => unknown; toBuffer: (fmt: string) => Buffer } }
+  // 掃描圖片型 PDF：需要 OCR，嘗試用 @napi-rs/canvas + tesseract.js
+  // 若 canvas 原生模組不可用，拋出清楚的錯誤提示
+  let createCanvas: ((w: number, h: number) => { getContext: (t: string) => unknown; toBuffer: (fmt: string) => Buffer }) | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const canvasMod = require('@napi-rs/canvas')
+    createCanvas = canvasMod.createCanvas
+  } catch {
+    throw new Error('此 PDF 為掃描圖片格式，無法直接提取文字。請改用 EPUB 或 TXT 格式上傳，或使用 Adobe Acrobat / 其他工具將其轉換為文字型 PDF。')
+  }
+  if (!createCanvas) {
+    throw new Error('此 PDF 為掃描圖片格式，無法直接提取文字。請改用 EPUB 或 TXT 格式上傳。')
+  }
+
   const { createWorker } = await import('tesseract.js')
   const worker = await createWorker('chi_tra+chi_sim+jpn+eng', undefined, { cachePath: '/tmp' })
   const allText: string[] = []
