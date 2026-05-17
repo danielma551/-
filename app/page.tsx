@@ -10,7 +10,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -21,6 +21,56 @@ import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 
+// ── Vision OCR 設定型別 ──
+interface VisionOcrConfig {
+  provider: 'mistral' | 'openai'
+  apiKey: string
+}
+
+// ── 單頁 Vision OCR：把 canvas 圖片傳給 AI 模型，回傳識別文字 ──
+async function processPageWithVisionOCR(
+  canvas: HTMLCanvasElement,
+  config: VisionOcrConfig
+): Promise<string> {
+  // 轉成 JPEG base64（壓縮比 PNG 小，節省 token）
+  const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1]
+  const prompt = '請直接輸出這張圖片中的所有文字，保持原有段落與換行格式，不要添加任何解釋、標題或標記。'
+
+  if (config.provider === 'mistral') {
+    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
+      body: JSON.stringify({
+        model: 'pixtral-large-latest',
+        messages: [{ role: 'user', content: [
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
+          { type: 'text', text: prompt }
+        ]}],
+        max_tokens: 4096,
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(`Mistral API 錯誤: ${data?.message ?? res.status}`)
+    return data.choices?.[0]?.message?.content ?? ''
+  } else {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: [
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'high' } },
+          { type: 'text', text: prompt }
+        ]}],
+        max_tokens: 4096,
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(`OpenAI API 錯誤: ${data?.error?.message ?? res.status}`)
+    return data.choices?.[0]?.message?.content ?? ''
+  }
+}
+
 // ── 客戶端句子切割（與 server splitIntoSentences 保持一致）──
 function splitSentencesClient(text: string): string[] {
   const cleaned = text.replace(/\r\n/g, '\n').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -30,15 +80,15 @@ function splitSentencesClient(text: string): string[] {
   return sentences.map(s => s.trim()).filter(s => s.length > 0)
 }
 
-// ── 瀏覽器端 PDF 處理：先提取文字，失敗則 OCR ──
+// ── 瀏覽器端 PDF 處理：先提取文字，失敗則用 Vision OCR 或 Tesseract ──
 async function processPdfClientSide(
   file: File,
-  onProgress: (msg: string) => void
+  onProgress: (msg: string) => void,
+  visionOcr?: VisionOcrConfig
 ): Promise<string[]> {
   onProgress('正在載入 PDF...')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfjsLib = await import('pdfjs-dist') as any
-  // 使用 unpkg CDN 作為 Worker（避免 Next.js 打包問題）
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
 
@@ -61,34 +111,50 @@ async function processPdfClientSide(
     return splitSentencesClient(fullText)
   }
 
-  // 第二步：掃描圖片型 PDF → 瀏覽器端 OCR（tesseract.js）
-  onProgress('正在載入中文 OCR 模型（首次需下載約 20MB，請稍候）...')
-  const { createWorker } = await import('tesseract.js')
-  // chi_sim（簡體）+ chi_tra（繁體），自動從 CDN 下載語言包
-  const worker = await createWorker(['chi_sim', 'chi_tra'], 1, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    logger: (m: any) => {
-      if (m.status === 'loading tesseract core') onProgress('載入 OCR 引擎...')
-      if (m.status === 'loading language traineddata') onProgress('載入中文語言模型...')
-    }
-  })
-
-  const allSentences: string[] = []
-  for (let i = 1; i <= totalPages; i++) {
-    onProgress(`OCR 識別中... ${i} / ${totalPages} 頁`)
-    const page = await pdf.getPage(i)
+  // 第二步：掃描圖片型 PDF，逐頁渲染為圖片
+  const renderPage = async (pageNum: number): Promise<HTMLCanvasElement> => {
+    const page = await pdf.getPage(pageNum)
     const viewport = page.getViewport({ scale: 2.0 })
     const canvas = document.createElement('canvas')
     canvas.width = Math.ceil(viewport.width)
     canvas.height = Math.ceil(viewport.height)
-    const ctx = canvas.getContext('2d')!
-    await page.render({ canvasContext: ctx, viewport }).promise
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: { text } } = await (worker as any).recognize(canvas)
-    if (text.trim()) allSentences.push(...splitSentencesClient(text))
+    await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
+    return canvas
   }
 
-  await worker.terminate()
+  const allSentences: string[] = []
+
+  if (visionOcr?.apiKey) {
+    // ── 路徑 A：Vision OCR（Mistral / OpenAI）準確率高 ──
+    const providerName = visionOcr.provider === 'mistral' ? 'Mistral Pixtral' : 'GPT-4o'
+    onProgress(`準備使用 ${providerName} 進行高精度 OCR...`)
+    for (let i = 1; i <= totalPages; i++) {
+      onProgress(`${providerName} OCR 識別中... ${i} / ${totalPages} 頁`)
+      const canvas = await renderPage(i)
+      const text = await processPageWithVisionOCR(canvas, visionOcr)
+      if (text.trim()) allSentences.push(...splitSentencesClient(text))
+    }
+  } else {
+    // ── 路徑 B：Tesseract.js 備選（免 API key，準確率較低）──
+    onProgress('正在載入中文 OCR 模型（首次需下載約 20MB）...')
+    const { createWorker } = await import('tesseract.js')
+    const worker = await createWorker(['chi_sim', 'chi_tra'], 1, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      logger: (m: any) => {
+        if (m.status === 'loading tesseract core') onProgress('載入 OCR 引擎...')
+        if (m.status === 'loading language traineddata') onProgress('載入中文語言模型...')
+      }
+    })
+    for (let i = 1; i <= totalPages; i++) {
+      onProgress(`OCR 識別中... ${i} / ${totalPages} 頁（提示：設定 AI 視覺 API 可大幅提升準確率）`)
+      const canvas = await renderPage(i)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: { text } } = await (worker as any).recognize(canvas)
+      if (text.trim()) allSentences.push(...splitSentencesClient(text))
+    }
+    await worker.terminate()
+  }
+
   onProgress('')
   return allSentences
 }
@@ -138,6 +204,15 @@ export default function Home() {
   const [appendingBookId, setAppendingBookId] = useState<string | null>(null)
   // OCR 進度提示文字
   const [ocrProgress, setOcrProgress] = useState<string>('')
+  // Vision OCR 設定
+  const [showVisionSettings, setShowVisionSettings] = useState(false)
+  const [visionProvider, setVisionProvider] = useState<'mistral' | 'openai'>(() =>
+    typeof window !== 'undefined' ? (localStorage.getItem('vision-ocr-provider') as 'mistral' | 'openai' || 'mistral') : 'mistral'
+  )
+  const [visionApiKey, setVisionApiKey] = useState<string>(() =>
+    typeof window !== 'undefined' ? (localStorage.getItem('vision-ocr-key') || '') : ''
+  )
+  const [visionKeyInput, setVisionKeyInput] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -168,7 +243,7 @@ export default function Home() {
 
       if (file.name.toLowerCase().endsWith('.pdf')) {
         // PDF：瀏覽器端處理（支援 OCR），不需要經過 server
-        sentences = await processPdfClientSide(file, setOcrProgress)
+        sentences = await processPdfClientSide(file, setOcrProgress, getVisionConfig())
       } else {
         // TXT / EPUB：送 server 處理（EPUB 需要解析章節+封面）
         const formData = new FormData()
@@ -275,6 +350,26 @@ export default function Home() {
     getAllBooksFromIDB().then(setSavedBooks)
   }
 
+  // 儲存 Vision OCR 設定到 localStorage
+  const saveVisionSettings = () => {
+    localStorage.setItem('vision-ocr-provider', visionProvider)
+    localStorage.setItem('vision-ocr-key', visionKeyInput)
+    setVisionApiKey(visionKeyInput)
+    setShowVisionSettings(false)
+  }
+
+  // 清除 Vision OCR 設定
+  const clearVisionSettings = () => {
+    localStorage.removeItem('vision-ocr-provider')
+    localStorage.removeItem('vision-ocr-key')
+    setVisionApiKey('')
+    setVisionKeyInput('')
+  }
+
+  // 取得當前 Vision OCR 設定（有 key 才傳入）
+  const getVisionConfig = (): VisionOcrConfig | undefined =>
+    visionApiKey ? { provider: visionProvider, apiKey: visionApiKey } : undefined
+
   // 追加內容：把新文件的句子接在現有書本尾部
   const handleAppendContent = async (book: BookData, file: File) => {
     setAppendingBookId(book.id)
@@ -283,7 +378,7 @@ export default function Home() {
       let newSentences: string[] = []
       if (file.name.toLowerCase().endsWith('.pdf')) {
         // PDF：瀏覽器端 OCR
-        newSentences = await processPdfClientSide(file, setOcrProgress)
+        newSentences = await processPdfClientSide(file, setOcrProgress, getVisionConfig())
       } else {
         const formData = new FormData()
         formData.append('file', file)
@@ -373,6 +468,15 @@ export default function Home() {
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
             <div className="flex items-center space-x-3">
+              {/* Vision OCR 設定按鈕 */}
+              <button
+                onClick={() => { setVisionKeyInput(visionApiKey); setShowVisionSettings(true) }}
+                className={`flex items-center space-x-1.5 px-3 py-2 rounded-full border text-sm font-medium transition-colors ${visionApiKey ? 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}
+                title="設定 AI 視覺 OCR（掃描 PDF 識別）"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{visionApiKey ? 'Vision OCR ✓' : 'Vision OCR'}</span>
+              </button>
               <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
               <label
@@ -396,6 +500,51 @@ export default function Home() {
               </label>
             </div>
           </header>
+
+          {/* Vision OCR 設定面板 */}
+          {showVisionSettings && (
+            <div className="mb-6 p-5 bg-white border border-gray-200 rounded-xl shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-indigo-600" />
+                  <span className="font-semibold text-gray-800">AI 視覺 OCR 設定</span>
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">掃描 PDF 必備</span>
+                </div>
+                <button onClick={() => setShowVisionSettings(false)}><X className="w-4 h-4 text-gray-400 hover:text-gray-600" /></button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4">比 Tesseract 準確率高很多，適合中文掃描書。API key 只存在瀏覽器本地，不上傳任何地方。</p>
+              {/* 選 provider */}
+              <div className="flex gap-2 mb-3">
+                {(['mistral', 'openai'] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setVisionProvider(p)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${visionProvider === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'}`}
+                  >
+                    {p === 'mistral' ? '🟠 Mistral Pixtral（便宜）' : '🟢 GPT-4o（最準確）'}
+                  </button>
+                ))}
+              </div>
+              {/* API key 輸入 */}
+              <input
+                type="password"
+                placeholder={visionProvider === 'mistral' ? '貼上 Mistral API key（mistral.ai → API Keys）' : '貼上 OpenAI API key（platform.openai.com → API keys）'}
+                value={visionKeyInput}
+                onChange={e => setVisionKeyInput(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-indigo-400 mb-3"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={saveVisionSettings}
+                  disabled={!visionKeyInput.trim()}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >儲存</button>
+                {visionApiKey && (
+                  <button onClick={clearVisionSettings} className="px-4 py-2 text-red-600 border border-red-200 rounded-lg text-sm hover:bg-red-50">清除</button>
+                )}
+              </div>
+            </div>
+          )}
 
           {uploadError && (
             <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg">
