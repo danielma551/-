@@ -131,9 +131,9 @@ async function processPdfClientSide(
     for (let i = 1; i <= totalPages; i++) {
       onProgress(`${providerName} OCR 識別中... ${i} / ${totalPages} 頁`)
       const canvas = await renderPage(i)
-      // 自動重試：遇到 rate limit 最多等待 3 次（2s → 5s → 10s）
+      // 自動重試：遇到 rate limit 最多等待 3 次（30s → 60s → 120s）
       let text = ''
-      const delays = [2000, 5000, 10000]
+      const delays = [30000, 60000, 120000]
       for (let attempt = 0; attempt <= delays.length; attempt++) {
         try {
           text = await processPageWithVisionOCR(canvas, visionOcr)
@@ -151,8 +151,13 @@ async function processPdfClientSide(
         }
       }
       if (text.trim()) allSentences.push(...splitSentencesClient(text))
-      // 每頁之間固定等待 1.5 秒，避免觸發 rate limit
-      if (i < totalPages) await new Promise(r => setTimeout(r, 1500))
+      // 每頁之間固定等待 22 秒（Mistral 免費層約 2-3 RPM）
+      if (i < totalPages) {
+        for (let s = 22; s > 0; s--) {
+          onProgress(`${providerName} OCR 識別中... ${i} / ${totalPages} 頁完成，等待 ${s} 秒...`)
+          await new Promise(r => setTimeout(r, 1000))
+        }
+      }
     }
   } else {
     // ── 路徑 B：Tesseract.js 備選（免 API key，準確率較低）──
