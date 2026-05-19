@@ -135,30 +135,43 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
     synth.resume()
   }, [getVoice])
 
-  // 播放完整拼讀（逐個念字母）
+  // 播放完整拼讀（串聯式：前一個字母播完才播下一個，相容 iOS Safari / Android）
   const handleSpeak = useCallback(() => {
     if (!('speechSynthesis' in window) || speaking) return
     const synth = window.speechSynthesis
     synth.cancel()
     if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
     setSpeaking(true)
+
     const voice = getVoice()
     const letters = currentWord.toLowerCase().split('')
-    letters.forEach((letter, i) => {
+    let idx = 0
+
+    const speakNext = () => {
+      if (idx >= letters.length) {
+        if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
+        setSpeaking(false)
+        return
+      }
+      const letter = letters[idx++]
       const utt = new SpeechSynthesisUtterance(LETTER_NAMES[letter] || letter)
       utt.lang = 'en-US'
       utt.rate = 0.8
       utt.pitch = 1.1
       if (voice) utt.voice = voice
-      utt.onerror = (e) => { if ((e as SpeechSynthesisErrorEvent).error !== 'interrupted') setSpeaking(false) }
-      if (i === letters.length - 1) {
-        utt.onend = () => {
+      utt.onend = speakNext
+      utt.onerror = (e) => {
+        const err = (e as SpeechSynthesisErrorEvent).error
+        if (err !== 'interrupted') {
           if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
           setSpeaking(false)
         }
       }
       synth.speak(utt)
-    })
+    }
+
+    speakNext()
+
     // Android Chrome bug：引擎在播放中會自動暫停，周期呼叫 resume() 修復
     resumeIntervalRef.current = setInterval(() => {
       if (synth.paused) synth.resume()
