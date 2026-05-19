@@ -130,28 +130,19 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
   }, [getVoice])
 
   // 念一次某個字母名稱（每輸錯觸發一次）
-  // 不呼叫 cancel()：直接插播，避免 cancel→speak 的競態條件
+  // 必須同步呼叫 speak()，不能有 setTimeout，否則 Chromium 系瀏覽器會因手勢上下文過期而靜默
   const speakOnce = useCallback((letterName: string) => {
     if (!('speechSynthesis' in window)) return
     const synth = window.speechSynthesis
-    // 若目前有語音在播，先 cancel 並等一個 tick，否則直接播
-    if (synth.speaking || synth.pending) {
-      synth.cancel()
-      setTimeout(() => {
-        const utt = makeUtt(letterName)
-        utt.onerror = () => {}
-        synth.resume()
-        synth.speak(utt)
-      }, 80)
-    } else {
-      const utt = makeUtt(letterName)
-      utt.onerror = () => {}
-      synth.resume()
-      synth.speak(utt)
-    }
+    synth.cancel()
+    synth.resume()
+    const utt = makeUtt(letterName)
+    utt.onerror = () => {}
+    synth.speak(utt)
   }, [makeUtt])
 
   // 播放完整拼讀（串聯式：前一個字母播完才播下一個）
+  // 同樣必須在使用者手勢的同步脈絡中呼叫第一個 speak()
   const handleSpeak = useCallback(() => {
     if (!('speechSynthesis' in window) || speaking) return
     const synth = window.speechSynthesis
@@ -180,12 +171,10 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
       synth.speak(utt)
     }
 
-    // cancel 後等 80ms 再開始，避免競態條件
+    // 同步呼叫：cancel → resume → 立刻開始第一個字母
     synth.cancel()
-    setTimeout(() => {
-      synth.resume()
-      speakNext()
-    }, 80)
+    synth.resume()
+    speakNext()
 
     // Android Chrome bug：引擎在播放中會自動暫停，周期呼叫 resume() 修復
     resumeIntervalRef.current = setInterval(() => {
