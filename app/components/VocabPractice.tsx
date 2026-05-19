@@ -118,32 +118,46 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
     availableVoices.find(v => v.name === selectedVoiceName) || null
   , [availableVoices, selectedVoiceName])
 
-  // 念一次某個字母名稱（每輸錯觸發一次，不循環）
-  const speakOnce = useCallback((letterName: string) => {
-    if (!('speechSynthesis' in window)) return
-    const synth = window.speechSynthesis
-    synth.cancel()
-    const utt = new SpeechSynthesisUtterance(letterName)
+  // 製作一個 utterance 物件
+  const makeUtt = useCallback((text: string): SpeechSynthesisUtterance => {
+    const utt = new SpeechSynthesisUtterance(text)
     utt.lang = 'en-US'
     utt.rate = 0.8
     utt.pitch = 1.1
     const voice = getVoice()
     if (voice) utt.voice = voice
-    utt.onerror = () => {}
-    synth.speak(utt)
-    // Android Chrome 對策：和 speak() 同步呼叫不會破壞 iOS 手勢上下文
-    synth.resume()
+    return utt
   }, [getVoice])
 
-  // 播放完整拼讀（串聯式：前一個字母播完才播下一個，相容 iOS Safari / Android）
+  // 念一次某個字母名稱（每輸錯觸發一次）
+  // 不呼叫 cancel()：直接插播，避免 cancel→speak 的競態條件
+  const speakOnce = useCallback((letterName: string) => {
+    if (!('speechSynthesis' in window)) return
+    const synth = window.speechSynthesis
+    // 若目前有語音在播，先 cancel 並等一個 tick，否則直接播
+    if (synth.speaking || synth.pending) {
+      synth.cancel()
+      setTimeout(() => {
+        const utt = makeUtt(letterName)
+        utt.onerror = () => {}
+        synth.resume()
+        synth.speak(utt)
+      }, 80)
+    } else {
+      const utt = makeUtt(letterName)
+      utt.onerror = () => {}
+      synth.resume()
+      synth.speak(utt)
+    }
+  }, [makeUtt])
+
+  // 播放完整拼讀（串聯式：前一個字母播完才播下一個）
   const handleSpeak = useCallback(() => {
     if (!('speechSynthesis' in window) || speaking) return
     const synth = window.speechSynthesis
-    synth.cancel()
     if (resumeIntervalRef.current) clearInterval(resumeIntervalRef.current)
     setSpeaking(true)
 
-    const voice = getVoice()
     const letters = currentWord.toLowerCase().split('')
     let idx = 0
 
@@ -154,11 +168,7 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
         return
       }
       const letter = letters[idx++]
-      const utt = new SpeechSynthesisUtterance(LETTER_NAMES[letter] || letter)
-      utt.lang = 'en-US'
-      utt.rate = 0.8
-      utt.pitch = 1.1
-      if (voice) utt.voice = voice
+      const utt = makeUtt(LETTER_NAMES[letter] || letter)
       utt.onend = speakNext
       utt.onerror = (e) => {
         const err = (e as SpeechSynthesisErrorEvent).error
@@ -170,7 +180,12 @@ export default function VocabPractice({ onExit }: VocabPracticeProps) {
       synth.speak(utt)
     }
 
-    speakNext()
+    // cancel 後等 80ms 再開始，避免競態條件
+    synth.cancel()
+    setTimeout(() => {
+      synth.resume()
+      speakNext()
+    }, 80)
 
     // Android Chrome bug：引擎在播放中會自動暫停，周期呼叫 resume() 修復
     resumeIntervalRef.current = setInterval(() => {
