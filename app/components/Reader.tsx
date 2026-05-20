@@ -347,10 +347,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setSearchResults([])
   }
 
-  const vibrate = (ms: number) => {
-    if (ms > 0 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate(ms)
-    }
+  const vibrate = (_ms: number) => {
+    if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return
+    const { VIBRATION_PRESETS } = require('../utils/storage')
+    const preset = VIBRATION_PRESETS[displaySettings.vibrationPattern ?? 'standard']
+    if (!preset || preset.pattern === 0) return
+    navigator.vibrate(preset.pattern)
   }
 
   const triggerFade = (action: () => void) => {

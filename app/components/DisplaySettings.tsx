@@ -12,12 +12,24 @@
 import { useState, useEffect } from 'react'
 import { Settings, X, Check } from 'lucide-react'
 
+export type VibrationPattern = 'off' | 'crisp' | 'gentle' | 'standard' | 'strong' | 'double'
+
+export const VIBRATION_PRESETS: Record<VibrationPattern, { label: string; pattern: number[] | 0; desc: string }> = {
+  off:      { label: '關閉',  pattern: 0,             desc: '無震動' },
+  crisp:    { label: '清脆',  pattern: [12],          desc: '12ms，類似按鍵感' },
+  gentle:   { label: '輕柔',  pattern: [28],          desc: '28ms 輕拍' },
+  standard: { label: '標準',  pattern: [60],          desc: '60ms 一般震動' },
+  strong:   { label: '強烈',  pattern: [120],         desc: '120ms 重震' },
+  double:   { label: '雙擊',  pattern: [12, 30, 12],  desc: '兩下短震，有節奏感' },
+}
+
 export interface DisplaySettings {
   fontSize: number
   backgroundColor: string
   textColor: string
   progressColor: string
   vibrationIntensity: number
+  vibrationPattern: VibrationPattern
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -25,7 +37,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   backgroundColor: '#ffffff',
   textColor: '#1f2937',
   progressColor: '#6366f1',
-  vibrationIntensity: 100
+  vibrationIntensity: 60,
+  vibrationPattern: 'standard',
 }
 
 interface DisplaySettingsProps {
@@ -231,60 +244,49 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                   </div>
                 </div>
 
-                {/* Vibration */}
+                {/* Vibration Pattern */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-gray-700">
-                      震動強度（手機）
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">震動模式（Android）</label>
                     {typeof navigator !== 'undefined' && !('vibrate' in navigator) && (
-                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                        iOS 不支援
-                      </span>
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">iOS 不支援</span>
                     )}
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <input
-                      type="range"
-                      min="0"
-                      max="200"
-                      step="10"
-                      value={editingSettings.vibrationIntensity}
-                      onChange={(e) => {
-                        const newSettings = { ...editingSettings, vibrationIntensity: parseInt(e.target.value) }
-                        setEditingSettings(newSettings)
-                        onSave(newSettings)
-                      }}
-                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                    />
-                    <span className="text-sm font-semibold text-gray-800 w-20 text-right">
-                      {editingSettings.vibrationIntensity === 0 ? '關閉' : `${editingSettings.vibrationIntensity}ms`}
-                    </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.entries(VIBRATION_PRESETS) as [VibrationPattern, typeof VIBRATION_PRESETS[VibrationPattern]][]).map(([key, preset]) => {
+                      const isSelected = (editingSettings.vibrationPattern ?? 'standard') === key
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            const newSettings = { ...editingSettings, vibrationPattern: key, vibrationIntensity: preset.pattern === 0 ? 0 : (preset.pattern as number[])[0] }
+                            setEditingSettings(newSettings)
+                            onSave(newSettings)
+                            // 選擇後立刻試震
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator && preset.pattern !== 0) {
+                              const ok = navigator.vibrate(preset.pattern as number[])
+                              setVibrateResult(ok ? 'ok' : 'unsupported')
+                              setTimeout(() => setVibrateResult('idle'), 1500)
+                            }
+                          }}
+                          className={`flex flex-col items-center py-2 px-1 rounded-xl border-2 transition-all text-center ${
+                            isSelected
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                          }`}
+                          title={preset.desc}
+                        >
+                          <span className="text-sm font-semibold">{preset.label}</span>
+                          <span className="text-xs text-gray-400 mt-0.5">{preset.desc.split('，')[0]}</span>
+                        </button>
+                      )
+                    })}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex justify-between text-xs text-gray-500 flex-1 mr-4">
-                      <span>關閉</span>
-                      <span>強</span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (typeof navigator === 'undefined' || !('vibrate' in navigator)) {
-                          setVibrateResult('unsupported')
-                        } else if (editingSettings.vibrationIntensity > 0) {
-                          const ok = navigator.vibrate(editingSettings.vibrationIntensity)
-                          setVibrateResult(ok ? 'ok' : 'unsupported')
-                        }
-                        setTimeout(() => setVibrateResult('idle'), 2500)
-                      }}
-                      className={`text-xs px-3 py-1 rounded-lg transition-colors ${
-                        vibrateResult === 'ok' ? 'bg-green-100 text-green-700' :
-                        vibrateResult === 'unsupported' ? 'bg-red-100 text-red-700' :
-                        'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                      }`}
-                    >
-                      {vibrateResult === 'ok' ? '✓ 已震動' : vibrateResult === 'unsupported' ? '✗ 不支援' : '測試震動'}
-                    </button>
-                  </div>
+                  {vibrateResult !== 'idle' && (
+                    <p className={`text-xs text-center ${vibrateResult === 'ok' ? 'text-green-600' : 'text-red-500'}`}>
+                      {vibrateResult === 'ok' ? '✓ 震動中' : '✗ 此裝置不支援震動'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Actions */}

@@ -137,12 +137,26 @@ export const shortcutsStorage = {
   }
 }
 
+// 振動模式：每個字串代表 navigator.vibrate() 的 pattern，逗號分隔
+// 例如 "15,30,15" → vibrate([15,30,15])，"0" → 關閉
+export type VibrationPattern = 'off' | 'crisp' | 'gentle' | 'standard' | 'strong' | 'double'
+
+export const VIBRATION_PRESETS: Record<VibrationPattern, { label: string; pattern: number[] | 0; desc: string }> = {
+  off:      { label: '關閉',   pattern: 0,              desc: '無震動' },
+  crisp:    { label: '清脆',   pattern: [12],           desc: '12ms 短促，類似按鍵感' },
+  gentle:   { label: '輕柔',   pattern: [28],           desc: '28ms 輕拍' },
+  standard: { label: '標準',   pattern: [60],           desc: '60ms 一般震動' },
+  strong:   { label: '強烈',   pattern: [120],          desc: '120ms 重震' },
+  double:   { label: '雙擊',   pattern: [12, 30, 12],   desc: '兩下短震，有節奏感' },
+}
+
 export interface DisplaySettings {
   fontSize: number
   backgroundColor: string
   textColor: string
   progressColor: string
-  vibrationIntensity: number
+  vibrationIntensity: number   // 保留舊欄位向後相容
+  vibrationPattern: VibrationPattern
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -150,7 +164,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   backgroundColor: '#ffffff',
   textColor: '#1f2937',
   progressColor: '#6366f1',
-  vibrationIntensity: 100
+  vibrationIntensity: 60,
+  vibrationPattern: 'standard',
 }
 
 export const displayStorage = {
@@ -167,7 +182,18 @@ export const displayStorage = {
     if (typeof window === 'undefined') return DEFAULT_DISPLAY_SETTINGS
     try {
       const data = localStorage.getItem(DISPLAY_STORAGE_KEY)
-      return data ? { ...DEFAULT_DISPLAY_SETTINGS, ...JSON.parse(data) } : DEFAULT_DISPLAY_SETTINGS
+      if (!data) return DEFAULT_DISPLAY_SETTINGS
+      const saved = JSON.parse(data)
+      const merged = { ...DEFAULT_DISPLAY_SETTINGS, ...saved }
+      // 舊資料沒有 vibrationPattern：根據舊 vibrationIntensity 推斷
+      if (!saved.vibrationPattern) {
+        if (!saved.vibrationIntensity || saved.vibrationIntensity === 0) merged.vibrationPattern = 'off'
+        else if (saved.vibrationIntensity <= 20) merged.vibrationPattern = 'crisp'
+        else if (saved.vibrationIntensity <= 40) merged.vibrationPattern = 'gentle'
+        else if (saved.vibrationIntensity <= 80) merged.vibrationPattern = 'standard'
+        else merged.vibrationPattern = 'strong'
+      }
+      return merged
     } catch (error) {
       console.error('Error loading display settings:', error)
       return DEFAULT_DISPLAY_SETTINGS
