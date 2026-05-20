@@ -684,142 +684,134 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         ) : (
           /* ── 正常模式 Header ── */
-          <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <BookOpen className="w-6 h-6 text-indigo-600" />
-              {!showSearch && (
-                <h1 className="text-base sm:text-xl font-semibold text-gray-800 max-w-[160px] sm:max-w-xs md:max-w-sm truncate" title={bookTitle}>{bookTitle}</h1>
-              )}
-              {showSearch ? (
-                <div className="relative">
-                  <div className="flex items-center w-72 px-3 py-1.5 border-2 border-indigo-400 rounded-full bg-white shadow-sm">
-                    <Search className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
-                    <input
-                      autoFocus
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => handleSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }
-                      }}
-                      placeholder="搜索句子..."
-                      className="flex-1 text-sm outline-none bg-transparent"
-                    />
-                    {searchQuery && (
-                      <button onClick={() => { setSearchQuery(''); setSearchResults([]) }} className="ml-1 p-0.5 hover:bg-gray-100 rounded-full">
-                        <X className="w-3.5 h-3.5 text-gray-400" />
-                      </button>
-                    )}
-                  </div>
+          <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center gap-2">
+            {/* 返回首頁：永遠顯示在最左邊，手機上只顯示圖示 */}
+            <button
+              onClick={onReset}
+              className="flex items-center gap-1 px-1.5 sm:px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+              title="返回首頁"
+            >
+              <Home className="w-5 h-5" />
+              <span className="hidden sm:inline text-sm">首頁</span>
+            </button>
 
-                  {searchQuery && (
-                    <div className="absolute top-full left-0 mt-1 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                      {searchResults.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-400">無符合結果</div>
-                      ) : (
-                        <>
-                          <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-50">
-                            共 {searchResults.length} 個結果 · 點擊預覽上下文
-                          </div>
-                          <ul className="max-h-64 overflow-y-auto">
-                            {searchResults.slice(0, 10).map((idx) => {
-                              const sentence = sentences[idx]
-                              const lower = sentence.toLowerCase()
-                              const qLower = searchQuery.toLowerCase()
-                              const matchPos = lower.indexOf(qLower)
-                              const preview = sentence.length > 60
-                                ? sentence.slice(Math.max(0, matchPos - 15), matchPos + searchQuery.length + 30) + '…'
-                                : sentence
-                              const before = preview.slice(0, preview.toLowerCase().indexOf(qLower))
-                              const match = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
-                              const after = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
-                              return (
-                                <li key={idx}>
-                                  <button
-                                    onClick={() => handleClickSearchResult(idx)}
-                                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2"
-                                  >
-                                    <Search className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
-                                    <span className="text-gray-600 leading-snug">
-                                      {before}
-                                      <strong className="text-indigo-600 font-semibold">{match}</strong>
-                                      {after}
-                                    </span>
-                                    <span className="text-xs text-gray-300 flex-shrink-0 ml-auto pl-2">#{idx + 1}</span>
-                                  </button>
-                                </li>
-                              )
-                            })}
-                            {searchResults.length > 10 && (
-                              <li className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
-                                還有 {searchResults.length - 10} 個結果…
-                              </li>
-                            )}
-                          </ul>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center space-x-1">
-                  {/* 書內搜索 */}
-                  <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="書內搜索">
-                    <Search className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              <BookOpen className="w-5 h-5 text-indigo-600" />
+              {!showSearch && (
+                <h1 className="text-sm sm:text-xl font-semibold text-gray-800 max-w-[100px] sm:max-w-xs md:max-w-sm truncate" title={bookTitle}>{bookTitle}</h1>
               )}
             </div>
-            <div className="flex items-center space-x-0.5 sm:space-x-2">
-              {/* 下雨特效：手機隱藏（省空間） */}
+
+            {/* 書內搜索框（展開時） */}
+            {showSearch && (
+              <div className="relative flex-1">
+                <div className="flex items-center w-full px-3 py-1.5 border-2 border-indigo-400 rounded-full bg-white shadow-sm">
+                  <Search className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }
+                    }}
+                    placeholder="搜索句子..."
+                    className="flex-1 text-sm outline-none bg-transparent"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => { setSearchQuery(''); setSearchResults([]) }} className="ml-1 p-0.5 hover:bg-gray-100 rounded-full">
+                      <X className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                  )}
+                </div>
+                {searchQuery && (
+                  <div className="absolute top-full left-0 mt-1 w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                    {searchResults.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-400">無符合結果</div>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-50">
+                          共 {searchResults.length} 個結果 · 點擊預覽上下文
+                        </div>
+                        <ul className="max-h-64 overflow-y-auto">
+                          {searchResults.slice(0, 10).map((idx) => {
+                            const sentence = sentences[idx]
+                            const lower = sentence.toLowerCase()
+                            const qLower = searchQuery.toLowerCase()
+                            const matchPos = lower.indexOf(qLower)
+                            const preview = sentence.length > 60
+                              ? sentence.slice(Math.max(0, matchPos - 15), matchPos + searchQuery.length + 30) + '…'
+                              : sentence
+                            const before = preview.slice(0, preview.toLowerCase().indexOf(qLower))
+                            const match = preview.slice(preview.toLowerCase().indexOf(qLower), preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                            const after = preview.slice(preview.toLowerCase().indexOf(qLower) + searchQuery.length)
+                            return (
+                              <li key={idx}>
+                                <button
+                                  onClick={() => handleClickSearchResult(idx)}
+                                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 transition-colors flex items-start space-x-2"
+                                >
+                                  <Search className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
+                                  <span className="text-gray-600 leading-snug">
+                                    {before}
+                                    <strong className="text-indigo-600 font-semibold">{match}</strong>
+                                    {after}
+                                  </span>
+                                  <span className="text-xs text-gray-300 flex-shrink-0 ml-auto pl-2">#{idx + 1}</span>
+                                </button>
+                              </li>
+                            )
+                          })}
+                          {searchResults.length > 10 && (
+                            <li className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
+                              還有 {searchResults.length - 10} 個結果…
+                            </li>
+                          )}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 右側工具列：橫向可滾動，手機可左滑看到更多 */}
+            <div className="flex items-center gap-0.5 ml-auto overflow-x-auto scrollbar-hide flex-shrink-0 max-w-[60vw] sm:max-w-none">
+              {/* 書內搜索按鈕 */}
+              {!showSearch && (
+                <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0" title="書內搜索">
+                  <Search className="w-4 h-4 text-gray-500" />
+                </button>
+              )}
+              {onOpenBook && <span className="hidden md:block flex-shrink-0"><SearchPanel onOpenBook={onOpenBook} /></span>}
+              <span className="flex-shrink-0"><DictionaryPanel /></span>
+              <span className="flex-shrink-0"><DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} /></span>
+              <span className="hidden md:block flex-shrink-0"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
+              <span className="flex-shrink-0"><FontSelector currentFont={fontFamily} onFontChange={handleFontChange} /></span>
               <button
                 onClick={() => setRainEnabled(v => !v)}
-                className={`hidden sm:block p-1.5 rounded-lg transition-colors ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
+                className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
                 title={rainEnabled ? '關閉雨聲' : '開啟下雨效果'}
               >
                 <CloudRain className="w-4 h-4" />
               </button>
-              {/* 跨書搜索：手機隱藏 */}
-              {onOpenBook && <span className="hidden md:block"><SearchPanel onOpenBook={onOpenBook} /></span>}
-              <DictionaryPanel />
-              <DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} />
-              {/* 快捷鍵設定：手機隱藏，但墨水屏顯示（iReader 有實體翻頁鍵） */}
-              <span className="hidden md:block"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
-              <FontSelector currentFont={fontFamily} onFontChange={handleFontChange} />
-              {/* 墨水屏模式切換 */}
               <button
                 onClick={toggleEinkMode}
-                className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg"
-                style={{
-                  color: '#6b7280',
-                  background: 'transparent',
-                  border: '1.5px solid transparent',
-                  transition: 'none',
-                }}
-                title="開啟墨水屏模式"
+                className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg flex-shrink-0"
+                style={{ color: '#6b7280' }}
+                title="墨水屏模式"
               >
                 <span className="text-sm">🖊️</span>
                 <span className="hidden sm:inline text-sm">墨水屏</span>
               </button>
-              {/* 閱讀模式切換 */}
               <button
                 onClick={toggleReaderMode}
-                className="flex items-center space-x-1 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors"
-                style={{
-                  color: isPaper ? '#a16207' : '#6b7280',
-                  background: isPaper ? '#fef3c7' : 'transparent',
-                }}
-                title={isPaper ? '切換回預設模式' : '切換到紙本質感'}
+                className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                style={{ color: isPaper ? '#a16207' : '#6b7280', background: isPaper ? '#fef3c7' : 'transparent' }}
+                title={isPaper ? '切換回預設模式' : '紙本質感'}
               >
                 <span className="text-sm">{isPaper ? '📖' : '🖥️'}</span>
-                <span className="hidden sm:inline text-sm">{isPaper ? '紙本質感' : '預設模式'}</span>
-              </button>
-              <button
-                onClick={onReset}
-                className="flex items-center space-x-1 px-1.5 sm:px-4 py-1.5 sm:py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Home className="w-5 h-5" />
-                <span className="hidden sm:inline">返回首頁</span>
+                <span className="hidden sm:inline text-sm">{isPaper ? '紙本' : '預設'}</span>
               </button>
             </div>
           </div>
