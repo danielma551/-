@@ -1104,7 +1104,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     className="leading-relaxed text-center"
                     style={{
                       fontFamily: textFontFamily,
-                      fontSize: isEink ? `${einkAutoFontSize}px` : `${displaySettings.fontSize}px`,
+                      fontSize: `${displaySettings.fontSize}px`,
                       color: isEink ? einkTheme.text : displaySettings.textColor,
                       whiteSpace: 'pre-wrap',
                       fontWeight: isEink ? 700 : undefined,
