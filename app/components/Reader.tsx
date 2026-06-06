@@ -86,6 +86,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // Flomo 同步：狀態 'idle' | 'sending' | 'ok' | 'error' | 'setup'
   const [flomoStatus, setFlomoStatus] = useState<'idle' | 'sending' | 'ok' | 'error' | 'setup'>('idle')
   const [flomoSetupInput, setFlomoSetupInput] = useState('')
+  // 🌿 Flomo 暫存區：逐句加入，最後一起發
+  const [flomoBuffer, setFlomoBuffer] = useState<string[]>([])
+  const [flomoAddFlash, setFlomoAddFlash] = useState(false)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -521,12 +524,25 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return cur + tail
   }, [currentIndex, sentences])
 
-  // 送到 Flomo：把當前句子 + 書名 + 日期 POST 到 Flomo API
+  // ＋ 加入暫存：把當前句子加入 buffer，閃爍提示
+  const addToFlomoBuffer = () => {
+    const sentence = effectiveSentence
+    if (!sentence || sentence.startsWith('data:image/')) return
+    setFlomoBuffer(prev => [...prev, sentence])
+    setFlomoAddFlash(true)
+    setTimeout(() => setFlomoAddFlash(false), 600)
+  }
+
+  // 🌿 送到 Flomo：把暫存區所有句子 + 書名 + 日期一起發出
   const sendToFlomo = async () => {
     const url = flomoStorage.getUrl()
     if (!url) { setFlomoStatus('setup'); return }
+    // 若暫存區有內容就發暫存，否則直接發當前句
+    const toSend = flomoBuffer.length > 0 ? flomoBuffer : [effectiveSentence]
+    if (!toSend[0] || toSend[0].startsWith('data:image/')) return
     const today = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${effectiveSentence}`
+    const body = toSend.join('\n')
+    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${body}`
     setFlomoStatus('sending')
     try {
       await fetch(url, {
@@ -535,6 +551,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         body: JSON.stringify({ content }),
       })
       setFlomoStatus('ok')
+      setFlomoBuffer([])   // 發送成功 → 清空暫存
       setTimeout(() => setFlomoStatus('idle'), 2000)
     } catch {
       setFlomoStatus('error')
@@ -817,20 +834,57 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <span className="hidden md:block flex-shrink-0"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
               <span className="flex-shrink-0"><FontSelector currentFont={fontFamily} onFontChange={handleFontChange} /></span>
 
-              {/* 🌿 Flomo 同步按鈕 */}
-              <button
-                onClick={sendToFlomo}
-                disabled={flomoStatus === 'sending'}
-                className="flex-shrink-0 px-2 py-1.5 rounded-lg transition-colors text-sm flex items-center gap-1 disabled:opacity-50"
-                style={{
-                  background: flomoStatus === 'ok' ? '#dcfce7' : flomoStatus === 'error' ? '#fee2e2' : '#f0fdf4',
-                  color: flomoStatus === 'ok' ? '#16a34a' : flomoStatus === 'error' ? '#dc2626' : '#15803d',
-                }}
-                title="儲存到 Flomo"
-              >
-                <span>{flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '🌿'}</span>
-                <span className="hidden sm:inline text-xs">{flomoStatus === 'ok' ? '已儲存' : flomoStatus === 'error' ? '失敗' : 'Flomo'}</span>
-              </button>
+              {/* 🌿 Flomo 按鈕組 */}
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                {/* ＋ 加入暫存 */}
+                <button
+                  onClick={addToFlomoBuffer}
+                  className="px-1.5 py-1.5 rounded-lg text-sm font-bold transition-all"
+                  style={{
+                    background: flomoAddFlash ? '#bbf7d0' : '#f0fdf4',
+                    color: flomoAddFlash ? '#15803d' : '#86efac',
+                    transform: flomoAddFlash ? 'scale(1.2)' : 'scale(1)',
+                    transition: 'transform 200ms cubic-bezier(0.23,1,0.32,1), background 200ms',
+                  }}
+                  title="加入 Flomo 暫存"
+                >
+                  ＋
+                </button>
+
+                {/* 🌿 發送暫存到 Flomo */}
+                <button
+                  onClick={sendToFlomo}
+                  disabled={flomoStatus === 'sending'}
+                  className="px-2 py-1.5 rounded-lg text-sm flex items-center gap-1 disabled:opacity-50 relative"
+                  style={{
+                    background: flomoStatus === 'ok' ? '#dcfce7' : flomoStatus === 'error' ? '#fee2e2' : '#f0fdf4',
+                    color: flomoStatus === 'ok' ? '#16a34a' : flomoStatus === 'error' ? '#dc2626' : '#15803d',
+                  }}
+                  title={flomoBuffer.length > 0 ? `發送 ${flomoBuffer.length} 句到 Flomo` : '儲存到 Flomo'}
+                >
+                  <span>{flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '🌿'}</span>
+                  <span className="hidden sm:inline text-xs">
+                    {flomoStatus === 'ok' ? '已發送' : flomoStatus === 'error' ? '失敗' : 'Flomo'}
+                  </span>
+                  {/* 暫存計數徽章 */}
+                  {flomoBuffer.length > 0 && flomoStatus === 'idle' && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-green-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center leading-none">
+                      {flomoBuffer.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* 清空暫存按鈕（有暫存時才顯示） */}
+                {flomoBuffer.length > 0 && (
+                  <button
+                    onClick={() => setFlomoBuffer([])}
+                    className="px-1 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-red-50 transition-colors"
+                    title="清空暫存"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={() => setRainEnabled(v => !v)}
