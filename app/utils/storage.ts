@@ -252,6 +252,24 @@ export const fontStorage = {
   }
 }
 
+// Flomo API 網址（只存 localStorage，不寫進代碼，避免 git 洩漏）
+const FLOMO_API_KEY = 'flomo-api-url'
+
+export const flomoStorage = {
+  getUrl(): string | null {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem(FLOMO_API_KEY)
+  },
+  saveUrl(url: string): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(FLOMO_API_KEY, url)
+  },
+  clearUrl(): void {
+    if (typeof window === 'undefined') return
+    localStorage.removeItem(FLOMO_API_KEY)
+  }
+}
+
 // RSS 訂閱來源的格式：名稱 + RSS 網址
 export interface FeedSource {
   id: string       // 唯一 ID，用 Date.now() 產生

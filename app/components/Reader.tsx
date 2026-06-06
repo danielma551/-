@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
@@ -83,6 +83,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [cycleToast, setCycleToast] = useState<string | null>(null)
   const cycleToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevCycleIdxRef = useRef<number>(-1)
+  // Flomo 同步：狀態 'idle' | 'sending' | 'ok' | 'error' | 'setup'
+  const [flomoStatus, setFlomoStatus] = useState<'idle' | 'sending' | 'ok' | 'error' | 'setup'>('idle')
+  const [flomoSetupInput, setFlomoSetupInput] = useState('')
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -518,6 +521,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return cur + tail
   }, [currentIndex, sentences])
 
+  // 送到 Flomo：把當前句子 + 書名 + 日期 POST 到 Flomo API
+  const sendToFlomo = async () => {
+    const url = flomoStorage.getUrl()
+    if (!url) { setFlomoStatus('setup'); return }
+    const today = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${effectiveSentence}`
+    setFlomoStatus('sending')
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      setFlomoStatus('ok')
+      setTimeout(() => setFlomoStatus('idle'), 2000)
+    } catch {
+      setFlomoStatus('error')
+      setTimeout(() => setFlomoStatus('idle'), 2500)
+    }
+  }
+
   // 找出當前在第幾個循環
   const currentCycleIdx = useMemo(() => {
     const capped = Math.min(sentencesRead, totalForProgress)
@@ -792,6 +816,22 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <span className="flex-shrink-0"><DisplaySettingsPanel settings={displaySettings} onSave={handleDisplaySettingsChange} /></span>
               <span className="hidden md:block flex-shrink-0"><KeyboardSettings shortcuts={shortcuts} onSave={handleShortcutsChange} /></span>
               <span className="flex-shrink-0"><FontSelector currentFont={fontFamily} onFontChange={handleFontChange} /></span>
+
+              {/* 🌿 Flomo 同步按鈕 */}
+              <button
+                onClick={sendToFlomo}
+                disabled={flomoStatus === 'sending'}
+                className="flex-shrink-0 px-2 py-1.5 rounded-lg transition-colors text-sm flex items-center gap-1 disabled:opacity-50"
+                style={{
+                  background: flomoStatus === 'ok' ? '#dcfce7' : flomoStatus === 'error' ? '#fee2e2' : '#f0fdf4',
+                  color: flomoStatus === 'ok' ? '#16a34a' : flomoStatus === 'error' ? '#dc2626' : '#15803d',
+                }}
+                title="儲存到 Flomo"
+              >
+                <span>{flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '🌿'}</span>
+                <span className="hidden sm:inline text-xs">{flomoStatus === 'ok' ? '已儲存' : flomoStatus === 'error' ? '失敗' : 'Flomo'}</span>
+              </button>
+
               <button
                 onClick={() => setRainEnabled(v => !v)}
                 className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${rainEnabled ? 'bg-blue-100 text-blue-500' : 'text-gray-400 hover:bg-gray-100'}`}
@@ -936,6 +976,53 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           🔄 {cycleToast}
         </div>
       </div>
+
+      {/* Flomo 設定彈窗：第一次用時要求輸入 API 網址 */}
+      {flomoStatus === 'setup' && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setFlomoStatus('idle')}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+            style={{ animation: 'panel-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-gray-800 mb-1">🌿 設定 Flomo API</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              在 Flomo →「設定」→「開放 API」找到你的網址，貼在下方：
+            </p>
+            <input
+              type="url"
+              value={flomoSetupInput}
+              onChange={e => setFlomoSetupInput(e.target.value)}
+              placeholder="https://flomoapp.com/iwh/..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-400"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFlomoStatus('idle')}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (flomoSetupInput.trim()) {
+                    flomoStorage.saveUrl(flomoSetupInput.trim())
+                    setFlomoStatus('idle')
+                    setTimeout(sendToFlomo, 100)
+                  }
+                }}
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium"
+              >
+                儲存並發送
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 主閱讀區：整個 main 都可點，右半下一句，左半上一句 */}
       {/* eink 模式：去除 padding，讓文字佔滿整個可用高度 */}
