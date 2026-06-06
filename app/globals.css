@@ -9,3 +9,71 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Emil Kowalski Design Engineering ── */
+
+/* 1. 自定義緩動曲線 CSS 變數（比預設更有衝擊感） */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 2. 按鈕按壓反饋：scale(0.97) on :active，讓介面感覺在聆聽用戶 */
+button:not(:disabled) {
+  transition: transform 160ms var(--ease-out);
+}
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* 3. 面板 / 模態框入場動畫：從 scale(0.95) + 透明 → 正常 */
+/*    Emil: 永遠不要從 scale(0) 出現，現實世界沒有東西憑空出現 */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 4. 書卡錯落入場動畫 */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.book-card-animate {
+  animation: fade-up 300ms var(--ease-out) both;
+}
+
+/* 5. 觸控裝置保護：hover 動效只在有真實游標的裝置上生效 */
+/*    Emil: 觸控裝置的 tap 會觸發 hover，造成誤判 */
+@media not all and (hover: hover) {
+  .hover-scale {
+    transform: none !important;
+  }
+}
+
+/* 6. 無障礙：尊重用戶的「減少動畫」偏好設定 */
+@media (prefers-reduced-motion: reduce) {
+  .book-card-animate {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  [data-modal-panel] {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

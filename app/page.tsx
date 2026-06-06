@@ -616,14 +616,15 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-5 gap-y-8">
-              {savedBooks.map((book) => {
+              {savedBooks.map((book, bookIndex) => {
                 const progress = book.sentences.length > 0
                   ? Math.round(((book.currentIndex + 1) / book.sentences.length) * 100)
                   : 0
                 return (
                   <div
                     key={book.id}
-                    className="group cursor-pointer"
+                    className="group cursor-pointer book-card-animate"
+                    style={{ animationDelay: `${bookIndex * 50}ms` }}
                     onClick={() => handleLoadBook(book)}
                   >
                     {/* Cover */}

@@ -295,6 +295,45 @@ export const feedStorage = {
   }
 }
 
+// 完書記錄：哪天讀完了哪本書
+const COMPLETIONS_STORAGE_KEY = 'reading-completions'
+
+export interface BookCompletion {
+  date: string   // "2026-06-06"
+  bookTitle: string
+  bookId: string
+}
+
+export const completionStorage = {
+  getAll(): BookCompletion[] {
+    if (typeof window === 'undefined') return []
+    try {
+      const data = localStorage.getItem(COMPLETIONS_STORAGE_KEY)
+      return data ? JSON.parse(data) : []
+    } catch { return [] }
+  },
+
+  record(bookTitle: string, bookId: string): void {
+    if (typeof window === 'undefined') return
+    try {
+      const all = completionStorage.getAll()
+      const today = new Date().toLocaleDateString('en-CA')
+      // 同一本書同一天只記一次
+      const alreadyRecorded = all.some(c => c.date === today && c.bookId === bookId)
+      if (alreadyRecorded) return
+      all.push({ date: today, bookTitle, bookId })
+      localStorage.setItem(COMPLETIONS_STORAGE_KEY, JSON.stringify(all))
+    } catch (e) {
+      console.error('[completionStorage] record failed:', e)
+    }
+  },
+
+  // 取得某天有沒有完書（回傳書名清單）
+  getCompletionsForDate(date: string): BookCompletion[] {
+    return completionStorage.getAll().filter(c => c.date === date)
+  }
+}
+
 // 每日閱讀記錄的 localStorage 鍵名
 const HISTORY_STORAGE_KEY = 'reading-history'
 

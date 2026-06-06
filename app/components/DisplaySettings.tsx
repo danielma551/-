@@ -99,8 +99,10 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
             className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4"
             onClick={() => setIsOpen(false)}
           >
-            <div 
+            <div
               className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+              style={{ animation: 'panel-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both' }}
+              data-modal-panel=""
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">

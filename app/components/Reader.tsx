@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
@@ -263,13 +263,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset])
 
-  // 文章讀到最後一句：觸發完成畫面
+  // 文章讀到最後一句：觸發完成畫面 + 記錄完書日期
   useEffect(() => {
-    if (onArticleFinished && sentences.length > 0 && currentIndex === sentences.length - 1 && !articleCompleted) {
+    if (sentences.length > 0 && currentIndex === sentences.length - 1 && !articleCompleted) {
       setArticleCompleted(true)
-      onArticleFinished()
+      // 記錄完書日期（書名 + 日期）
+      completionStorage.record(bookTitle, bookId)
+      if (onArticleFinished) onArticleFinished()
     }
-  }, [currentIndex, sentences.length, onArticleFinished, articleCompleted])
+  }, [currentIndex, sentences.length, onArticleFinished, articleCompleted, bookTitle, bookId])
 
   useEffect(() => {
     if (bookId) {
@@ -1111,7 +1113,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       letterSpacing: isEink ? '0.02em' : undefined,
                       lineHeight: isEink ? 1.5 : undefined,
                       opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
-                      transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
+                      transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1)' : 'opacity 0.12s ease-out'),
                     }}
                   >
                     {effectiveSentence}
