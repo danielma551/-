@@ -89,6 +89,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 🌿 Flomo 暫存區：逐句加入，最後一起發
   const [flomoBuffer, setFlomoBuffer] = useState<string[]>([])
   const [flomoAddFlash, setFlomoAddFlash] = useState(false)
+  const [showFlomoNPicker, setShowFlomoNPicker] = useState(false)
+  // 預覽模態框：null = 關閉，有內容 = 顯示預覽
+  const [flomoPreview, setFlomoPreview] = useState<string[] | null>(null)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -533,16 +536,25 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setTimeout(() => setFlomoAddFlash(false), 600)
   }
 
-  // 🌿 送到 Flomo：把暫存區所有句子 + 書名 + 日期一起發出
-  const sendToFlomo = async () => {
+  // 抓最近 N 句（過濾圖片句）→ 顯示預覽，讓用戶確認再發
+  const sendLastN = (n: number) => {
+    setShowFlomoNPicker(false)
+    const collected: string[] = []
+    for (let i = currentIndex; i >= 0 && collected.length < n; i--) {
+      const s = sentences[i]
+      if (s && !s.startsWith('data:image/')) collected.unshift(s)
+    }
+    if (collected.length === 0) return
+    setFlomoPreview(collected)   // 先預覽，不直接發
+  }
+
+  // 🌿 核心發送函數（接受要發送的句子陣列）
+  const sendToFlomoWithContent = async (toSend: string[]) => {
     const url = flomoStorage.getUrl()
     if (!url) { setFlomoStatus('setup'); return }
-    // 若暫存區有內容就發暫存，否則直接發當前句
-    const toSend = flomoBuffer.length > 0 ? flomoBuffer : [effectiveSentence]
     if (!toSend[0] || toSend[0].startsWith('data:image/')) return
     const today = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    const body = toSend.join('\n')
-    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${body}`
+    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${toSend.join('\n')}`
     setFlomoStatus('sending')
     try {
       await fetch(url, {
@@ -551,16 +563,24 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         body: JSON.stringify({ content }),
       })
       setFlomoStatus('ok')
-      setFlomoBuffer([])   // 發送成功 → 清空暫存
+      setFlomoBuffer([])
       setTimeout(() => setFlomoStatus('idle'), 2000)
     } catch {
       setFlomoStatus('error')
-      // 發送失敗：1.5 秒後自動彈出設定框，讓用戶重新輸入 API 網址
       setTimeout(() => {
         const savedUrl = flomoStorage.getUrl() ?? ''
         setFlomoSetupInput(savedUrl)
         setFlomoStatus('setup')
       }, 1500)
+    }
+  }
+
+  // 🌿 點 Flomo 按鈕：有暫存就發，沒暫存就彈出 N 句選擇器
+  const sendToFlomo = () => {
+    if (flomoBuffer.length > 0) {
+      sendToFlomoWithContent(flomoBuffer)
+    } else {
+      setShowFlomoNPicker(v => !v)
     }
   }
 
@@ -1038,6 +1058,43 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 🌿 Flomo 浮動按鈕組（右下角，拇指易按，e-ink 和普通模式都有） */}
       <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2">
+
+        {/* N 句快選選單（點 🌿 且暫存為空時出現） */}
+        {showFlomoNPicker && flomoBuffer.length === 0 && (
+          <div
+            className="flex flex-col items-end gap-1.5 mb-1"
+            style={{ animation: 'panel-in 180ms cubic-bezier(0.23,1,0.32,1) both' }}
+          >
+            <p className="text-xs font-medium px-2" style={{ color: isEink ? '#333' : '#6b7280' }}>
+              發送最近幾句？
+            </p>
+            {[3, 5, 10].map(n => (
+              <button
+                key={n}
+                onClick={() => sendLastN(n)}
+                className="rounded-xl font-bold text-sm shadow"
+                style={{
+                  padding: '8px 18px',
+                  background: isEink ? '#fff' : '#f0fdf4',
+                  color: isEink ? '#000' : '#15803d',
+                  border: isEink ? '2px solid #000' : '1.5px solid #86efac',
+                  boxShadow: isEink ? '2px 2px 0 #000' : '0 3px 8px rgba(0,0,0,0.1)',
+                  minWidth: 80,
+                }}
+              >
+                最近 {n} 句
+              </button>
+            ))}
+            <button
+              onClick={() => setShowFlomoNPicker(false)}
+              className="text-xs px-3 py-1 rounded-lg"
+              style={{ color: isEink ? '#555' : '#9ca3af' }}
+            >
+              取消
+            </button>
+          </div>
+        )}
+
         {/* 暫存計數提示 */}
         {flomoBuffer.length > 0 && (
           <div
@@ -1124,6 +1181,97 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </button>
         </div>
       </div>
+
+      {/* 🌿 Flomo 預覽彈窗：確認後才發送 */}
+      {flomoPreview && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setFlomoPreview(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            style={{
+              background: isEink ? '#fff' : '#fff',
+              border: isEink ? '2px solid #000' : 'none',
+              animation: 'panel-in 200ms cubic-bezier(0.23,1,0.32,1) both',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 標題 */}
+            <div className="px-5 py-4 border-b flex items-center justify-between"
+              style={{ borderColor: isEink ? '#000' : '#e5e7eb' }}>
+              <div>
+                <p className="font-bold text-base" style={{ color: isEink ? '#000' : '#1f2937' }}>
+                  🌿 預覽 · 確認後發送
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: isEink ? '#555' : '#6b7280' }}>
+                  📖 {bookTitle} · {flomoPreview.length} 句
+                </p>
+              </div>
+              <button onClick={() => setFlomoPreview(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
+
+            {/* 句子列表（可滾動） */}
+            <div className="px-5 py-4 max-h-64 overflow-y-auto space-y-2">
+              {flomoPreview.map((s, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <span className="text-xs mt-1 flex-shrink-0 w-4 text-right"
+                    style={{ color: isEink ? '#555' : '#9ca3af' }}>
+                    {i + 1}
+                  </span>
+                  <p className="text-sm leading-relaxed flex-1"
+                    style={{ color: isEink ? '#000' : '#374151' }}>
+                    {s}
+                  </p>
+                  {/* 移除單句按鈕 */}
+                  <button
+                    onClick={() => {
+                      const updated = flomoPreview.filter((_, idx) => idx !== i)
+                      if (updated.length === 0) setFlomoPreview(null)
+                      else setFlomoPreview(updated)
+                    }}
+                    className="text-xs flex-shrink-0 mt-1"
+                    style={{ color: isEink ? '#555' : '#d1d5db' }}
+                    title="移除這句"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+
+            {/* 操作按鈕 */}
+            <div className="px-5 py-4 border-t flex gap-3"
+              style={{ borderColor: isEink ? '#000' : '#e5e7eb' }}>
+              <button
+                onClick={() => setFlomoPreview(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium"
+                style={{
+                  background: isEink ? '#fff' : '#f3f4f6',
+                  color: isEink ? '#000' : '#374151',
+                  border: isEink ? '2px solid #000' : 'none',
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  const toSend = flomoPreview
+                  setFlomoPreview(null)
+                  sendToFlomoWithContent(toSend)
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                style={{
+                  background: isEink ? '#000' : '#16a34a',
+                  color: '#fff',
+                  border: isEink ? '2px solid #000' : 'none',
+                }}
+              >
+                確認發送 🌿
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Flomo 設定彈窗：第一次用時要求輸入 API 網址 */}
       {flomoStatus === 'setup' && (
