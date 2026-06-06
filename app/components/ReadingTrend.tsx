@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { historyStorage, completionStorage, BookCompletion } from '../utils/storage'
 
 export default function ReadingTrend() {
@@ -14,23 +14,12 @@ export default function ReadingTrend() {
   const [completions, setCompletions] = useState<BookCompletion[]>([])
   // 控制動畫是否已觸發（進入 viewport 後才播）
   const [animated, setAnimated] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setDays(historyStorage.getLast30Days())
     setCompletions(completionStorage.getAll())
-  }, [])
-
-  // IntersectionObserver：進入畫面後才播動畫（Emil 原則）
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setAnimated(true) },
-      { threshold: 0.2 }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
+    // 資料載入後等一個 frame 再觸發動畫，確保 DOM 已渲染
+    requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)))
   }, [])
 
   const maxCount = Math.max(...days.map(d => d.count), 1)
@@ -63,7 +52,7 @@ export default function ReadingTrend() {
       {totalSentences === 0 ? (
         <p className="text-sm text-gray-300 text-center py-6">開始閱讀後，這裡將顯示你的閱讀趨勢</p>
       ) : (
-        <div ref={containerRef} className="flex items-end space-x-0.5 h-24">
+        <div className="flex items-end space-x-0.5 h-24">
           {days.map((day, i) => {
             const heightPct = maxCount > 0 ? (day.count / maxCount) * 100 : 0
             const dayNum = day.date.split('-')[2]
