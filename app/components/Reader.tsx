@@ -555,7 +555,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       setTimeout(() => setFlomoStatus('idle'), 2000)
     } catch {
       setFlomoStatus('error')
-      setTimeout(() => setFlomoStatus('idle'), 2500)
+      // 發送失敗：1.5 秒後自動彈出設定框，讓用戶重新輸入 API 網址
+      setTimeout(() => {
+        const savedUrl = flomoStorage.getUrl() ?? ''
+        setFlomoSetupInput(savedUrl)
+        setFlomoStatus('setup')
+      }, 1500)
     }
   }
 
@@ -1132,6 +1137,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             onClick={e => e.stopPropagation()}
           >
             <h3 className="text-lg font-bold text-gray-800 mb-1">🌿 設定 Flomo API</h3>
+            {flomoSetupInput && (
+              <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                ❌ 發送失敗，請確認 API 網址是否正確
+              </div>
+            )}
             <p className="text-sm text-gray-500 mb-4">
               在 Flomo →「設定」→「開放 API」找到你的網址，貼在下方：
             </p>
