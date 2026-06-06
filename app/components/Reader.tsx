@@ -1068,7 +1068,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <p className="text-xs font-medium px-2" style={{ color: isEink ? '#333' : '#6b7280' }}>
               發送最近幾句？
             </p>
-            {[3, 5, 10].map(n => (
+            {[3, 5, 10, 15, 20].map(n => (
               <button
                 key={n}
                 onClick={() => sendLastN(n)}
