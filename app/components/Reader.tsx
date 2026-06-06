@@ -1031,6 +1031,95 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </div>
 
+      {/* 🌿 Flomo 浮動按鈕組（右下角，拇指易按，e-ink 和普通模式都有） */}
+      <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2">
+        {/* 暫存計數提示 */}
+        {flomoBuffer.length > 0 && (
+          <div
+            className="text-xs font-bold px-2.5 py-1 rounded-full"
+            style={{
+              background: isEink ? '#000' : '#16a34a',
+              color: '#fff',
+              animation: 'panel-in 150ms cubic-bezier(0.23,1,0.32,1) both',
+            }}
+          >
+            {flomoBuffer.length} 句待發
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          {/* ➖ 移除最後一句（有暫存時才顯示） */}
+          {flomoBuffer.length > 0 && (
+            <button
+              onClick={() => setFlomoBuffer(prev => prev.slice(0, -1))}
+              className="flex items-center justify-center rounded-xl font-bold text-base shadow-lg"
+              style={{
+                width: 44, height: 44,
+                background: isEink ? '#fff' : '#fff',
+                color: isEink ? '#000' : '#dc2626',
+                border: isEink ? '2px solid #000' : '1.5px solid #fca5a5',
+                boxShadow: isEink ? '2px 2px 0 #000' : '0 4px 12px rgba(0,0,0,0.12)',
+              }}
+              title="移除最後加入的句子"
+            >
+              ➖
+            </button>
+          )}
+
+          {/* ➕ 加入當前句 */}
+          <button
+            onClick={addToFlomoBuffer}
+            className="flex items-center justify-center rounded-xl font-bold text-base shadow-lg"
+            style={{
+              width: 44, height: 44,
+              background: flomoAddFlash ? (isEink ? '#000' : '#16a34a') : (isEink ? '#fff' : '#f0fdf4'),
+              color: flomoAddFlash ? '#fff' : (isEink ? '#000' : '#15803d'),
+              border: isEink ? '2px solid #000' : '1.5px solid #86efac',
+              boxShadow: isEink ? '2px 2px 0 #000' : '0 4px 12px rgba(0,0,0,0.12)',
+              transform: flomoAddFlash ? 'scale(1.15)' : 'scale(1)',
+              transition: 'transform 200ms cubic-bezier(0.23,1,0.32,1), background 200ms, color 200ms',
+            }}
+            title="加入暫存"
+          >
+            ➕
+          </button>
+
+          {/* 🌿 發送到 Flomo */}
+          <button
+            onClick={sendToFlomo}
+            disabled={flomoStatus === 'sending'}
+            className="flex items-center justify-center rounded-xl font-bold text-base shadow-lg relative disabled:opacity-50"
+            style={{
+              width: 52, height: 44,
+              background: flomoStatus === 'ok'
+                ? (isEink ? '#000' : '#16a34a')
+                : flomoStatus === 'error'
+                  ? (isEink ? '#000' : '#dc2626')
+                  : (isEink ? '#fff' : '#f0fdf4'),
+              color: (flomoStatus === 'ok' || flomoStatus === 'error')
+                ? '#fff'
+                : (isEink ? '#000' : '#15803d'),
+              border: isEink ? '2px solid #000' : '1.5px solid #86efac',
+              boxShadow: isEink ? '2px 2px 0 #000' : '0 4px 12px rgba(0,0,0,0.12)',
+            }}
+            title={flomoBuffer.length > 0 ? `發送 ${flomoBuffer.length} 句到 Flomo` : '發送到 Flomo'}
+          >
+            <span className="text-sm">
+              {flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '🌿'}
+            </span>
+            {/* 計數徽章 */}
+            {flomoBuffer.length > 0 && flomoStatus === 'idle' && (
+              <span
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center"
+                style={{ background: isEink ? '#000' : '#16a34a', color: '#fff' }}
+              >
+                {flomoBuffer.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Flomo 設定彈窗：第一次用時要求輸入 API 網址 */}
       {flomoStatus === 'setup' && (
         <div
