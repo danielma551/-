@@ -101,6 +101,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setStartIndex(initialIndex)
     setGoalCompleted(false)
     setVictory(null)
+    passedCheckpoints.current = new Set()   // 重置檢查點旗仔
   }, [initialIndex])
 
   // 下雨特效動畫（eink 模式下強制關閉）
@@ -325,6 +326,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
   // 過濾掉點按鈕、輸入框等互動元素的情況，反饋改用振動（無視覺閃光）
   const handleMainTap = (e: React.MouseEvent<HTMLElement>) => {
+    // 墨水屏長按查詞啱啱觸發咗：呢下 click 係長按嘅尾巴，唔好翻頁
+    if (longPressFired.current) return
     const target = e.target as HTMLElement
     if (target.closest('button, input, textarea, a, [role="button"], select')) return
     // 用戶正在選字時，不觸發翻頁
@@ -386,6 +389,144 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       setFadeVisible(true)
     }, 160)
   }
+
+  // ── 🔍 墨水屏長按查詞 ──
+  // 長按句子中嘅字 → 定位按住嘅字符 → 自動組詞查字典（中文試 4/3/2/1 字，英文擴展成整個單詞）
+  const [einkDict, setEinkDict] = useState<{
+    word: string
+    status: 'loading' | 'ok' | 'notfound' | 'error'
+    definition?: string
+  } | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFired = useRef(false)        // 長按已觸發：抑制隨後嘅 click 翻頁
+  const longPressStart = useRef<{ x: number; y: number } | null>(null)
+  const dictOpenedAt = useRef(0)              // 開啟時間：吸收 touchend 後嘅合成 click
+
+  // 清理計時器（unmount 時）
+  useEffect(() => () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+  }, [])
+
+  // 由螢幕座標定位文字節點 + 字符 offset（Safari/Chrome 用 caretRangeFromPoint，Firefox 用 caretPositionFromPoint）
+  const charFromPoint = (x: number, y: number): { text: string; offset: number } | null => {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const doc = document as any
+    let node: Node | null = null
+    let offset = 0
+    if (doc.caretRangeFromPoint) {
+      const r = doc.caretRangeFromPoint(x, y)
+      if (!r) return null
+      node = r.startContainer
+      offset = r.startOffset
+    } else if (doc.caretPositionFromPoint) {
+      const p = doc.caretPositionFromPoint(x, y)
+      if (!p) return null
+      node = p.offsetNode
+      offset = p.offset
+    }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    if (!node || node.nodeType !== Node.TEXT_NODE) return null
+    return { text: node.textContent ?? '', offset }
+  }
+
+  // 由按住嘅字符組出候選詞（由長到短逐個查，命中即停）
+  const wordCandidates = (text: string, offset: number): string[] => {
+    const isCJK = (ch: string) => /[一-鿿]/.test(ch)
+    const isLatin = (ch: string) => /[A-Za-z]/.test(ch)
+    let i = Math.min(Math.max(offset, 0), text.length - 1)
+    if (i < 0 || text.length === 0) return []
+    // 按到標點 / 空白：往前移一格
+    if (!isCJK(text[i]) && !isLatin(text[i]) && i > 0) i--
+    const ch = text[i]
+
+    if (isLatin(ch)) {
+      // 英文：向兩邊擴展成整個單詞
+      let s = i, e = i
+      while (s > 0 && /[A-Za-z'-]/.test(text[s - 1])) s--
+      while (e < text.length - 1 && /[A-Za-z'-]/.test(text[e + 1])) e++
+      return [text.slice(s, e + 1)]
+    }
+
+    if (isCJK(ch)) {
+      // 中文：以按住字為首，向後取 n 個連續漢字
+      const grab = (n: number) => {
+        let w = ''
+        for (let k = i; k < text.length && w.length < n; k++) {
+          if (!isCJK(text[k])) break
+          w += text[k]
+        }
+        return w
+      }
+      const cands: string[] = []
+      const w4 = grab(4), w3 = grab(3), w2 = grab(2)
+      if (w4.length === 4) cands.push(w4)
+      if (w3.length === 3) cands.push(w3)
+      if (w2.length === 2) cands.push(w2)
+      // 按住字可能係詞尾：前一字 + 按住字
+      if (i > 0 && isCJK(text[i - 1])) cands.push(text[i - 1] + ch)
+      cands.push(ch)
+      return Array.from(new Set(cands))
+    }
+    return []
+  }
+
+  // 執行查詢：逐個候選詞試，第一個命中嘅就顯示
+  const einkDictLookup = async (x: number, y: number) => {
+    const pos = charFromPoint(x, y)
+    if (!pos) return
+    const cands = wordCandidates(pos.text, pos.offset)
+    if (cands.length === 0) return
+
+    longPressFired.current = true
+    setTimeout(() => { longPressFired.current = false }, 700)   // 自動復位，避免食咗下一次翻頁
+    vibrate(30)
+    dictOpenedAt.current = Date.now()
+    setEinkDict({ word: cands[0], status: 'loading' })
+
+    for (const w of cands) {
+      try {
+        const res = await fetch(`/api/dict?word=${encodeURIComponent(w)}`)
+        const data = await res.json()
+        if (res.ok && data.definition) {
+          setEinkDict({ word: w, status: 'ok', definition: data.definition })
+          return
+        }
+      } catch {
+        setEinkDict({ word: cands[0], status: 'error' })
+        return
+      }
+    }
+    setEinkDict({ word: cands[0], status: 'notfound' })
+  }
+
+  const LONG_PRESS_MS = 550
+  const startLongPress = (x: number, y: number) => {
+    if (!einkMode) return
+    longPressStart.current = { x, y }
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => einkDictLookup(x, y), LONG_PRESS_MS)
+  }
+  const cancelLongPress = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
+  }
+  const moveLongPress = (x: number, y: number) => {
+    // 手指移動超過 10px = 想滑動/選字，取消長按
+    const s = longPressStart.current
+    if (s && (Math.abs(x - s.x) > 10 || Math.abs(y - s.y) > 10)) cancelLongPress()
+  }
+
+  // 掛喺句子 <p> 上嘅事件（只在墨水屏模式生效）
+  const einkPressHandlers = einkMode ? {
+    onTouchStart: (e: React.TouchEvent) => startLongPress(e.touches[0].clientX, e.touches[0].clientY),
+    onTouchMove: (e: React.TouchEvent) => moveLongPress(e.touches[0].clientX, e.touches[0].clientY),
+    onTouchEnd: cancelLongPress,
+    onTouchCancel: cancelLongPress,
+    onMouseDown: (e: React.MouseEvent) => startLongPress(e.clientX, e.clientY),
+    onMouseMove: (e: React.MouseEvent) => { if (e.buttons === 1) moveLongPress(e.clientX, e.clientY) },
+    onMouseUp: cancelLongPress,
+    onMouseLeave: cancelLongPress,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),   // 阻止長按彈出系統選單
+  } : {}
 
   // 短碎片判斷：注圖後緊接的短文字（≤8字）視為前句的尾巴，合併顯示
   const isAnnotationTail = (idx: number) =>
@@ -486,6 +627,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
     prevReadRef.current = sentencesRead
   }, [sentencesRead, einkMode, readingGoal])
+
+  // ── ② 檢查點：25/50/75% 旗仔（非墨水屏；閃光 + micro-toast） ──
+  const passedCheckpoints = useRef<Set<number>>(new Set())
+  const [cpFlash, setCpFlash] = useState<number | null>(null)
+  const [cpToast, setCpToast] = useState<string | null>(null)
+  const cpToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (einkMode || readingGoal <= 0) return
+    const pct = (sentencesRead / readingGoal) * 100
+    const MSGS: Record<number, string> = { 25: '🚩 25%！旗開得勝', 50: '⚡ 過半啦！', 75: '🔥 75%！最後衝刺' }
+    for (const m of [25, 50, 75]) {
+      if (pct >= m && !passedCheckpoints.current.has(m)) {
+        passedCheckpoints.current.add(m)
+        if (pct >= 100) continue   // 直接衝線：終點有勝利卡，唔使再彈 checkpoint toast
+        setCpFlash(m)
+        setTimeout(() => setCpFlash(null), 750)
+        setCpToast(MSGS[m])
+        if (cpToastTimer.current) clearTimeout(cpToastTimer.current)
+        cpToastTimer.current = setTimeout(() => setCpToast(null), 2200)
+      }
+    }
+  }, [sentencesRead, readingGoal, einkMode])
 
   // ── 固定循環生成：每個循環固定 13 句，最後一個循環可能不足 13 句 ──
   const cycleData = useMemo(() => {
@@ -650,6 +813,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 兩條條：前半 / 後半循環，永遠從 0 填到 maxFill
   const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxFill * 100
   const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (cycleSize - HALF_CYCLE), 0) * maxFill * 100
+
+  // ── ④ 合併單條：一條 bar 顯示成個循環（非墨水屏用；墨水屏保留原雙條） ──
+  const mergedBarWidth = (cycleSize > 0 ? posInCycle / cycleSize : 0) * maxFill * 100
+  // ① 戰鬥征途：勇者位置 = 目標進度
+  const questPct = readingGoal > 0 ? Math.min((Math.max(sentencesRead, 0) / readingGoal) * 100, 100) : 0
+  // ⑤ 全書薄條：今日疆土分段
+  const bookBeforePct = sentences.length > 1 ? (startIndex / (sentences.length - 1)) * 100 : 0
+  const bookTodayPct = sentences.length > 1 ? (Math.max(currentIndex - startIndex, 0) / (sentences.length - 1)) * 100 : 0
 
   // 薄條：目標進度 或 全書進度
   const goalProgressPct = readingGoal > 0
@@ -1014,6 +1185,117 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
           )}
 
+          {!isEink ? (
+          /* ── 非墨水屏：④合併循環條 + ①②戰鬥征途 + ⑤今日疆土 ── */
+          <>
+          {/* ④ 合併循環條：一條 bar 顯示成個循環，50% 加粗中點刻度 = 上半/下半交界 */}
+          <div
+            className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5"
+            style={{ color: getProgressColor() }}
+          >
+            <span>循環進度 · 第 {currentCycleIdx + 1}/{cycleData.count} 循環（{Math.max(posInCycle, 0)}/{cycleSize} 句）</span>
+            <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
+          </div>
+          <div className="w-full relative" style={{ height: 8 }}>
+            <div className="absolute inset-0 rounded-full bg-gray-200" />
+            {/* 漸層色填充（紅→黃→瑞幸藍，沿用原插值邏輯） */}
+            <div
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{ width: `${mergedBarWidth}%`, backgroundColor: getBarColor(mergedBarWidth), transition: 'all 0.3s' }}
+            />
+            {/* 發光尾端 */}
+            {mergedBarWidth > 0.5 && (
+              <div
+                className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
+                style={{
+                  left: `${mergedBarWidth}%`,
+                  transform: 'translate(-50%,-50%)',
+                  width: 14, height: 14,
+                  backgroundColor: getBarColor(mergedBarWidth),
+                  opacity: 0.5,
+                  boxShadow: `0 0 8px 5px ${getBarColor(mergedBarWidth)}88`,
+                }}
+              />
+            )}
+            {/* 25/75 缺口 */}
+            {[25, 75].map(m => (
+              <div
+                key={m}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
+                style={{ left: `${m}%`, width: 2, height: 14, background: 'white', borderRadius: 0 }}
+              />
+            ))}
+            {/* 50% 加粗中點刻度 */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
+              style={{ left: '50%', width: 4, height: 18, background: '#a5b4fc', borderRadius: 2 }}
+            />
+          </div>
+
+          {/* ①② 戰鬥征途：小勇者行向怪物 + 檢查點旗仔（有目標先顯示） */}
+          {battleMonster && (
+            <div className="w-full relative" style={{ height: 10, marginTop: 16 }}>
+              <div className="absolute inset-0 rounded-full" style={{ background: '#eef2ff', border: '1px solid #e0e7ff' }} />
+              <div
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{ width: `${questPct}%`, background: 'linear-gradient(90deg,#a5b4fc,#6366f1)', transition: 'width 350ms var(--ease-out)' }}
+              />
+              {/* ② 檢查點旗仔：25/50/75，通過時著燈 + 閃光 */}
+              {[25, 50, 75].map(m => (
+                <div
+                  key={m}
+                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
+                  style={{
+                    left: `${m}%`, width: 2, height: 16,
+                    background: questPct >= m ? '#6366f1' : '#c7d2fe',
+                    transition: 'background .3s',
+                    animation: cpFlash === m ? 'gamify-cp-flash 700ms var(--ease-out)' : undefined,
+                  }}
+                >
+                  <span style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', fontSize: 10, opacity: questPct >= m ? 1 : 0.35, transition: 'opacity .3s' }}>🚩</span>
+                </div>
+              ))}
+              {/* ① 小勇者：企喺進度尖端，每讀一句踏前一步 */}
+              <span
+                className="pointer-events-none"
+                style={{
+                  position: 'absolute', left: `${Math.min(questPct, 96)}%`, top: '50%',
+                  transform: 'translate(-50%,-58%)', fontSize: 16, zIndex: 12, display: 'inline-block',
+                  transition: 'left 350ms var(--ease-out)',
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.25))',
+                  animation: hudShake ? 'gamify-hero-step 350ms var(--ease-out)' : undefined,
+                }}
+              >⚔️</span>
+              {/* 怪物：右端等緊；HP 清零反白倒地 */}
+              <span
+                className="pointer-events-none"
+                style={{
+                  position: 'absolute', right: -2, top: '50%', transform: 'translate(0,-58%)',
+                  fontSize: 17, zIndex: 11, display: 'inline-block',
+                  animation: goalCompleted
+                    ? 'gamify-monster-fall 900ms var(--ease-out) both'
+                    : hudShake ? 'gamify-lane-hit 380ms var(--ease-out)' : undefined,
+                }}
+              >{battleMonster.emoji}</span>
+            </div>
+          )}
+
+          {/* ⑤ 全書薄條 + 今日疆土：淺藍=之前讀咗，深藍=今日疆土，灰=未讀 */}
+          <div
+            className="w-full relative rounded-full overflow-hidden"
+            style={{ height: 4, background: '#f3f4f6', marginTop: battleMonster ? 8 : 4 }}
+            title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
+          >
+            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: '#bae6fd' }} />
+            <div
+              className="absolute inset-y-0"
+              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
+            />
+          </div>
+          </>
+          ) : (
+          /* ── 墨水屏：原雙循環條 + 薄條，一律照舊零改動 ── */
+          <>
           {/* ── 進度條共用：A發光尾端 + B里程碑缺口 + C漸層色進 ── */}
           {/* 漸層：冷色(靛藍) → 紫 → 暖色(金)，隨進度條延伸自然色移 */}
           {/* 完成後統一轉綠 */}
@@ -1117,6 +1399,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               }}
             />
           </div>
+          </>
+          )}
         </div>
       </header>
 
@@ -1127,6 +1411,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       >
         <div className="px-4 py-2 bg-gray-800/80 backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap">
           🔄 {cycleToast}
+        </div>
+      </div>
+
+      {/* ② 檢查點 micro-toast */}
+      <div
+        className="fixed top-32 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-500"
+        style={{ opacity: cpToast ? 1 : 0, transform: `translateX(-50%) translateY(${cpToast ? '0px' : '-8px'})` }}
+      >
+        <div className="px-4 py-2 bg-indigo-600/85 backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap">
+          {cpToast}
         </div>
       </div>
 
@@ -1568,6 +1862,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <div className="relative w-full flex items-center justify-center">
                   <p
                     className="leading-relaxed text-center"
+                    {...einkPressHandlers}
                     style={{
                       fontFamily: textFontFamily,
                       fontSize: `${displaySettings.fontSize}px`,
@@ -1578,7 +1873,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       lineHeight: isEink ? 1.5 : undefined,
                       opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
                       transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1)' : 'opacity 0.12s ease-out'),
-                    }}
+                      // 墨水屏：禁用原生選字，長按專用嚟查詞
+                      userSelect: isEink ? 'none' : undefined,
+                      WebkitUserSelect: isEink ? 'none' : undefined,
+                      WebkitTouchCallout: isEink ? 'none' : undefined,
+                    } as React.CSSProperties}
                   >
                     {effectiveSentence}
                   </p>
@@ -1767,6 +2066,62 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         )}
       </main>
 
+
+      {/* 🔍 墨水屏長按查詞彈窗：黑框靜態底部卡，跟注釋彈窗同一風格（無動畫） */}
+      {isEink && einkDict && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => {
+            // 吸收 touchend 後嘅合成 click，避免彈窗一開即關
+            if (Date.now() - dictOpenedAt.current < 600) return
+            setEinkDict(null)
+          }}
+        >
+          <div
+            className="w-full max-w-2xl"
+            style={{
+              background: '#fff',
+              border: '2px solid #000',
+              borderBottom: 'none',
+              padding: '20px 20px 32px',
+              maxHeight: '65vh',
+              overflowY: 'auto',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 標題列 */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex items-center justify-center rounded-full text-white text-sm font-bold"
+                  style={{ width: 28, height: 28, background: '#000', flexShrink: 0 }}
+                >詞</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: '#000' }}>{einkDict.word}</span>
+              </div>
+              <button
+                onClick={() => setEinkDict(null)}
+                style={{ border: '1.5px solid #000', borderRadius: 4, padding: '4px 12px', fontSize: 13, fontWeight: 700, background: '#fff' }}
+              >關閉</button>
+            </div>
+            {/* 內容 */}
+            {einkDict.status === 'loading' && (
+              <p style={{ fontSize: 15, color: '#000', margin: 0 }}>查詢中⋯</p>
+            )}
+            {einkDict.status === 'ok' && einkDict.definition && (
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.7, color: '#000' }}>
+                {einkDict.definition}
+              </div>
+            )}
+            {einkDict.status === 'notfound' && (
+              <p style={{ fontSize: 15, color: '#000', margin: 0 }}>字典中找不到「{einkDict.word}」</p>
+            )}
+            {einkDict.status === 'error' && (
+              <p style={{ fontSize: 15, color: '#000', margin: 0 }}>網絡錯誤，請稍後再試</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 書內搜索的上下文預覽彈窗 */}
       {contextPreviewIndex !== null && (

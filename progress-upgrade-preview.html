@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>進度條升級預覽 — 勇者行軍 + 檢查點 + 今日疆土</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:'Noto Sans TC',-apple-system,sans-serif; font-size:0.875rem;
+  color:#1f2937; background:#f9fafb; line-height:1.5; padding:2rem 1rem;
+}
+.wrap { max-width: 52rem; margin:0 auto; }
+.note { text-align:center; font-size:0.75rem; color:#9ca3af; margin-bottom:1rem; }
+
+/* ── 模擬 Reader header ── */
+.reader-header {
+  background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08);
+  border-radius:12px; padding:14px 16px 12px; margin-bottom:1.5rem;
+}
+.header-top { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.header-top .title { font-size:1rem; font-weight:600; color:#1f2937; }
+.header-top .icon { color:#4f46e5; }
+
+/* 戰況列 */
+.battle-row { display:flex; align-items:center; justify-content:space-between; padding:0 2px; margin-bottom:6px; }
+.battle-left { display:flex; align-items:center; gap:6px; }
+.battle-emoji { font-size:1rem; display:inline-block; }
+.battle-emoji.hit { animation:hud-shake 380ms var(--ease-out); }
+.battle-emoji.dead { filter:grayscale(1); opacity:.55; transition:filter .4s, opacity .4s; }
+@keyframes hud-shake {
+  0%{transform:translateX(0)} 25%{transform:translateX(-4px) rotate(-5deg); filter:brightness(1.4)}
+  55%{transform:translateX(3px) rotate(4deg)} 100%{transform:translateX(0)}
+}
+.battle-name { font-size:0.75rem; font-weight:600; color:#374151; }
+.battle-hp { font-size:0.75rem; font-variant-numeric:tabular-nums; font-weight:500; }
+.battle-defeated { font-size:0.75rem; font-weight:600; color:#16a34a; }
+
+/* 循環條（復刻原樣，不變） */
+.bar-label { display:flex; justify-content:space-between; font-size:0.75rem; margin:4px 2px 2px; color:#6366f1; }
+.track { position:relative; width:100%; height:8px; }
+.track-bg { position:absolute; inset:0; border-radius:9999px; background:#e5e7eb; }
+.track-fill { position:absolute; top:0; bottom:0; left:0; border-radius:9999px; transition:all .3s; }
+.glow { position:absolute; top:50%; width:14px; height:14px; border-radius:50%; opacity:.5; transform:translate(-50%,-50%); transition:all .3s; pointer-events:none; }
+.gap { position:absolute; top:50%; transform:translate(-50%,-50%); width:2px; height:14px; background:#fff; z-index:10; pointer-events:none; }
+
+/* ── ① + ② 戰鬥征途 lane ── */
+.quest-lane-wrap { margin-top:10px; }
+.quest-label { display:flex; justify-content:space-between; font-size:0.6875rem; color:#9ca3af; margin:0 2px 3px; }
+.quest-lane { position:relative; width:100%; height:10px; }
+.quest-bg { position:absolute; inset:0; border-radius:9999px; background:#eef2ff; border:1px solid #e0e7ff; }
+.quest-fill {
+  position:absolute; top:0; bottom:0; left:0; border-radius:9999px;
+  background:linear-gradient(90deg,#a5b4fc,#6366f1);
+  transition:width .35s var(--ease-out);
+}
+/* 小勇者：行喺進度尖端 */
+.hero {
+  position:absolute; top:50%; transform:translate(-50%,-58%);
+  font-size:1.05rem; z-index:12; transition:left .35s var(--ease-out);
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));
+}
+.hero.step { animation:hero-step 350ms var(--ease-out); }
+@keyframes hero-step {
+  0%{transform:translate(-50%,-58%) rotate(0)}
+  40%{transform:translate(-50%,-75%) rotate(-12deg)}
+  100%{transform:translate(-50%,-58%) rotate(0)}
+}
+/* 怪物：右端等緊 */
+.lane-monster {
+  position:absolute; right:-4px; top:50%; transform:translate(0,-58%);
+  font-size:1.15rem; z-index:11;
+}
+.lane-monster.hit { animation:hud-shake 380ms var(--ease-out); }
+.lane-monster.dead { animation:monster-fall .9s var(--ease-out) both; }
+@keyframes monster-fall {
+  30%{transform:translate(0,-58%) rotate(10deg) scale(1.1); filter:brightness(1.5)}
+  100%{transform:translate(0,10%) rotate(85deg) scale(.8); opacity:0; filter:grayscale(1)}
+}
+/* ② 檢查點旗仔 */
+.checkpoint {
+  position:absolute; top:50%; transform:translate(-50%,-50%);
+  width:2px; height:16px; background:#c7d2fe; z-index:10; pointer-events:none;
+  transition:background .3s;
+}
+.checkpoint .flag {
+  position:absolute; top:-14px; left:50%; transform:translateX(-50%);
+  font-size:0.625rem; opacity:.35; transition:opacity .3s;
+}
+.checkpoint.passed { background:#6366f1; }
+.checkpoint.passed .flag { opacity:1; }
+.checkpoint.flash { animation:cp-flash 700ms var(--ease-out); }
+@keyframes cp-flash {
+  0%{box-shadow:0 0 0 0 rgba(99,102,241,.6)}
+  50%{box-shadow:0 0 10px 5px rgba(99,102,241,.45)}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+
+/* ── ⑤ 全書薄條 + 今日疆土 ── */
+.book-bar-wrap { margin-top:10px; }
+.book-bar { position:relative; width:100%; height:5px; border-radius:9999px; background:#f3f4f6; overflow:hidden; }
+.book-before { position:absolute; top:0; bottom:0; left:0; background:#bae6fd; transition:width .35s; }
+.book-today {
+  position:absolute; top:0; bottom:0; background:linear-gradient(90deg,#00A3E0,#0284c7);
+  transition:left .35s, width .35s var(--ease-out);
+}
+.book-legend { display:flex; gap:14px; font-size:0.6875rem; color:#9ca3af; margin-top:5px; padding:0 2px; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+
+/* ── 控制台 ── */
+.controls { display:flex; gap:10px; justify-content:center; margin:1.25rem 0; flex-wrap:wrap; }
+button {
+  font-family:inherit; cursor:pointer; border:none; border-radius:8px;
+  padding:10px 22px; font-size:0.875rem; font-weight:600;
+  transition:transform 160ms var(--ease-out), background .15s;
+}
+button:active { transform:scale(.97); }
+.btn-next { background:#4f46e5; color:#fff; box-shadow:0 10px 15px -3px rgba(0,0,0,.1); }
+.btn-next:hover { background:#4338ca; }
+.btn-next:disabled { opacity:.4; cursor:not-allowed; }
+.btn-auto { background:#fff; color:#4b5563; border:1px solid #d1d5db; }
+.btn-auto.on { background:#eef2ff; color:#4f46e5; border-color:#a5b4fc; }
+.btn-reset { background:#fff; color:#6b7280; border:1px solid #e5e7eb; }
+
+/* 假閱讀卡 */
+.fake-card {
+  background:#fff; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,.15);
+  border:1px solid rgba(255,255,255,.4); padding:3rem 2rem; text-align:center;
+  font-size:1.375rem; color:#1f2937; min-height:9rem;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* 檢查點 toast */
+#toast-zone { position:fixed; top:1rem; left:50%; transform:translateX(-50%); z-index:60; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:none; }
+.toast {
+  background:rgba(31,41,55,.85); backdrop-filter:blur(4px); color:#fff;
+  padding:8px 18px; border-radius:9999px; font-size:0.8125rem; font-weight:500;
+  animation:toast-in .35s var(--ease-out);
+}
+.toast.out { animation:toast-out .3s ease forwards; }
+@keyframes toast-in { from{opacity:0; transform:translateY(-12px) scale(.92)} to{opacity:1; transform:none} }
+@keyframes toast-out { to{opacity:0; transform:translateY(-8px) scale(.95)} }
+
+/* 彩帶 */
+#fx { position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
+.confetti { position:absolute; top:-12px; animation:cf linear forwards; }
+@keyframes cf { to{ transform:translateY(108vh) rotate(720deg); opacity:.7 } }
+
+.section-tag {
+  display:inline-block; font-size:0.6875rem; font-weight:700; color:#4f46e5;
+  background:#eef2ff; border:1px solid #c7d2fe; border-radius:9999px; padding:1px 9px;
+  margin-left:6px; vertical-align:1px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="note">進度條升級預覽 · 復刻 Reader header 真實樣式 · 目標 20 句（🐉 惡龍）· 全書 300 句，今日由第 120 句讀起</p>
+
+  <!-- ═══ 模擬 Reader Header ═══ -->
+  <div class="reader-header">
+    <div class="header-top">
+      <span class="icon">📖</span>
+      <span class="title">被討厭的勇氣</span>
+    </div>
+
+    <!-- 戰況列（現有功能） -->
+    <div class="battle-row">
+      <div class="battle-left">
+        <span class="battle-emoji" id="rowMonster">🐉</span>
+        <span class="battle-name">惡龍</span>
+        <span class="battle-defeated" id="defeatedTag" style="display:none">已擊敗！</span>
+      </div>
+      <span class="battle-hp" id="hpText">HP 20/20</span>
+    </div>
+
+    <!-- 循環條 1 / 2（雙條模式：原樣保留） -->
+    <div id="twinBars">
+      <div class="bar-label" id="lbl1"><span>進度 1</span><span id="pct1">0%</span></div>
+      <div class="track">
+        <div class="track-bg"></div>
+        <div class="track-fill" id="fill1"></div>
+        <div class="glow" id="glow1" style="display:none"></div>
+        <div class="gap" style="left:25%"></div><div class="gap" style="left:50%"></div><div class="gap" style="left:75%"></div>
+      </div>
+      <div class="bar-label" id="lbl2"><span>進度 2</span><span id="pct2">0%</span></div>
+      <div class="track">
+        <div class="track-bg"></div>
+        <div class="track-fill" id="fill2"></div>
+        <div class="glow" id="glow2" style="display:none"></div>
+        <div class="gap" style="left:25%"></div><div class="gap" style="left:50%"></div><div class="gap" style="left:75%"></div>
+      </div>
+    </div>
+
+    <!-- ④ 合併單條（中點刻度標示上半/下半交界） -->
+    <div id="mergedBar" style="display:none">
+      <div class="bar-label"><span id="lblM">循環進度 · 第 1/2 循環<span class="section-tag">新 ④</span></span><span id="pctM">0%</span></div>
+      <div class="track">
+        <div class="track-bg"></div>
+        <div class="track-fill" id="fillM"></div>
+        <div class="glow" id="glowM" style="display:none"></div>
+        <div class="gap" style="left:25%"></div><div class="gap" style="left:75%"></div>
+        <!-- 中點刻度：上半／下半交界，加粗標示 -->
+        <div class="gap mid" style="left:50%; width:4px; height:18px; background:#a5b4fc; border-radius:2px"></div>
+      </div>
+    </div>
+
+    <!-- ① 戰鬥征途：勇者行軍 + ② 檢查點 -->
+    <div class="quest-lane-wrap">
+      <div class="quest-label">
+        <span>⚔️ 戰鬥征途<span class="section-tag">新 ①②</span></span>
+        <span id="questPct">0%</span>
+      </div>
+      <div class="quest-lane">
+        <div class="quest-bg"></div>
+        <div class="quest-fill" id="questFill"></div>
+        <div class="checkpoint" id="cp25" style="left:25%"><span class="flag">🚩</span></div>
+        <div class="checkpoint" id="cp50" style="left:50%"><span class="flag">🚩</span></div>
+        <div class="checkpoint" id="cp75" style="left:75%"><span class="flag">🚩</span></div>
+        <span class="hero" id="hero" style="left:0%">⚔️</span>
+        <span class="lane-monster" id="laneMonster">🐉</span>
+      </div>
+    </div>
+
+    <!-- ⑤ 全書薄條 + 今日疆土 -->
+    <div class="book-bar-wrap">
+      <div class="quest-label">
+        <span>📚 全書進度<span class="section-tag">新 ⑤</span></span>
+        <span id="bookPct">40%</span>
+      </div>
+      <div class="book-bar">
+        <div class="book-before" id="bookBefore"></div>
+        <div class="book-today" id="bookToday"></div>
+      </div>
+      <div class="book-legend">
+        <span><span class="dot" style="background:#bae6fd"></span>之前讀咗</span>
+        <span><span class="dot" style="background:#00A3E0"></span>今日疆土</span>
+        <span><span class="dot" style="background:#f3f4f6; border:1px solid #e5e7eb"></span>未讀</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 假閱讀卡 -->
+  <div class="fake-card" id="sentence">勇氣不是不害怕，而是害怕著仍往前走。</div>
+
+  <div class="controls">
+    <button class="btn-next" id="btnNext">下一句 →</button>
+    <button class="btn-auto" id="btnAuto">▶ 自動閱讀</button>
+    <button class="btn-auto" id="btnMerge">🔀 試吓 ④ 合併單條</button>
+    <button class="btn-reset" id="btnReset">↺ 重設</button>
+  </div>
+  <p class="note" id="heightNote" style="display:none">📏 合併後 header 矮咗 <b id="heightSaved">—</b>px，閱讀區即刻高咗</p>
+</div>
+
+<div id="toast-zone"></div>
+<div id="fx"></div>
+
+<script>
+/* ── 設定 ── */
+const GOAL = 20            // 今日目標（惡龍）
+const BOOK_TOTAL = 300     // 全書句數
+const TODAY_START = 120    // 今日由第幾句開始
+const CYCLE = 13
+
+const SENTENCES = [
+  '勇氣不是不害怕，而是害怕著仍往前走。','一切的煩惱，都來自人際關係。',
+  '所謂自由，就是被別人討厭的勇氣。','重要的不是過去，而是你如何看待過去。',
+  '人生不是與他人的比賽。','他推開門，風裏帶著一點海的味道。',
+  '夜深了，城市的燈一盞一盞地熄滅。','雨停之後，街道亮得像一面鏡子。',
+  '貓睡在窗台上，把下午睡成了黃昏。','山的那邊還是山，但他還是想去看看。',
+  '改變的勇氣，藏在最平凡的一天裏。','火車穿過隧道，黑暗只是一瞬間。',
+  '能把平凡的日子過好，已是本事。','他把書合上，世界卻沒有跟著合上。',
+  '星星不說話，但夜空因它們而不寂寞。','麵包香氣從巷口飄來，像溫柔的問候。',
+  '書桌上的茶涼了，故事才剛開始。','她說，慢慢來，比較快。',
+  '黃昏把影子拉得很長很長。','今天讀的每一句，都是明天的你。',
+]
+
+let read = 0               // 今日已讀句數
+let passed = { 25:false, 50:false, 75:false }
+let autoTimer = null
+const $ = id => document.getElementById(id)
+
+/* ── 原循環條邏輯（照搬 app）── */
+function getBarColor(pct) {
+  const stops = [
+    { p:0, r:239, g:68, b:68 }, { p:50, r:234, g:179, b:8 }, { p:100, r:0, g:164, b:228 },
+  ]
+  const c = Math.min(Math.max(pct,0),100)
+  let f = stops[0], t = stops[1]
+  for (let i=0;i<stops.length-1;i++) if (c>=stops[i].p && c<=stops[i+1].p){ f=stops[i]; t=stops[i+1]; break }
+  const k = (t.p===f.p)?0:(c-f.p)/(t.p-f.p)
+  return `rgb(${Math.round(f.r+(t.r-f.r)*k)},${Math.round(f.g+(t.g-f.g)*k)},${Math.round(f.b+(t.b-f.b)*k)})`
+}
+
+function renderCycleBars() {
+  const total = GOAL
+  const sizes = []; let rem = total
+  while (rem>0){ sizes.push(Math.min(CYCLE,rem)); rem-=Math.min(CYCLE,rem) }
+  const bounds=[0]; for(const s of sizes) bounds.push(bounds[bounds.length-1]+s)
+  const capped = Math.min(read, total)
+  let ci = sizes.length-1
+  for (let i=0;i<bounds.length-1;i++) if (capped>bounds[i] && capped<=bounds[i+1]){ ci=i; break }
+  if (capped===0) ci=0
+  const start=bounds[ci], size=sizes[ci], pos=Math.min(capped-start,size), HALF=Math.ceil(size/2)
+  const maxFill=(ci+1)/sizes.length
+  const w1=Math.min(pos/HALF,1)*maxFill*100
+  const w2=Math.max((pos-HALF)/(size-HALF),0)*maxFill*100
+  paintBar('fill1','glow1','pct1',w1)
+  paintBar('fill2','glow2','pct2',w2)
+  // ④ 合併單條：一條 bar 顯示成個循環，50% 處有加粗中點刻度
+  const wM=(size>0?pos/size:0)*maxFill*100
+  paintBar('fillM','glowM','pctM',wM)
+  $('lblM').innerHTML=`循環進度 · 第 ${ci+1}/${sizes.length} 循環（${pos}/${size} 句）<span class="section-tag">新 ④</span>`
+}
+function paintBar(fillId, glowId, pctId, w) {
+  const color = getBarColor(w)
+  const fill=$(fillId), glow=$(glowId)
+  fill.style.width=w+'%'; fill.style.backgroundColor=color
+  $(pctId).textContent=w.toFixed(0)+'%'
+  if (w>0.5){ glow.style.display='block'; glow.style.left=w+'%'; glow.style.backgroundColor=color; glow.style.boxShadow=`0 0 8px 5px ${color}88` }
+  else glow.style.display='none'
+}
+
+/* ── ①② 戰鬥征途 ── */
+function toast(msg) {
+  const z=$('toast-zone'), t=document.createElement('div')
+  t.className='toast'; t.textContent=msg; z.appendChild(t)
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),320) },2000)
+}
+const CP_MSG = { 25:'🚩 25%！旗開得勝', 50:'⚡ 過半啦！', 75:'🔥 75%！最後衝刺' }
+
+function renderQuest() {
+  const pct = Math.min(read/GOAL*100,100)
+  $('questFill').style.width=pct+'%'
+  $('hero').style.left=Math.min(pct,96)+'%'
+  $('questPct').textContent=pct.toFixed(0)+'%'
+  $('hpText').textContent='HP '+Math.max(GOAL-read,0)+'/'+GOAL
+  const hpPct=Math.max(GOAL-read,0)/GOAL*100
+  $('hpText').style.color = read>=GOAL ? '#16a34a' : hpPct>60?'#eab308':hpPct>25?'#fb923c':'#ef4444'
+  // 檢查點
+  for (const m of [25,50,75]) {
+    const el=$('cp'+m)
+    if (pct>=m && !passed[m]) {
+      passed[m]=true
+      el.classList.add('passed','flash')
+      setTimeout(()=>el.classList.remove('flash'),750)
+      if (read<GOAL) toast(CP_MSG[m])
+    }
+    el.classList.toggle('passed', pct>=m)
+  }
+}
+
+/* ── ⑤ 全書薄條 ── */
+function renderBookBar() {
+  const cur = TODAY_START + read
+  const beforePct = TODAY_START/BOOK_TOTAL*100
+  const todayPct = read/BOOK_TOTAL*100
+  $('bookBefore').style.width=beforePct+'%'
+  $('bookToday').style.left=beforePct+'%'
+  $('bookToday').style.width=todayPct+'%'
+  $('bookPct').textContent=(cur/BOOK_TOTAL*100).toFixed(0)+'%'
+}
+
+/* ── 動作 ── */
+function next() {
+  if (read>=GOAL) return
+  read++
+  $('sentence').textContent = SENTENCES[read % SENTENCES.length]
+  // 勇者踏步 + 怪物中拳
+  const hero=$('hero'); hero.classList.remove('step'); void hero.offsetWidth; hero.classList.add('step')
+  const lm=$('laneMonster'), rm=$('rowMonster')
+  for (const el of [lm,rm]){ el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit') }
+  renderCycleBars(); renderQuest(); renderBookBar()
+  if (read>=GOAL) defeat()
+}
+function defeat() {
+  stopAuto()
+  $('btnNext').disabled=true
+  $('laneMonster').classList.add('dead')
+  $('rowMonster').classList.add('dead')
+  $('defeatedTag').style.display='inline'
+  $('hpText').textContent='⚡ +60 XP'
+  setTimeout(()=>{ confetti(110); toast('🏆 惡龍被擊敗！+60 XP') },500)
+}
+function reset() {
+  stopAuto()
+  read=0; passed={25:false,50:false,75:false}
+  $('btnNext').disabled=false
+  $('laneMonster').classList.remove('dead','hit')
+  $('rowMonster').classList.remove('dead','hit')
+  $('defeatedTag').style.display='none'
+  $('sentence').textContent=SENTENCES[0]
+  renderCycleBars(); renderQuest(); renderBookBar()
+}
+function stopAuto(){ if(autoTimer){clearInterval(autoTimer);autoTimer=null;$('btnAuto').classList.remove('on');$('btnAuto').textContent='▶ 自動閱讀'} }
+$('btnNext').onclick=next
+$('btnReset').onclick=reset
+
+/* ── ④ 雙條 ↔ 合併單條 切換 ── */
+let merged=false
+$('btnMerge').onclick=()=>{
+  const header=document.querySelector('.reader-header')
+  const before=header.offsetHeight
+  merged=!merged
+  $('twinBars').style.display=merged?'none':'block'
+  $('mergedBar').style.display=merged?'block':'none'
+  $('btnMerge').classList.toggle('on',merged)
+  $('btnMerge').textContent=merged?'🔀 切返雙條對比':'🔀 試吓 ④ 合併單條'
+  const after=header.offsetHeight
+  if(merged){
+    $('heightNote').style.display='block'
+    $('heightSaved').textContent=before-after
+  } else {
+    $('heightNote').style.display='none'
+  }
+}
+$('btnAuto').onclick=()=>{
+  if(autoTimer){stopAuto();return}
+  $('btnAuto').classList.add('on'); $('btnAuto').textContent='⏸ 暫停'
+  autoTimer=setInterval(()=>{ if(read>=GOAL)stopAuto(); else next() },650)
+}
+
+/* ── 彩帶 ── */
+const COLORS=['#6366f1','#818cf8','#22c55e','#fcd34d','#fb923c','#f87171','#60a5fa']
+function confetti(n){
+  const layer=$('fx')
+  for(let i=0;i<n;i++){
+    const c=document.createElement('div'); c.className='confetti'
+    const s=6+Math.random()*7
+    c.style.cssText+=`left:${Math.random()*100}vw;width:${s}px;height:${s}px;background:${COLORS[Math.floor(Math.random()*COLORS.length)]};border-radius:${Math.random()>.5?'50%':'2px'};animation-duration:${1.6+Math.random()*1.6}s;animation-delay:${Math.random()*0.4}s`
+    layer.appendChild(c); setTimeout(()=>c.remove(),4200)
+  }
+}
+
+renderCycleBars(); renderQuest(); renderBookBar()
+</script>
+</body>
+</html>

@@ -110,6 +110,35 @@ button:active:not(:disabled) {
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* ① 小勇者踏步（keyframe 內含基準位移，避免覆蓋置中 transform） */
+@keyframes gamify-hero-step {
+  0%   { transform: translate(-50%, -58%) rotate(0); }
+  40%  { transform: translate(-50%, -78%) rotate(-12deg); }
+  100% { transform: translate(-50%, -58%) rotate(0); }
+}
+
+/* ① 征途怪物中拳（含基準位移） */
+@keyframes gamify-lane-hit {
+  0%   { transform: translate(0, -58%); }
+  25%  { transform: translate(-3px, -58%) rotate(-6deg); filter: brightness(1.4); }
+  55%  { transform: translate(2px, -58%) rotate(4deg); }
+  100% { transform: translate(0, -58%); }
+}
+
+/* ① 征途怪物倒地 */
+@keyframes gamify-monster-fall {
+  0%   { transform: translate(0, -58%) rotate(0); opacity: 1; }
+  30%  { transform: translate(0, -58%) rotate(10deg) scale(1.1); filter: brightness(1.5); }
+  100% { transform: translate(0, 10%) rotate(85deg) scale(0.8); opacity: 0; filter: grayscale(1); }
+}
+
+/* ② 檢查點通過閃光 */
+@keyframes gamify-cp-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6); }
+  50%  { box-shadow: 0 0 10px 5px rgba(99, 102, 241, 0.45); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [style*="gamify-"] {
     animation: none !important;
