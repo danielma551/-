@@ -803,14 +803,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const cycleStart  = cycleData.boundaries[currentCycleIdx]
   const cycleSize   = cycleData.sizes[currentCycleIdx]
   const posInCycle  = Math.min(sentencesRead - cycleStart, cycleSize)
-  const HALF_CYCLE  = Math.ceil(cycleSize / 2)
 
   // 當前循環的最大填充高度（線性遞增，最後一個循環 = 100%）
   const maxFill = (currentCycleIdx + 1) / cycleData.count
-
-  // 兩條條：前半 / 後半循環，永遠從 0 填到 maxFill
-  const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxFill * 100
-  const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (cycleSize - HALF_CYCLE), 0) * maxFill * 100
 
   // 再戰一場：由當前句開始新一場戰鬥（同一目標、同一隻怪）
   // 書剩低句數唔夠一場先唔顯示「再戰」掣
@@ -822,18 +817,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     passedCheckpoints.current = new Set()
   }
 
-  // ── ④ 合併單條：一條 bar 顯示成個循環（非墨水屏用；墨水屏保留原雙條） ──
+  // ── ④ 合併單條：一條 bar 顯示成個循環（普通 + 墨水屏共用數值） ──
   const mergedBarWidth = (cycleSize > 0 ? posInCycle / cycleSize : 0) * maxFill * 100
   // ① 戰鬥征途：勇者位置 = 目標進度
   const questPct = readingGoal > 0 ? Math.min((Math.max(sentencesRead, 0) / readingGoal) * 100, 100) : 0
   // ⑤ 全書薄條：今日疆土分段
   const bookBeforePct = sentences.length > 1 ? (startIndex / (sentences.length - 1)) * 100 : 0
   const bookTodayPct = sentences.length > 1 ? (Math.max(currentIndex - startIndex, 0) / (sentences.length - 1)) * 100 : 0
-
-  // 薄條：目標進度 或 全書進度
-  const goalProgressPct = readingGoal > 0
-    ? Math.min(sentencesRead / readingGoal * 100, 100)
-    : sentences.length > 1 ? currentIndex / (sentences.length - 1) * 100 : 100
 
   const getProgressColor = () => {
     if (einkMode) return '#000000'
@@ -1302,109 +1292,88 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
           </>
           ) : (
-          /* ── 墨水屏：原雙循環條 + 薄條，一律照舊零改動 ── */
+          /* ── 墨水屏：④合併循環條 + ①②戰鬥征途 + ⑤今日疆土（靜態高對比版，無動畫無轉場） ── */
           <>
-          {/* ── 進度條共用：A發光尾端 + B里程碑缺口 + C漸層色進 ── */}
-          {/* 漸層：冷色(靛藍) → 紫 → 暖色(金)，隨進度條延伸自然色移 */}
-          {/* 完成後統一轉綠 */}
-
-          {/* 循環進度條 1（前半循環） */}
-          {/* e-ink 永遠顯示標籤；一般模式只在 sm 以上顯示 */}
+          {/* ④ 合併循環條：純黑填充，50% 加粗中點刻度 */}
           <div
-            className={isEink ? 'flex justify-between mb-0.5 px-0.5' : 'hidden sm:flex justify-between text-xs mb-0.5 px-0.5'}
-            style={{ color: getProgressColor(), fontSize: isEink ? 13 : undefined, fontWeight: isEink ? 600 : undefined }}
+            className="flex justify-between mb-0.5 px-0.5"
+            style={{ color: '#000', fontSize: 13, fontWeight: 600 }}
           >
-            <span>{isEink ? `第 ${currentCycleIdx + 1}/${cycleData.count} 循環 · 上半` : '進度 1'}</span>
-            <span className="tabular-nums">{bar1Width.toFixed(0)}%</span>
+            <span>第 {currentCycleIdx + 1}/{cycleData.count} 循環 · {Math.max(posInCycle, 0)}/{cycleSize} 句</span>
+            <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
           </div>
-          {/* 相對定位容器：讓發光點和里程碑可以溢出 */}
-          <div className="w-full relative" style={{ height: isEink ? 12 : 8 }}>
-            {/* 軌道底色 */}
-            <div className="absolute inset-0 rounded-full" style={{ background: isEink ? '#e0e0e0' : undefined }} data-role="track">
-              {!isEink && <div className="absolute inset-0 rounded-full bg-gray-200" />}
+          <div className="w-full relative" style={{ height: 12 }}>
+            <div className="absolute inset-0 rounded-full" style={{ background: '#e0e0e0' }} />
+            <div
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{ width: `${mergedBarWidth}%`, background: '#000', transition: 'none' }}
+            />
+            {/* 25/75 細刻度 */}
+            {[25, 75].map(m => (
+              <div
+                key={m}
+                className="absolute top-0 bottom-0 z-10 pointer-events-none"
+                style={{ left: `${m}%`, width: 1, background: '#888', transform: 'translateX(-50%)' }}
+              />
+            ))}
+            {/* 50% 加粗中點刻度（上半/下半交界） */}
+            <div
+              className="absolute z-10 pointer-events-none"
+              style={{ left: '50%', top: -2, bottom: -2, width: 3, background: '#000', transform: 'translateX(-50%)' }}
+            />
+          </div>
+
+          {/* ①② 戰鬥征途（墨水屏版）：斜紋填充、靜態勇者+怪物、檢查點旗仔（無閃光無 toast） */}
+          {battleMonster && (
+            <div className="w-full relative" style={{ height: 12, marginTop: 18 }}>
+              <div className="absolute inset-0 rounded-full" style={{ background: '#fff', border: '1.5px solid #000' }} />
+              <div
+                className="absolute inset-y-0 left-0 rounded-full overflow-hidden"
+                style={{ width: `${questPct}%`, background: 'repeating-linear-gradient(45deg, #000 0 4px, #fff 4px 8px)', transition: 'none' }}
+              />
+              {/* ② 檢查點：通過實心黑加粗，未過幼灰 */}
+              {[25, 50, 75].map(m => (
+                <div
+                  key={m}
+                  className="absolute z-10 pointer-events-none"
+                  style={{
+                    left: `${m}%`, top: -3, bottom: -3,
+                    width: questPct >= m ? 3 : 1,
+                    background: questPct >= m ? '#000' : '#888',
+                    transform: 'translateX(-50%)',
+                  }}
+                >
+                  <span style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', fontSize: 10, opacity: questPct >= m ? 1 : 0.3 }}>🚩</span>
+                </div>
+              ))}
+              {/* ① 勇者：靜態企喺進度尖端（位置跟翻頁更新，無動畫） */}
+              <span
+                className="pointer-events-none"
+                style={{ position: 'absolute', left: `${Math.min(questPct, 96)}%`, top: '50%', transform: 'translate(-50%,-58%)', fontSize: 16, zIndex: 12, display: 'inline-block' }}
+              >⚔️</span>
+              {/* 怪物：右端等緊；擊敗後轉灰（靜態轉換） */}
+              <span
+                className="pointer-events-none"
+                style={{
+                  position: 'absolute', right: -2, top: '50%', transform: 'translate(0,-58%)',
+                  fontSize: 17, zIndex: 11, display: 'inline-block',
+                  filter: goalCompleted ? 'grayscale(1)' : undefined,
+                  opacity: goalCompleted ? 0.4 : 1,
+                }}
+              >{battleMonster.emoji}</span>
             </div>
-            {/* C: 單色填充，顏色隨進度插值變化 */}
-            <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{
-                width: `${bar1Width}%`,
-                backgroundColor: getBarColor(bar1Width),
-                transition: isEink ? 'none' : 'all 0.3s',
-              }}
-            />
-            {/* A: 發光尾端（eink 模式下不顯示） */}
-            {!isEink && bar1Width > 0.5 && (
-              <div
-                className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
-                style={{
-                  left: `${bar1Width}%`,
-                  transform: 'translate(-50%,-50%)',
-                  width: 14, height: 14,
-                  backgroundColor: getBarColor(bar1Width),
-                  opacity: 0.5,
-                  boxShadow: `0 0 8px 5px ${getBarColor(bar1Width)}88`,
-                }}
-              />
-            )}
-            {/* B: 里程碑缺口（eink 時改黑色刻度線） */}
-            {[25, 50, 75].map(m => (
-              <div
-                key={m}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: isEink ? 1 : 2, height: isEink ? '100%' : 14, background: isEink ? '#888' : 'white', borderRadius: 0 }}
-              />
-            ))}
-          </div>
+          )}
 
-          {/* 循環進度條 2（後半循環） */}
+          {/* ⑤ 全書薄條 + 今日疆土：中灰=之前讀咗，黑=今日疆土，淺灰=未讀 */}
           <div
-            className={isEink ? 'flex justify-between mt-1 mb-0.5 px-0.5' : 'hidden sm:flex justify-between text-xs mt-1 mb-0.5 px-0.5'}
-            style={{ color: getProgressColor(), fontSize: isEink ? 13 : undefined, fontWeight: isEink ? 600 : undefined }}
+            className="w-full relative rounded-full overflow-hidden"
+            style={{ height: 5, background: '#e0e0e0', marginTop: battleMonster ? 10 : 6 }}
+            title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
           >
-            <span>{isEink ? `第 ${currentCycleIdx + 1}/${cycleData.count} 循環 · 下半` : '進度 2'}</span>
-            <span className="tabular-nums">{bar2Width.toFixed(0)}%</span>
-          </div>
-          <div className="w-full relative" style={{ height: isEink ? 12 : 8 }}>
-            <div className="absolute inset-0 rounded-full" style={{ background: isEink ? '#e0e0e0' : '#e5e7eb' }} />
+            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: '#999' }} />
             <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{
-                width: `${bar2Width}%`,
-                backgroundColor: getBarColor(bar2Width),
-                transition: isEink ? 'none' : 'all 0.3s',
-              }}
-            />
-            {!isEink && bar2Width > 0.5 && (
-              <div
-                className="absolute top-1/2 rounded-full transition-all duration-300 pointer-events-none"
-                style={{
-                  left: `${bar2Width}%`,
-                  transform: 'translate(-50%,-50%)',
-                  width: 14, height: 14,
-                  backgroundColor: getBarColor(bar2Width),
-                  opacity: 0.5,
-                  boxShadow: `0 0 8px 5px ${getBarColor(bar2Width)}88`,
-                }}
-              />
-            )}
-            {[25, 50, 75].map(m => (
-              <div
-                key={m}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: isEink ? 1 : 2, height: isEink ? '100%' : 14, background: isEink ? '#888' : 'white', borderRadius: 0 }}
-              />
-            ))}
-          </div>
-
-          {/* 目標 / 全書總進度薄條 */}
-          <div className="w-full rounded-full overflow-hidden mt-1" style={{ height: isEink ? 4 : 4, background: isEink ? '#e0e0e0' : '#f3f4f6' }}>
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${goalProgressPct}%`,
-                backgroundColor: isEink ? '#000' : '#00A3E0',
-                transition: isEink ? 'none' : 'all 0.5s',
-              }}
+              className="absolute inset-y-0"
+              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: '#000', transition: 'none' }}
             />
           </div>
           </>
