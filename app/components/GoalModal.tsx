@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import { Target, X, History } from 'lucide-react'
-import { MONSTERS, monsterForGoal } from '../utils/gamify'
+import { getMonsters, saveMonsterGoals, monsterForGoal, Monster } from '../utils/gamify'
 
 const HISTORY_KEY = 'reading-goal-history'
 const MAX_HISTORY = 4
@@ -41,6 +41,30 @@ interface GoalModalProps {
 export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }: GoalModalProps) {
   // 歷史記錄，首次渲染時從 localStorage 讀取
   const [history] = useState<number[]>(() => loadHistory())
+
+  // 怪物列表（含用戶自訂句數）+ 自訂編輯模式
+  const [monsters, setMonsters] = useState<Monster[]>(() => getMonsters())
+  const [editingMonsters, setEditingMonsters] = useState(false)
+  const [editVals, setEditVals] = useState<Record<string, string>>({})
+
+  // 進入編輯：帶入現有數值；完成編輯：驗證 + 儲存
+  const toggleEditMonsters = () => {
+    if (!editingMonsters) {
+      const vals: Record<string, string> = {}
+      monsters.forEach(m => { vals[m.id] = String(m.hp) })
+      setEditVals(vals)
+      setEditingMonsters(true)
+    } else {
+      const goals: Record<string, number> = {}
+      monsters.forEach(m => {
+        const n = parseInt(editVals[m.id])
+        goals[m.id] = Number.isFinite(n) && n >= 1 ? n : m.hp   // 無效輸入就保留原值
+      })
+      saveMonsterGoals(goals)
+      setMonsters(getMonsters())
+      setEditingMonsters(false)
+    }
+  }
 
   // 預填最近一次的目標；若無歷史則留空
   const [goalInput, setGoalInput] = useState<string>(
@@ -95,34 +119,58 @@ export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }:
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 召喚今日怪物：點怪物卡直接開戰 */}
+          {/* 召喚今日怪物：點怪物卡直接開戰；✏️ 自訂每隻怪嘅句數 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              召喚今日怪物
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                召喚今日怪物
+              </label>
+              <button
+                type="button"
+                onClick={toggleEditMonsters}
+                className={`text-xs font-medium transition-colors ${editingMonsters ? 'text-green-600 hover:text-green-700' : 'text-indigo-500 hover:text-indigo-700'}`}
+              >
+                {editingMonsters ? '✓ 完成並儲存' : '✏️ 自訂句數'}
+              </button>
+            </div>
             <div className="grid grid-cols-4 gap-2">
-              {MONSTERS.map((m) => {
-                const disabled = m.hp > maxSentences
+              {monsters.map((m) => {
+                const disabled = !editingMonsters && m.hp > maxSentences
                 return (
                   <button
                     key={m.id}
                     type="button"
                     disabled={disabled}
                     onClick={() => {
+                      if (editingMonsters) return   // 編輯緊：唔開戰
                       setGoalInput(String(m.hp))
                       handleConfirm(m.hp)
                     }}
-                    className="flex flex-col items-center gap-0.5 py-2.5 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    title={disabled ? `這本書只有 ${maxSentences} 句` : `目標 ${m.hp} 句 · 擊敗得 ${m.xp} XP`}
+                    className={`flex flex-col items-center gap-0.5 py-2.5 rounded-xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${editingMonsters ? 'border-indigo-200 bg-indigo-50/50 cursor-default' : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'}`}
+                    title={editingMonsters ? '輸入呢隻怪物嘅目標句數' : disabled ? `這本書只有 ${maxSentences} 句` : `目標 ${m.hp} 句 · 擊敗得 ${m.xp} XP`}
                   >
                     <span className="text-2xl leading-none">{m.emoji}</span>
                     <span className="text-xs font-semibold text-gray-700 mt-1">{m.name}</span>
-                    <span className="text-[10px] text-gray-400">{m.hp} 句</span>
+                    {editingMonsters ? (
+                      <input
+                        type="number"
+                        min={1}
+                        value={editVals[m.id] ?? ''}
+                        onChange={e => setEditVals(v => ({ ...v, [m.id]: e.target.value }))}
+                        onClick={e => e.stopPropagation()}
+                        className="w-14 text-center text-xs border border-indigo-300 rounded-md px-1 py-0.5 mt-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      />
+                    ) : (
+                      <span className="text-[10px] text-gray-400">{m.hp} 句</span>
+                    )}
                     <span className="text-[10px] font-semibold text-indigo-500">⚡ +{m.xp}</span>
                   </button>
                 )
               })}
             </div>
+            {editingMonsters && (
+              <p className="text-xs text-gray-400 mt-2">輸入每隻怪物嘅目標句數，撳「✓ 完成並儲存」生效（下次召喚都會記住）</p>
+            )}
           </div>
 
           <div>

@@ -23,12 +23,44 @@ export const MONSTERS: Monster[] = [
   { id: 'demon',  name: '魔王',   emoji: '👹', hp: 50, xp: 180 },
 ]
 
-// 自訂目標句數 → 對應等級的怪物（取不超過目標的最強一隻）
+// ── 自訂怪物目標句數：用戶可以喺 GoalModal 自己改每隻怪物嘅句數 ──
+const MONSTER_GOALS_KEY = 'reading-monster-goals'
+
+// 取得怪物列表（已套用用戶自訂句數；無自訂就用預設）
+export function getMonsters(): Monster[] {
+  if (typeof window === 'undefined') return MONSTERS
+  try {
+    const raw = localStorage.getItem(MONSTER_GOALS_KEY)
+    if (!raw) return MONSTERS
+    const goals = JSON.parse(raw) as Record<string, number>
+    return MONSTERS.map(m => {
+      const custom = goals[m.id]
+      return {
+        ...m,
+        hp: Number.isFinite(custom) && custom >= 1 ? Math.floor(custom) : m.hp,
+      }
+    })
+  } catch { return MONSTERS }
+}
+
+// 儲存用戶自訂嘅怪物句數
+export function saveMonsterGoals(goals: Record<string, number>): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(MONSTER_GOALS_KEY, JSON.stringify(goals))
+  } catch (e) {
+    console.error('[gamify] saveMonsterGoals failed:', e)
+  }
+}
+
+// 自訂目標句數 → 對應等級的怪物（按自訂門檻：取唔超過目標嘅最強一隻）
 export function monsterForGoal(goal: number): Monster {
-  if (goal >= 50) return MONSTERS[3]
-  if (goal >= 20) return MONSTERS[2]
-  if (goal >= 10) return MONSTERS[1]
-  return MONSTERS[0]
+  const monsters = getMonsters().slice().sort((a, b) => a.hp - b.hp)
+  let result = monsters[0]
+  for (const m of monsters) {
+    if (goal >= m.hp) result = m
+  }
+  return result
 }
 
 // ── XP / 擊殺記錄（localStorage） ──
