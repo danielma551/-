@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { Target, X, History } from 'lucide-react'
+import { MONSTERS, monsterForGoal } from '../utils/gamify'
 
 const HISTORY_KEY = 'reading-goal-history'
 const MAX_HISTORY = 4
@@ -90,13 +91,43 @@ export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }:
         </div>
 
         <p className="text-gray-600 mb-6">
-          今天想要閱讀多少句？設定目標讓閱讀更有動力！
+          今天想要閱讀多少句？目標越大，怪物越強，獎勵越多！
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* 召喚今日怪物：點怪物卡直接開戰 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              句子數量 (最多 {maxSentences} 句)
+              召喚今日怪物
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {MONSTERS.map((m) => {
+                const disabled = m.hp > maxSentences
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setGoalInput(String(m.hp))
+                      handleConfirm(m.hp)
+                    }}
+                    className="flex flex-col items-center gap-0.5 py-2.5 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={disabled ? `這本書只有 ${maxSentences} 句` : `目標 ${m.hp} 句 · 擊敗得 ${m.xp} XP`}
+                  >
+                    <span className="text-2xl leading-none">{m.emoji}</span>
+                    <span className="text-xs font-semibold text-gray-700 mt-1">{m.name}</span>
+                    <span className="text-[10px] text-gray-400">{m.hp} 句</span>
+                    <span className="text-[10px] font-semibold text-indigo-500">⚡ +{m.xp}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              自訂句子數量 (最多 {maxSentences} 句)
             </label>
             <input
               type="number"
@@ -108,6 +139,15 @@ export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }:
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               autoFocus
             />
+            {/* 即時預覽：自訂數字會召喚邊隻怪物 */}
+            {goalInput && parseInt(goalInput) > 0 && (() => {
+              const m = monsterForGoal(parseInt(goalInput))
+              return (
+                <p className="text-xs text-gray-500 mt-2">
+                  本次召喚：{m.emoji} <span className="font-semibold">{m.name}</span> · 擊敗可得 <span className="text-indigo-600 font-semibold">⚡ {m.xp} XP</span>
+                </p>
+              )
+            })()}
           </div>
 
           {/* 快速選項：有歷史時顯示「最近」標籤 */}

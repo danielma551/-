@@ -24,6 +24,7 @@ import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
+import { monsterForGoal, gamifyStorage, fireConfetti, getStreak } from '../utils/gamify'
 
 interface ReaderProps {
   sentences: string[]
@@ -40,6 +41,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
+  // 遊戲化勝利資訊：只在非墨水屏模式設定（墨水屏保持原有完成畫面）
+  const [victory, setVictory] = useState<{ emoji: string; name: string; xp: number; streak: number } | null>(null)
   const [articleCompleted, setArticleCompleted] = useState(false)
   const [fontFamily, setFontFamily] = useState('system-ui, -apple-system, sans-serif')
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
@@ -97,6 +100,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setCurrentIndex(initialIndex)
     setStartIndex(initialIndex)
     setGoalCompleted(false)
+    setVictory(null)
   }, [initialIndex])
 
   // 下雨特效動畫（eink 模式下強制關閉）
@@ -265,12 +269,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       const sentencesRead = currentIndex - startIndex + 1
       if (sentencesRead >= readingGoal && !goalCompleted) {
         setGoalCompleted(true)
+        // 遊戲化：擊敗怪物 → 記錄 XP + 擊殺（數據任何模式都記錄）
+        const monster = monsterForGoal(readingGoal)
+        gamifyStorage.addXP(monster.xp)
+        gamifyStorage.recordKill(monster.id)
+        // 戰果任何模式都顯示（墨水屏用靜態無動畫版本）；彩帶只在非墨水屏模式
+        setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, streak: getStreak() })
+        if (!einkMode) fireConfetti(120)
         setTimeout(() => {
           onReset()
-        }, 3000)
+        }, 4500)
       }
     }
-  }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset])
+  }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset, einkMode])
 
   // 文章讀到最後一句：觸發完成畫面 + 記錄完書日期
   useEffect(() => {
@@ -455,6 +466,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   const sentencesRead = currentIndex - startIndex + 1
   const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
+
+  // ── ⚔️ 怪物戰鬥條（代替循環進度條；只在非墨水屏 + 有目標時使用） ──
+  const battleMonster = readingGoal > 0 ? monsterForGoal(readingGoal) : null
+  const battleHp = Math.max(readingGoal - sentencesRead, 0)
+  const battleHpPct = readingGoal > 0 ? (battleHp / readingGoal) * 100 : 0
+  const battleBarColor = goalCompleted
+    ? '#22c55e'
+    : battleHpPct > 60 ? '#eab308' : battleHpPct > 25 ? '#fb923c' : '#ef4444'
+  // 扣血震動：偵測「又讀咗一句」
+  const [hudShake, setHudShake] = useState(false)
+  const prevReadRef = useRef(sentencesRead)
+  useEffect(() => {
+    if (!einkMode && readingGoal > 0 && sentencesRead > prevReadRef.current) {
+      setHudShake(true)
+      const t = setTimeout(() => setHudShake(false), 380)
+      prevReadRef.current = sentencesRead
+      return () => clearTimeout(t)
+    }
+    prevReadRef.current = sentencesRead
+  }, [sentencesRead, einkMode, readingGoal])
 
   // ── 固定循環生成：每個循環固定 13 句，最後一個循環可能不足 13 句 ──
   const cycleData = useMemo(() => {
@@ -940,6 +971,49 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         )}
         <div className="w-full">
+          {/* ── ⚔️ 戰況列：怪物 + HP，融合喺原進度條上方 ── */}
+          {/* 普通模式：扣血震動 + HP 變色；墨水屏：純黑靜態文字，無動畫無轉場（避免殘影） */}
+          {battleMonster && (
+            <div className="flex items-center justify-between px-0.5" style={{ marginBottom: isEink ? 4 : 6 }}>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-base leading-none"
+                  style={isEink ? { fontSize: 15 } : {
+                    display: 'inline-block',
+                    animation: hudShake ? 'gamify-hud-shake 380ms var(--ease-out)' : undefined,
+                    filter: goalCompleted ? 'grayscale(1)' : undefined,
+                    opacity: goalCompleted ? 0.55 : 1,
+                    transition: 'filter 400ms ease, opacity 400ms ease',
+                  }}
+                >
+                  {battleMonster.emoji}
+                </span>
+                <span
+                  className={isEink ? undefined : 'text-xs font-semibold text-gray-700'}
+                  style={isEink ? { fontSize: 13, fontWeight: 700, color: '#000' } : undefined}
+                >
+                  {battleMonster.name}
+                </span>
+                {goalCompleted && (
+                  <span
+                    className={isEink ? undefined : 'text-xs font-semibold text-green-600'}
+                    style={isEink ? { fontSize: 13, fontWeight: 700, color: '#000' } : undefined}
+                  >
+                    已擊敗！
+                  </span>
+                )}
+              </div>
+              <span
+                className="text-xs tabular-nums font-medium"
+                style={isEink
+                  ? { fontSize: 13, fontWeight: 700, color: '#000' }
+                  : { color: goalCompleted ? '#16a34a' : battleBarColor }}
+              >
+                {goalCompleted ? `⚡ +${battleMonster.xp} XP` : `HP ${battleHp}/${readingGoal}`}
+              </span>
+            </div>
+          )}
+
           {/* ── 進度條共用：A發光尾端 + B里程碑缺口 + C漸層色進 ── */}
           {/* 漸層：冷色(靛藍) → 紫 → 暖色(金)，隨進度條延伸自然色移 */}
           {/* 完成後統一轉綠 */}
@@ -1416,8 +1490,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 完成訊息 */}
             {goalCompleted && (
               <div className="mt-6 p-4 rounded-lg text-center" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-                <p className="font-medium" style={{ color: '#166534' }}>🎉 恭喜！您已完成今天的閱讀目標</p>
-                <p className="text-sm mt-1" style={{ color: '#16a34a' }}>3秒後自動返回首頁...</p>
+                <p className="font-medium" style={{ color: '#166534' }}>
+                  {victory ? `${victory.emoji} ${victory.name}被擊敗！⚡ +${victory.xp} XP` : '🎉 恭喜！您已完成今天的閱讀目標'}
+                </p>
+                <p className="text-sm mt-1" style={{ color: '#16a34a' }}>{victory ? '即將返回書架...' : '3秒後自動返回首頁...'}</p>
               </div>
             )}
             {articleCompleted && (
@@ -1640,12 +1716,40 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </span>
             </div>
 
-            {goalCompleted && (
+            {goalCompleted && (victory && isEink ? (
+              /* 🖋️ 墨水屏勝利卡：純黑邊框 + 靜態文字，無動畫無漸層（避免殘影） */
+              <div className="mt-6 p-4 text-center" style={{ border: '2px solid #000', background: '#fff' }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color: '#000', margin: 0 }}>
+                  {victory.emoji} {victory.name}被擊敗！
+                </p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#000', marginTop: 6 }}>
+                  ⚡ +{victory.xp} XP{victory.streak > 1 ? ` ・ 🔥 連續 ${victory.streak} 天` : ''}
+                </p>
+                <p style={{ fontSize: 12, color: '#555', marginTop: 8 }}>即將返回書架...</p>
+              </div>
+            ) : victory ? (
+              /* ⚔️ 勝利卡：擊敗怪物 + XP +連續打卡（彩帶版） */
+              <div
+                className="mt-6 p-6 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl text-center shadow-sm"
+                style={{ animation: 'gamify-victory-pop 400ms var(--ease-out) both' }}
+              >
+                <p className="text-4xl mb-1">{victory.emoji}</p>
+                <p className="text-green-800 font-semibold text-lg">{victory.name}被擊敗！</p>
+                <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+                  <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 text-sm font-bold rounded-full">⚡ +{victory.xp} XP</span>
+                  {victory.streak > 1 && (
+                    <span className="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-500 text-sm font-bold rounded-full">🔥 連續 {victory.streak} 天</span>
+                  )}
+                </div>
+                <p className="text-green-600 text-sm mt-3">即將返回書架...</p>
+              </div>
+            ) : (
+              /* 後備：無戰果資料時的原有完成畫面 */
               <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
                 <p className="text-green-800 font-medium">🎉 恭喜！您已完成今天的閱讀目標</p>
-                <p className="text-green-600 text-sm mt-1">3秒後自動返回首頁...</p>
+                <p className="text-green-600 text-sm mt-1">即將返回書架...</p>
               </div>
-            )}
+            ))}
             {articleCompleted && (
               <div className="mt-6 p-6 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl text-center shadow-sm">
                 <p className="text-3xl mb-2">🎉</p>

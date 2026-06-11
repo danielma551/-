@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>閱讀網站 — 召喚今日怪物 ⚔️</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+
+:root {
+  --color-indigo-50:#eef2ff; --color-indigo-100:#e0e7ff; --color-indigo-200:#c7d2fe;
+  --color-indigo-300:#a5b4fc; --color-indigo-400:#818cf8; --color-indigo-500:#6366f1;
+  --color-indigo-600:#4f46e5;
+  --color-green-50:#f0fdf4; --color-green-100:#dcfce7; --color-green-500:#22c55e;
+  --color-yellow-500:#eab308; --color-amber-300:#fcd34d;
+  --color-orange-400:#fb923c; --color-orange-500:#f97316;
+  --color-red-400:#f87171; --color-red-500:#ef4444;
+  --color-gray-50:#f9fafb; --color-gray-100:#f3f4f6; --color-gray-200:#e5e7eb;
+  --color-gray-300:#d1d5db; --color-gray-400:#9ca3af; --color-gray-500:#6b7280;
+  --color-gray-600:#4b5563; --color-gray-800:#1f2937; --color-gray-900:#111827;
+  --font-noto-tc:'Noto Sans TC',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --radius-md:0.5rem; --radius-lg:0.75rem; --radius-2xl:1rem; --radius-full:9999px;
+  --shadow-sm:0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1);
+  --shadow-2xl:0 25px 50px -12px rgba(0,0,0,0.25);
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:var(--font-noto-tc); font-size:0.875rem; color:var(--color-gray-800);
+  background:var(--color-gray-50); line-height:1.5; padding:2rem 1.5rem;
+}
+.wrap { max-width:40rem; margin:0 auto; display:flex; flex-direction:column; gap:1.5rem; }
+
+.card {
+  background:white; border:1px solid var(--color-gray-100);
+  border-radius:var(--radius-2xl); box-shadow:var(--shadow-sm); padding:1.75rem;
+}
+.section-head { display:flex; align-items:center; gap:0.5rem; }
+.section-accent { width:4px; height:20px; border-radius:var(--radius-full); flex-shrink:0; }
+.section-head h2 { font-size:1.25rem; font-weight:700; color:var(--color-gray-900); }
+.section-sub { color:var(--color-gray-400); margin:0.5rem 0 1.25rem; }
+
+/* ── Summon grid ── */
+.monster-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+@media (max-width:520px){ .monster-grid { grid-template-columns:1fr; } }
+.monster-card {
+  border:1px solid var(--color-gray-200); border-radius:var(--radius-lg);
+  padding:1.75rem 1rem; text-align:center; cursor:pointer; background:white;
+  transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.monster-card:hover {
+  transform:translateY(-3px); border-color:var(--color-indigo-300); box-shadow:var(--shadow-lg);
+}
+.monster-card:hover .m-emoji { animation:wiggle .5s ease; }
+@keyframes wiggle { 0%,100%{transform:rotate(0)} 30%{transform:rotate(-8deg) scale(1.1)} 60%{transform:rotate(6deg)} }
+.m-emoji { font-size:3rem; display:inline-block; margin-bottom:0.75rem; }
+.m-name { font-size:1.125rem; font-weight:700; color:var(--color-gray-900); margin-bottom:0.25rem; }
+.m-goal { color:var(--color-gray-400); margin-bottom:0.5rem; }
+.m-xp { font-weight:600; color:var(--color-indigo-500); }
+
+/* ── Battle ── */
+#battle { display:none; }
+.battle-head { display:flex; gap:1.25rem; align-items:flex-start; }
+.boss-portrait {
+  width:72px; height:72px; border-radius:var(--radius-lg); flex-shrink:0;
+  background:var(--color-indigo-50); display:flex; align-items:center; justify-content:center;
+  font-size:2.5rem;
+}
+.boss-portrait.hit { animation:bossHit .35s ease; }
+@keyframes bossHit {
+  0%{transform:translateX(0); filter:none}
+  25%{transform:translateX(-7px) rotate(-4deg); filter:brightness(1.4) saturate(2)}
+  55%{transform:translateX(6px) rotate(3deg)}
+  100%{transform:translateX(0)}
+}
+.boss-portrait.dead { animation:bossDead .9s ease forwards; }
+@keyframes bossDead {
+  30%{transform:rotate(8deg) scale(1.05); filter:brightness(1.6)}
+  100%{transform:rotate(90deg) translateY(18px) scale(.75); opacity:0; filter:grayscale(1)}
+}
+.battle-info { flex:1; position:relative; }
+.boss-name { font-size:1.25rem; font-weight:700; color:var(--color-gray-900); }
+.boss-goal { color:var(--color-gray-400); margin:0.125rem 0 0.625rem; }
+.hp-row { display:flex; align-items:center; gap:0.75rem; }
+.hp-track { flex:1; height:12px; background:var(--color-gray-100); border-radius:var(--radius-full); overflow:hidden; }
+.hp-fill {
+  height:100%; width:100%; border-radius:var(--radius-full);
+  background:var(--color-yellow-500);
+  transition:width .45s cubic-bezier(.22,1,.36,1), background-color .4s ease;
+}
+.hp-label { font-weight:600; color:var(--color-gray-600); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+.sentence-box {
+  background:var(--color-gray-50); border:1px solid var(--color-gray-100);
+  border-radius:var(--radius-lg); padding:3rem 2rem; text-align:center;
+  font-size:1.5rem; line-height:1.8; color:var(--color-gray-800);
+  margin:1.5rem 0; min-height:9rem; display:flex; align-items:center; justify-content:center;
+}
+.sentence-box.swap { animation:sentenceIn .4s ease; }
+@keyframes sentenceIn { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none} }
+
+.btn-attack {
+  width:100%; padding:1.125rem; border:none; border-radius:var(--radius-lg);
+  background:var(--color-indigo-500); color:white; font-family:inherit;
+  font-size:1.125rem; font-weight:700; cursor:pointer;
+  transition:background .15s ease, transform .1s ease;
+}
+.btn-attack:hover { background:var(--color-indigo-600); }
+.btn-attack:active { transform:scale(.985); }
+.retreat {
+  display:block; text-align:center; margin-top:1rem; color:var(--color-gray-400);
+  background:none; border:none; font-family:inherit; font-size:0.875rem; cursor:pointer; width:100%;
+}
+.retreat:hover { color:var(--color-gray-600); text-decoration:underline; }
+
+/* damage float */
+.dmg {
+  position:absolute; font-weight:700; font-size:1.25rem; color:var(--color-red-500);
+  pointer-events:none; animation:dmgFloat .9s ease-out forwards; text-shadow:0 1px 0 white;
+  z-index:10;
+}
+@keyframes dmgFloat {
+  0%{opacity:0; transform:translateY(0) scale(.7)}
+  20%{opacity:1; transform:translateY(-8px) scale(1.2)}
+  100%{opacity:0; transform:translateY(-40px) scale(1)}
+}
+
+/* combo */
+.combo {
+  position:absolute; right:0; top:-0.25rem; font-weight:700; color:var(--color-orange-500);
+  font-size:0.875rem; opacity:0; transition:opacity .2s ease;
+}
+.combo.show { opacity:1; animation:wiggle .4s ease; }
+
+/* ── Stats ── */
+.stats-sub { color:var(--color-gray-500); margin:0.5rem 0 1.25rem; }
+.stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; }
+.stat {
+  background:var(--color-gray-50); border-radius:var(--radius-lg);
+  padding:1.5rem 0.5rem; text-align:center;
+}
+.stat-num { font-size:2rem; font-weight:700; color:var(--color-gray-900); font-variant-numeric:tabular-nums; }
+.stat-num.tick { animation:numPop .35s ease; }
+@keyframes numPop { 40%{transform:scale(1.25); color:var(--color-indigo-500)} }
+.stat-label { color:var(--color-gray-400); margin-top:0.25rem; }
+
+/* ── Victory modal ── */
+.overlay {
+  position:fixed; inset:0; background:rgba(17,24,39,.55); z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; pointer-events:none; transition:opacity .25s ease;
+}
+.overlay.show { opacity:1; pointer-events:auto; }
+.modal {
+  background:white; border-radius:var(--radius-2xl); max-width:24rem; width:90%;
+  padding:2.5rem 2rem; text-align:center; box-shadow:var(--shadow-2xl);
+  transform:scale(.85); transition:transform .35s cubic-bezier(.22,1.4,.36,1);
+}
+.overlay.show .modal { transform:scale(1); }
+.modal-emoji { font-size:3.5rem; display:inline-block; animation:victorySpin .7s ease .1s both; }
+@keyframes victorySpin { 0%{transform:scale(.3) rotate(-180deg); opacity:0} 70%{transform:scale(1.15) rotate(10deg)} 100%{transform:scale(1) rotate(0)} }
+.modal h3 { font-size:1.5rem; font-weight:700; margin:0.75rem 0 0.375rem; }
+.modal p { color:var(--color-gray-500); margin-bottom:1.5rem; }
+.xp-gain {
+  display:inline-block; background:var(--color-indigo-50); color:var(--color-indigo-600);
+  font-weight:700; padding:0.375rem 1rem; border-radius:var(--radius-full); margin-bottom:1.5rem;
+}
+.btn-primary {
+  display:inline-flex; align-items:center; gap:0.5rem; padding:0.625rem 1.5rem;
+  background:var(--color-indigo-500); color:white; border:none; border-radius:var(--radius-md);
+  font-family:inherit; font-size:0.875rem; font-weight:500; cursor:pointer;
+}
+.btn-primary:hover { background:var(--color-indigo-600); }
+
+/* confetti */
+#fx-layer { position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
+.confetti { position:absolute; width:9px; height:9px; top:-12px; animation:confettiFall linear forwards; }
+@keyframes confettiFall { to { transform:translateY(110vh) rotate(720deg); opacity:.7; } }
+
+.demo-note { text-align:center; font-size:0.75rem; color:var(--color-gray-400); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- ═══ Summon screen ═══ -->
+  <div class="card" id="summon">
+    <div class="section-head">
+      <div class="section-accent" style="background:var(--color-indigo-500)"></div>
+      <h2>召喚今日怪物</h2>
+    </div>
+    <p class="section-sub">今天想要閱讀多少句？目標越大，怪物越強，獎勵越多！</p>
+    <div class="monster-grid">
+      <div class="monster-card" data-i="0">
+        <span class="m-emoji">🟢</span>
+        <div class="m-name">史萊姆</div>
+        <div class="m-goal">目標 5 句（試玩）</div>
+        <div class="m-xp">⚡ +10 XP</div>
+      </div>
+      <div class="monster-card" data-i="1">
+        <span class="m-emoji">👺</span>
+        <div class="m-name">哥布林</div>
+        <div class="m-goal">目標 10 句</div>
+        <div class="m-xp">⚡ +25 XP</div>
+      </div>
+      <div class="monster-card" data-i="2">
+        <span class="m-emoji">🐉</span>
+        <div class="m-name">惡龍</div>
+        <div class="m-goal">目標 20 句</div>
+        <div class="m-xp">⚡ +60 XP</div>
+      </div>
+      <div class="monster-card" data-i="3">
+        <span class="m-emoji">👹</span>
+        <div class="m-name">魔王</div>
+        <div class="m-goal">目標 50 句</div>
+        <div class="m-xp">⚡ +180 XP</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Battle screen ═══ -->
+  <div class="card" id="battle">
+    <div class="battle-head">
+      <div class="boss-portrait" id="bossFace">👹</div>
+      <div class="battle-info">
+        <span class="combo" id="combo"></span>
+        <div class="boss-name" id="bossName">魔王</div>
+        <div class="boss-goal" id="bossGoal">今日目標 · 50 句</div>
+        <div class="hp-row">
+          <div class="hp-track"><div class="hp-fill" id="hpFill"></div></div>
+          <span class="hp-label" id="hpLabel">HP 50/50</span>
+        </div>
+      </div>
+    </div>
+    <div class="sentence-box" id="sentence">那一年，春天來得很早，桃花剛開了一半。</div>
+    <button class="btn-attack" id="attackBtn">⚔️ 讀完這句，攻擊！</button>
+    <button class="retreat" id="retreatBtn">先撤退，改天再戰</button>
+  </div>
+
+  <!-- ═══ Stats ═══ -->
+  <div class="card">
+    <div class="section-head">
+      <div class="section-accent" style="background:var(--color-green-500)"></div>
+      <h2 style="font-size:1.125rem">今日戰績</h2>
+    </div>
+    <p class="stats-sub">每讀一句 = 一次攻擊，數字會說話 💪</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-num" id="statSentences">0</div><div class="stat-label">已讀句子</div></div>
+      <div class="stat"><div class="stat-num" id="statKills">0</div><div class="stat-label">斬殺怪物</div></div>
+      <div class="stat"><div class="stat-num" id="statXP">0</div><div class="stat-label">累計 XP</div></div>
+    </div>
+  </div>
+
+  <p class="demo-note">怪物戰鬥 Demo · 跟足閱讀網站 Design System</p>
+</div>
+
+<div id="fx-layer"></div>
+
+<!-- Victory modal -->
+<div class="overlay" id="victoryOverlay">
+  <div class="modal">
+    <span class="modal-emoji" id="victoryEmoji">🏆</span>
+    <h3 id="victoryTitle">魔王被擊敗！</h3>
+    <p id="victoryDesc">50 句閱讀攻擊，乾淨利落。</p>
+    <div class="xp-gain" id="victoryXP">⚡ +180 XP</div><br>
+    <button class="btn-primary" id="nextBtn">再戰一場 →</button>
+  </div>
+</div>
+
+<script>
+/* ── Data ── */
+const MONSTERS = [
+  { name:'史萊姆', emoji:'🟢', hp:5,  xp:10  },
+  { name:'哥布林', emoji:'👺', hp:10, xp:25  },
+  { name:'惡龍',   emoji:'🐉', hp:20, xp:60  },
+  { name:'魔王',   emoji:'👹', hp:50, xp:180 },
+];
+
+/* Demo 句子 — 實際接入時換成書本內容 */
+const SENTENCES = [
+  '那一年，春天來得很早，桃花剛開了一半。',
+  '他推開門，風裏帶著一點海的味道。',
+  '一切的煩惱，都來自人際關係。',
+  '書桌上的茶涼了，故事才剛剛開始。',
+  '她說，慢慢來，比較快。',
+  '夜深了，城市的燈一盞一盞地熄滅。',
+  '勇氣不是不害怕，而是害怕著仍往前走。',
+  '雨停之後，街道亮得像一面鏡子。',
+  '所謂自由，就是被別人討厭的勇氣。',
+  '貓睡在窗台上，把下午睡成了黃昏。',
+  '重要的不是過去，而是你如何看待過去。',
+  '山的那邊還是山，但他還是想去看看。',
+  '人生不是與他人的比賽，只需走在自己的路上。',
+  '麵包的香氣從巷口飄來，像一句溫柔的問候。',
+  '改變的勇氣，往往藏在最平凡的一天裏。',
+  '火車穿過隧道，黑暗只是一瞬間的事。',
+  '能把平凡的日子過好，已經是了不起的本事。',
+  '他把書合上，世界卻沒有跟著合上。',
+  '星星不說話，但夜空因它們而不寂寞。',
+  '今天讀的每一句，都是明天的你。',
+];
+
+/* ── State ── */
+let cur = null;      /* current monster {idx,hp} */
+let sIdx = 0;        /* sentence index */
+let combo = 0;
+const stats = { sentences:0, kills:0, xp:0 };
+
+const $ = id => document.getElementById(id);
+
+/* ── Summon ── */
+document.querySelectorAll('.monster-card').forEach(card => {
+  card.addEventListener('click', () => startBattle(+card.dataset.i));
+});
+
+function startBattle(i) {
+  const m = MONSTERS[i];
+  cur = { idx:i, hp:m.hp };
+  combo = 0;
+  $('summon').style.display = 'none';
+  $('battle').style.display = 'block';
+  $('bossFace').textContent = m.emoji;
+  $('bossFace').classList.remove('dead');
+  $('bossName').textContent = m.name;
+  $('bossGoal').textContent = `今日目標 · ${m.hp} 句`;
+  renderHP();
+  nextSentence();
+}
+
+/* ── HP bar：黃 → 橙 → 紅，越打越危 ── */
+function renderHP() {
+  const m = MONSTERS[cur.idx];
+  const pct = cur.hp / m.hp * 100;
+  const fill = $('hpFill');
+  fill.style.width = pct + '%';
+  fill.style.backgroundColor = pct > 60 ? 'var(--color-yellow-500)'
+                            : pct > 25 ? 'var(--color-orange-400)'
+                            : 'var(--color-red-500)';
+  $('hpLabel').textContent = `HP ${cur.hp}/${m.hp}`;
+}
+
+function nextSentence() {
+  const box = $('sentence');
+  box.textContent = SENTENCES[sIdx % SENTENCES.length];
+  sIdx++;
+  box.classList.remove('swap');
+  void box.offsetWidth;
+  box.classList.add('swap');
+}
+
+/* ── Attack ── */
+$('attackBtn').addEventListener('click', () => {
+  if (!cur || cur.hp <= 0) return;
+  cur.hp--;
+  combo++;
+  stats.sentences++;
+  tick('statSentences', stats.sentences);
+
+  /* hit feedback */
+  const face = $('bossFace');
+  face.classList.remove('hit');
+  void face.offsetWidth;
+  face.classList.add('hit');
+
+  /* damage float */
+  const d = document.createElement('div');
+  d.className = 'dmg';
+  d.textContent = '-1';
+  d.style.left = (90 + Math.random()*60) + 'px';
+  d.style.top = '0px';
+  document.querySelector('.battle-info').appendChild(d);
+  setTimeout(() => d.remove(), 950);
+
+  /* combo */
+  if (combo >= 3) {
+    const c = $('combo');
+    c.textContent = combo + ' 連擊 🔥';
+    c.classList.remove('show'); void c.offsetWidth; c.classList.add('show');
+  }
+
+  renderHP();
+
+  if (cur.hp <= 0) { defeat(); }
+  else { nextSentence(); }
+});
+
+/* ── Victory ── */
+function defeat() {
+  const m = MONSTERS[cur.idx];
+  stats.kills++;
+  stats.xp += m.xp;
+  $('attackBtn').disabled = true;
+  $('bossFace').classList.add('dead');
+
+  setTimeout(() => {
+    tick('statKills', stats.kills);
+    tick('statXP', stats.xp);
+    $('victoryEmoji').textContent = '🏆';
+    $('victoryTitle').textContent = `${m.name}被擊敗！`;
+    $('victoryDesc').textContent = `${m.hp} 句閱讀攻擊，乾淨利落。`;
+    $('victoryXP').textContent = `⚡ +${m.xp} XP`;
+    $('victoryOverlay').classList.add('show');
+    confetti(m.hp >= 50 ? 160 : 90);
+  }, 800);
+}
+
+$('nextBtn').addEventListener('click', () => {
+  $('victoryOverlay').classList.remove('show');
+  $('attackBtn').disabled = false;
+  backToSummon();
+});
+
+$('retreatBtn').addEventListener('click', backToSummon);
+
+function backToSummon() {
+  cur = null;
+  $('battle').style.display = 'none';
+  $('summon').style.display = 'block';
+}
+
+/* ── Stat tick animation ── */
+function tick(id, val) {
+  const el = $(id);
+  el.textContent = val;
+  el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick');
+}
+
+/* ── Confetti ── */
+const COLORS = ['#6366f1','#818cf8','#22c55e','#fcd34d','#fb923c','#f87171','#60a5fa'];
+function confetti(n) {
+  const layer = $('fx-layer');
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random()*100 + 'vw';
+    c.style.background = COLORS[Math.floor(Math.random()*COLORS.length)];
+    c.style.animationDuration = (1.6 + Math.random()*1.6) + 's';
+    c.style.animationDelay = Math.random()*0.4 + 's';
+    c.style.borderRadius = Math.random() > .5 ? '50%' : '2px';
+    c.style.width = c.style.height = (6 + Math.random()*7) + 'px';
+    layer.appendChild(c);
+    setTimeout(() => c.remove(), 4000);
+  }
+}
+</script>
+</body>
+</html>

@@ -77,3 +77,41 @@ button:active:not(:disabled) {
     transform: none;
   }
 }
+
+/* ── 遊戲化動畫（墨水屏模式不渲染相關元件，這些 keyframes 不會影響 e-ink） ── */
+
+/* 勝利彩帶：由頂部飄落 + 旋轉 */
+@keyframes gamify-confetti-fall {
+  to {
+    transform: translateY(108vh) rotate(720deg);
+    opacity: 0.7;
+  }
+}
+
+/* 怪物中拳：左右震 + 短暫提亮 */
+@keyframes gamify-hud-shake {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-4px) rotate(-5deg); filter: brightness(1.4); }
+  55%  { transform: translateX(3px) rotate(4deg); }
+  100% { transform: translateX(0); }
+}
+
+/* -1 傷害飄字：上飄淡出 */
+@keyframes gamify-dmg-float {
+  0%   { opacity: 0; transform: translateY(2px) scale(0.7); }
+  20%  { opacity: 1; transform: translateY(-4px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-22px) scale(1); }
+}
+
+/* 勝利卡入場：Emil 原則 — 從 scale(0.9) 出現，不從 0 */
+@keyframes gamify-victory-pop {
+  0%   { opacity: 0; transform: scale(0.9); }
+  60%  { transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="gamify-"] {
+    animation: none !important;
+  }
+}

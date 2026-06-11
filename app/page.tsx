@@ -16,6 +16,7 @@ import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
 import FeedPanel from './components/FeedPanel'
+import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData } from './utils/storage'
@@ -590,6 +591,9 @@ export default function Home() {
 
           {/* 30天閱讀趨勢圖（有資料時才顯示） */}
           <ReadingTrend />
+
+          {/* 閱讀冒險：等級 / XP / 連續打卡 / 怪物擊殺 */}
+          <GamifyBar />
 
           {/* 每日練習入口卡片 */}
           <div className="mb-6">
