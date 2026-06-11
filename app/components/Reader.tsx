@@ -2004,11 +2004,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
 
       {/* 🏆 勝利彈框：擊敗怪物後置中顯示（普通版有動畫 + 彩帶；墨水屏版黑框靜態） */}
+      {/* 必須喺框內作出選擇：背景冇 onClick，唔揀唔會關 */}
       {goalCompleted && victory && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(17,24,39,0.55)' }}
-          onClick={() => setVictory(null)}
         >
           <div
             className="w-full max-w-sm text-center"
