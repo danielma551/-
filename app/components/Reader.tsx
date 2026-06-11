@@ -275,11 +275,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         gamifyStorage.addXP(monster.xp)
         gamifyStorage.recordKill(monster.id)
         // 戰果任何模式都顯示（墨水屏用靜態無動畫版本）；彩帶只在非墨水屏模式
+        // 唔再自動返回書架：由用戶喺勝利卡自己揀「再戰一場」或「返回書架」
         setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, streak: getStreak() })
         if (!einkMode) fireConfetti(120)
-        setTimeout(() => {
-          onReset()
-        }, 4500)
       }
     }
   }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset, einkMode])
@@ -813,6 +811,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 兩條條：前半 / 後半循環，永遠從 0 填到 maxFill
   const bar1Width = Math.min(posInCycle / HALF_CYCLE, 1) * maxFill * 100
   const bar2Width = Math.max((posInCycle - HALF_CYCLE) / (cycleSize - HALF_CYCLE), 0) * maxFill * 100
+
+  // 再戰一場：由當前句開始新一場戰鬥（同一目標、同一隻怪）
+  // 書剩低句數唔夠一場先唔顯示「再戰」掣
+  const canRematch = readingGoal > 0 && (sentences.length - 1 - currentIndex) >= readingGoal
+  const continueBattle = () => {
+    setStartIndex(currentIndex)
+    setGoalCompleted(false)
+    setVictory(null)
+    passedCheckpoints.current = new Set()
+  }
 
   // ── ④ 合併單條：一條 bar 顯示成個循環（非墨水屏用；墨水屏保留原雙條） ──
   const mergedBarWidth = (cycleSize > 0 ? posInCycle / cycleSize : 0) * maxFill * 100
@@ -1787,7 +1795,21 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <p className="font-medium" style={{ color: '#166534' }}>
                   {victory ? `${victory.emoji} ${victory.name}被擊敗！⚡ +${victory.xp} XP` : '🎉 恭喜！您已完成今天的閱讀目標'}
                 </p>
-                <p className="text-sm mt-1" style={{ color: '#16a34a' }}>{victory ? '即將返回書架...' : '3秒後自動返回首頁...'}</p>
+                {/* 紙本模式選擇掣 */}
+                <div className="mt-3 flex items-center justify-center gap-3 flex-wrap">
+                  {canRematch && (
+                    <button
+                      onClick={continueBattle}
+                      className="px-5 py-2 rounded-lg text-sm font-semibold shadow"
+                      style={{ background: '#a16207', color: '#fff' }}
+                    >⚔️ 再戰一場</button>
+                  )}
+                  <button
+                    onClick={onReset}
+                    className="px-5 py-2 rounded-lg text-sm"
+                    style={{ background: '#fffef8', border: '1px solid #ebe2cd', color: '#3a342b' }}
+                  >返回書架</button>
+                </div>
               </div>
             )}
             {articleCompleted && (
@@ -2024,7 +2046,19 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#000', marginTop: 6 }}>
                   ⚡ +{victory.xp} XP{victory.streak > 1 ? ` ・ 🔥 連續 ${victory.streak} 天` : ''}
                 </p>
-                <p style={{ fontSize: 12, color: '#555', marginTop: 8 }}>即將返回書架...</p>
+                {/* 墨水屏版選擇掣：黑白高對比、無動畫 */}
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 14 }}>
+                  {canRematch && (
+                    <button
+                      onClick={continueBattle}
+                      style={{ border: '2px solid #000', background: '#000', color: '#fff', padding: '8px 18px', fontSize: 14, fontWeight: 700, borderRadius: 4 }}
+                    >⚔️ 再戰一場</button>
+                  )}
+                  <button
+                    onClick={onReset}
+                    style={{ border: '2px solid #000', background: '#fff', color: '#000', padding: '8px 18px', fontSize: 14, fontWeight: 700, borderRadius: 4 }}
+                  >返回書架</button>
+                </div>
               </div>
             ) : victory ? (
               /* ⚔️ 勝利卡：擊敗怪物 + XP +連續打卡（彩帶版） */
@@ -2040,13 +2074,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     <span className="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-500 text-sm font-bold rounded-full">🔥 連續 {victory.streak} 天</span>
                   )}
                 </div>
-                <p className="text-green-600 text-sm mt-3">即將返回書架...</p>
+                {/* 由用戶話事：再戰 or 收工 */}
+                <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+                  {canRematch && (
+                    <button
+                      onClick={continueBattle}
+                      className="px-5 py-2.5 bg-indigo-600 text-white rounded-full text-sm font-semibold hover:bg-indigo-700 transition-colors shadow"
+                    >⚔️ 再戰一場</button>
+                  )}
+                  <button
+                    onClick={onReset}
+                    className="px-5 py-2.5 bg-white text-gray-600 border border-gray-200 rounded-full text-sm font-medium hover:bg-gray-50 transition-colors"
+                  >返回書架</button>
+                </div>
               </div>
             ) : (
               /* 後備：無戰果資料時的原有完成畫面 */
               <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
                 <p className="text-green-800 font-medium">🎉 恭喜！您已完成今天的閱讀目標</p>
-                <p className="text-green-600 text-sm mt-1">即將返回書架...</p>
+                <button
+                  onClick={onReset}
+                  className="mt-3 px-5 py-2 bg-green-500 text-white rounded-full text-sm font-medium hover:bg-green-600 transition-colors"
+                >返回書架</button>
               </div>
             ))}
             {articleCompleted && (
