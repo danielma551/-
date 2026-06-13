@@ -68,7 +68,8 @@ const GAMIFY_STORAGE_KEY = 'reading-gamify'
 
 export interface GamifyData {
   xp: number
-  kills: Record<string, number>   // monsterId → 擊殺次數
+  kills: Record<string, number>   // monsterId → 擊殺次數（累計）
+  todayKills?: { date: string; count: number }  // 今日擊殺：日期 + 次數
 }
 
 const EMPTY: GamifyData = { xp: 0, kills: {} }
@@ -101,7 +102,20 @@ export const gamifyStorage = {
   recordKill(monsterId: string): void {
     const data = gamifyStorage.get()
     data.kills[monsterId] = (data.kills[monsterId] ?? 0) + 1
+    // 同步更新今日擊殺
+    const today = new Date().toLocaleDateString('en-CA')
+    if (data.todayKills?.date === today) {
+      data.todayKills.count += 1
+    } else {
+      data.todayKills = { date: today, count: 1 }
+    }
     gamifyStorage.save(data)
+  },
+
+  getTodayKills(): number {
+    const data = gamifyStorage.get()
+    const today = new Date().toLocaleDateString('en-CA')
+    return data.todayKills?.date === today ? data.todayKills.count : 0
   },
 
   totalKills(): number {

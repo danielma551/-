@@ -24,7 +24,7 @@ import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
-import { monsterForGoal, gamifyStorage, fireConfetti, getStreak } from '../utils/gamify'
+import { monsterForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP } from '../utils/gamify'
 
 interface ReaderProps {
   sentences: string[]
@@ -42,7 +42,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
   // 遊戲化勝利資訊：只在非墨水屏模式設定（墨水屏保持原有完成畫面）
-  const [victory, setVictory] = useState<{ emoji: string; name: string; xp: number; streak: number } | null>(null)
+  const [victory, setVictory] = useState<{ emoji: string; name: string; xp: number; streak: number; todayKills: number; totalXP: number } | null>(null)
   const [articleCompleted, setArticleCompleted] = useState(false)
   const [fontFamily, setFontFamily] = useState('system-ui, -apple-system, sans-serif')
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
@@ -276,7 +276,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         gamifyStorage.recordKill(monster.id)
         // 戰果任何模式都顯示（墨水屏用靜態無動畫版本）；彩帶只在非墨水屏模式
         // 唔再自動返回書架：由用戶喺勝利卡自己揀「再戰一場」或「返回書架」
-        setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, streak: getStreak() })
+        const totalXP = gamifyStorage.get().xp
+        setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, streak: getStreak(), todayKills: gamifyStorage.getTodayKills(), totalXP })
         if (!einkMode) fireConfetti(120)
       }
     }
@@ -2021,22 +2022,74 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             }}
             onClick={e => e.stopPropagation()}
           >
+            {/* 怪物 emoji + 名稱 */}
             <p style={{ fontSize: isEink ? 40 : 52, lineHeight: 1, margin: 0 }}>{victory.emoji}</p>
             <p style={{ fontSize: isEink ? 20 : 22, fontWeight: 700, color: isEink ? '#000' : '#1f2937', marginTop: 12 }}>
               {victory.name}被擊敗！
             </p>
+
             {isEink ? (
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#000', marginTop: 8 }}>
-                ⚡ +{victory.xp} XP{victory.streak > 1 ? ` ・ 🔥 連續 ${victory.streak} 天` : ''}
-              </p>
+              /* ── 墨水屏：靜態純文字版 ── */
+              <>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#000', marginTop: 8 }}>
+                  ⚡ +{victory.xp} XP{victory.streak > 1 ? ` ・ 🔥 連續 ${victory.streak} 天` : ''}
+                </p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#000', marginTop: 6 }}>
+                  🗡️ 今日擊殺 {victory.todayKills} 隻怪獸
+                </p>
+                <p style={{ fontSize: 12, color: '#333', marginTop: 4 }}>
+                  {(() => {
+                    const lv = levelForXP(victory.totalXP)
+                    return `Lv.${lv.level} ${lv.title} ・ ${lv.xpInLevel}/${lv.xpNeeded} XP`
+                  })()}
+                </p>
+              </>
             ) : (
-              <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-                <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 text-sm font-bold rounded-full">⚡ +{victory.xp} XP</span>
-                {victory.streak > 1 && (
-                  <span className="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-500 text-sm font-bold rounded-full">🔥 連續 {victory.streak} 天</span>
-                )}
-              </div>
+              /* ── 普通模式：視覺化版 ── */
+              <>
+                {/* XP + 連打卡 chips */}
+                <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+                  <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 text-sm font-bold rounded-full">⚡ +{victory.xp} XP</span>
+                  {victory.streak > 1 && (
+                    <span className="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-500 text-sm font-bold rounded-full">🔥 連續 {victory.streak} 天</span>
+                  )}
+                  <span className="px-3 py-1 bg-rose-50 border border-rose-100 text-rose-500 text-sm font-bold rounded-full">🗡️ 今日 {victory.todayKills} 殺</span>
+                </div>
+
+                {/* XP 升級進度條 */}
+                {(() => {
+                  const lv = levelForXP(victory.totalXP)
+                  const pct = Math.round(lv.progress * 100)
+                  return (
+                    <div style={{ marginTop: 16, padding: '12px 14px', background: '#f5f3ff', borderRadius: 12 }}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#6366f1' }}>Lv.{lv.level} {lv.title}</span>
+                        <span style={{ fontSize: 11, color: '#8b5cf6' }}>{lv.xpInLevel} / {lv.xpNeeded} XP</span>
+                      </div>
+                      <div style={{ height: 8, background: '#ddd6fe', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#6366f1,#8b5cf6)', borderRadius: 99, transition: 'width 600ms cubic-bezier(0.23,1,0.32,1)' }} />
+                      </div>
+                      <p style={{ fontSize: 11, color: '#7c3aed', marginTop: 4, textAlign: 'right' }}>還差 {lv.xpNeeded - lv.xpInLevel} XP 升級 →</p>
+                    </div>
+                  )
+                })()}
+
+                {/* 動態鼓勵語句 */}
+                <p style={{ fontSize: 13, color: '#6b7280', marginTop: 12, lineHeight: 1.5 }}>
+                  {(() => {
+                    const k = victory.todayKills, s = victory.streak
+                    if (k >= 5) return '🏆 今天戰力全開！你是真正的書海勇者！'
+                    if (k >= 3) return '⚔️ 三連殺！今天的你勢不可擋！'
+                    if (k === 2) return '💪 再下一城！今日已擊敗兩隻怪獸！'
+                    if (s >= 7) return '👑 連續一週！你的堅持令人敬佩！'
+                    if (s >= 3) return `🔥 已連續 ${s} 天！繼續保持勢頭！`
+                    if (s === 1 && k === 1) return '🌱 旅途開始！每一句都是進步！'
+                    return '✨ 今天又打了一場好仗，明天繼續！'
+                  })()}
+                </p>
+              </>
             )}
+
             <div className="flex items-center justify-center gap-3 flex-wrap" style={{ marginTop: 20 }}>
               {canRematch && (
                 <button
