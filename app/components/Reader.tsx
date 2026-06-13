@@ -612,8 +612,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           }
         }
       }
-      // 💎 幸運加成：~6% 機率，非墨水屏、非已完成目標
-      if (!einkMode && !goalCompleted && Math.random() < 0.06) {
+      // 💎 幸運加成：~6% 機率，非已完成目標（墨水屏有靜態版）
+      if (!goalCompleted && Math.random() < 0.06) {
         const bonusAmounts = [10, 20, 30, 50]
         const bonus = bonusAmounts[Math.floor(Math.random() * bonusAmounts.length)]
         const type = LUCKY_TYPES[Math.floor(Math.random() * LUCKY_TYPES.length)]
@@ -1490,6 +1490,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {cpToast}
         </div>
       </div>
+
+      {/* 💎 幸運加成：墨水屏靜態版（黑框、無動畫） */}
+      {isEink && luckyReward && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-start justify-center" style={{ paddingTop: '22vh' }}>
+          <div style={{ background: '#fff', border: '3px solid #000', padding: '20px 40px', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, lineHeight: 1 }}>{luckyReward.emoji}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#000', marginTop: 8 }}>{luckyReward.label}</div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: '#000', marginTop: 4 }}>+{luckyReward.xp} XP</div>
+          </div>
+        </div>
+      )}
 
       {/* 💎 幸運加成：炫目爆裂卡片（非墨水屏） */}
       {!isEink && luckyReward && (
