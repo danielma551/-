@@ -133,7 +133,8 @@ const LEVELS: { need: number; title: string }[] = [
   { need: 900,  title: '閱讀宗師' },
   { need: 1500, title: '傳說書蟲' },
 ]
-const BEYOND_STEP = 800   // 滿級後每 800 XP 再升一級
+const BEYOND_BASE = 800   // 6→7 級需要 800 XP
+const BEYOND_INC  = 150   // 每級再多 150 XP（7→8 需 950，8→9 需 1100，以此類推）
 
 export interface LevelInfo {
   level: number          // 1-based
@@ -148,16 +149,26 @@ export function levelForXP(xp: number): LevelInfo {
   for (let i = LEVELS.length - 1; i >= 0; i--) {
     if (xp >= LEVELS[i].need) { idx = i; break }
   }
-  // 滿級之後：無限延伸
+  // 滿級之後：無限延伸，每級所需 XP = BEYOND_BASE + beyond * BEYOND_INC
   if (idx === LEVELS.length - 1) {
-    const beyond = Math.floor((xp - LEVELS[idx].need) / BEYOND_STEP)
-    const base = LEVELS[idx].need + beyond * BEYOND_STEP
+    const baseXP = LEVELS[idx].need
+    const xpBeyond = xp - baseXP
+    let beyond = 0
+    let accumulated = 0
+    // 逐級累加，找出目前身處哪一個 beyond 級
+    while (true) {
+      const step = BEYOND_BASE + beyond * BEYOND_INC
+      if (accumulated + step > xpBeyond) break
+      accumulated += step
+      beyond++
+    }
+    const xpNeeded = BEYOND_BASE + beyond * BEYOND_INC
     return {
       level: LEVELS.length + beyond,
       title: LEVELS[idx].title,
-      xpInLevel: xp - base,
-      xpNeeded: BEYOND_STEP,
-      progress: (xp - base) / BEYOND_STEP,
+      xpInLevel: xpBeyond - accumulated,
+      xpNeeded,
+      progress: (xpBeyond - accumulated) / xpNeeded,
     }
   }
   const cur = LEVELS[idx], next = LEVELS[idx + 1]
