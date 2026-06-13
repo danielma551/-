@@ -139,6 +139,35 @@ button:active:not(:disabled) {
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
+/* 💎 幸運加成卡：爆裂入場 */
+@keyframes gamify-lucky-burst {
+  0%   { opacity: 0; transform: scale(0.3) rotate(-15deg); }
+  55%  { transform: scale(1.12) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+/* 💎 gem 彈跳旋轉 */
+@keyframes gamify-lucky-gem {
+  0%   { transform: scale(1) rotate(0); }
+  30%  { transform: scale(1.2) rotate(-12deg); }
+  60%  { transform: scale(1.05) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+/* 💎 XP 數字淡入上升 */
+@keyframes gamify-lucky-xp {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+/* 💎 星火四濺 */
+@keyframes gamify-lucky-spark {
+  0%   { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--spark-dx), var(--spark-dy)) scale(0.3); }
+}
+/* 💎 淡出收縮 */
+@keyframes gamify-lucky-out {
+  0%   { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.85) translateY(-20px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [style*="gamify-"] {
     animation: none !important;

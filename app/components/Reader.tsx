@@ -37,14 +37,33 @@ interface ReaderProps {
   onOpenBook?: (book: BookData, sentenceIndex: number) => void
 }
 
+// 💎 幸運加成：星火位置 + 獎勵類型
+const LUCKY_SPARKS = [
+  { dx: '-55px', dy: '-45px', color: '#fcd34d' },
+  { dx: '50px',  dy: '-55px', color: '#fb923c' },
+  { dx: '62px',  dy: '20px',  color: '#fbbf24' },
+  { dx: '40px',  dy: '56px',  color: '#f87171' },
+  { dx: '-50px', dy: '50px',  color: '#a78bfa' },
+  { dx: '-65px', dy: '10px',  color: '#60a5fa' },
+  { dx: '-20px', dy: '-62px', color: '#4ade80' },
+  { dx: '22px',  dy: '-62px', color: '#fcd34d' },
+]
+const LUCKY_TYPES = [
+  { emoji: '💎', label: '幸運降臨！', color: '#f59e0b', shadow: 'rgba(245,158,11,0.35)' },
+  { emoji: '⚡', label: '閃電暴擊！', color: '#6366f1', shadow: 'rgba(99,102,241,0.35)' },
+  { emoji: '🍀', label: '幸運草！',   color: '#22c55e', shadow: 'rgba(34,197,94,0.35)'  },
+  { emoji: '⭐', label: '流星！',     color: '#f472b6', shadow: 'rgba(244,114,182,0.35)' },
+]
+
 export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
   // 遊戲化勝利資訊：只在非墨水屏模式設定（墨水屏保持原有完成畫面）
   const [victory, setVictory] = useState<{ emoji: string; name: string; xp: number; earnedXP: number; multiplier: number; streak: number; todayKills: number; totalXP: number } | null>(null)
-  // 💎 幸運加成：隨機觸發，顯示浮動 toast
-  const [luckyBonus, setLuckyBonus] = useState<number | null>(null)
+  // 💎 幸運加成：隨機觸發，顯示炫目卡片
+  const [luckyReward, setLuckyReward] = useState<{ xp: number; emoji: string; label: string; color: string; shadow: string } | null>(null)
+  const [luckyFading, setLuckyFading] = useState(false)
   const luckyBonusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 📅 每日挑戰：初次從 localStorage 載入
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null)
@@ -597,10 +616,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (!einkMode && !goalCompleted && Math.random() < 0.06) {
         const bonusAmounts = [10, 20, 30, 50]
         const bonus = bonusAmounts[Math.floor(Math.random() * bonusAmounts.length)]
+        const type = LUCKY_TYPES[Math.floor(Math.random() * LUCKY_TYPES.length)]
         gamifyStorage.addXP(bonus)
-        setLuckyBonus(bonus)
+        setLuckyFading(false)
+        setLuckyReward({ xp: bonus, ...type })
         if (luckyBonusTimer.current) clearTimeout(luckyBonusTimer.current)
-        luckyBonusTimer.current = setTimeout(() => setLuckyBonus(null), 2500)
+        luckyBonusTimer.current = setTimeout(() => {
+          setLuckyFading(true)
+          setTimeout(() => { setLuckyReward(null); setLuckyFading(false) }, 420)
+        }, 2100)
       }
       triggerFade(() => setCurrentIndex(next))
     }
@@ -1467,14 +1491,39 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </div>
 
-      {/* 💎 幸運加成浮動 toast（非墨水屏） */}
-      {!isEink && luckyBonus && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{ top: 88, left: '50%', transform: 'translateX(-50%)', animation: 'gamify-victory-pop 300ms both' }}
-        >
-          <div style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', color: '#fff', borderRadius: 99, padding: '8px 22px', fontWeight: 700, fontSize: 15, boxShadow: '0 4px 20px rgba(251,191,36,0.45)', whiteSpace: 'nowrap' }}>
-            💎 幸運加成！+{luckyBonus} XP
+      {/* 💎 幸運加成：炫目爆裂卡片（非墨水屏） */}
+      {!isEink && luckyReward && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-start justify-center" style={{ paddingTop: '18vh' }}>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            {/* 星火四濺 */}
+            {LUCKY_SPARKS.map((s, i) => (
+              <div key={i} style={{
+                position: 'absolute', width: 10, height: 10, borderRadius: '50%',
+                background: s.color, top: '50%', left: '50%', marginTop: -5, marginLeft: -5,
+                animation: 'gamify-lucky-spark 600ms ease 150ms both',
+                ['--spark-dx' as string]: s.dx,
+                ['--spark-dy' as string]: s.dy,
+              }} />
+            ))}
+            {/* 主卡片 */}
+            <div style={{
+              background: luckyReward.color,
+              borderRadius: 20, padding: '24px 48px', textAlign: 'center',
+              boxShadow: `0 0 0 6px ${luckyReward.shadow.replace('0.35','0.2')}, 0 24px 60px ${luckyReward.shadow}`,
+              animation: luckyFading
+                ? 'gamify-lucky-out 420ms ease forwards'
+                : 'gamify-lucky-burst 420ms cubic-bezier(0.34,1.56,0.64,1) both',
+            }}>
+              <div style={{ fontSize: 52, lineHeight: 1, display: 'inline-block', animation: 'gamify-lucky-gem 500ms cubic-bezier(0.34,1.56,0.64,1) 200ms both' }}>
+                {luckyReward.emoji}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.88)', fontWeight: 600, marginTop: 8, letterSpacing: '0.5px' }}>
+                {luckyReward.label}
+              </div>
+              <div style={{ fontSize: 38, fontWeight: 900, color: '#fff', marginTop: 4, textShadow: '0 2px 8px rgba(0,0,0,0.18)', animation: 'gamify-lucky-xp 350ms ease 300ms both' }}>
+                +{luckyReward.xp} XP
+              </div>
+            </div>
           </div>
         </div>
       )}
