@@ -24,7 +24,7 @@ import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
-import { monsterForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP } from '../utils/gamify'
+import { monsterForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 interface ReaderProps {
   sentences: string[]
@@ -42,7 +42,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
   // 遊戲化勝利資訊：只在非墨水屏模式設定（墨水屏保持原有完成畫面）
-  const [victory, setVictory] = useState<{ emoji: string; name: string; xp: number; streak: number; todayKills: number; totalXP: number } | null>(null)
+  const [victory, setVictory] = useState<{ emoji: string; name: string; xp: number; earnedXP: number; multiplier: number; streak: number; todayKills: number; totalXP: number } | null>(null)
+  // 💎 幸運加成：隨機觸發，顯示浮動 toast
+  const [luckyBonus, setLuckyBonus] = useState<number | null>(null)
+  const luckyBonusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 📅 每日挑戰：初次從 localStorage 載入
+  const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null)
+  const [challengeDone, setChallengeDone] = useState(false)  // 本 session 剛完成 → 顯示慶祝
+  const challengeDoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [articleCompleted, setArticleCompleted] = useState(false)
   const [fontFamily, setFontFamily] = useState('system-ui, -apple-system, sans-serif')
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
@@ -260,9 +267,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     
     const savedShortcuts = shortcutsStorage.getShortcuts()
     setShortcuts(savedShortcuts)
-    
+
     const savedDisplaySettings = displayStorage.getSettings()
     setDisplaySettings(savedDisplaySettings)
+
+    // 載入每日挑戰
+    setDailyChallenge(getDailyChallenge())
   }, [])
 
   useEffect(() => {
@@ -270,14 +280,24 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       const sentencesRead = currentIndex - startIndex + 1
       if (sentencesRead >= readingGoal && !goalCompleted) {
         setGoalCompleted(true)
-        // 遊戲化：擊敗怪物 → 記錄 XP + 擊殺（數據任何模式都記錄）
+        // 遊戲化：擊敗怪物 → 記錄 XP（加連打卡倍數）+ 擊殺
         const monster = monsterForGoal(readingGoal)
-        gamifyStorage.addXP(monster.xp)
+        const streak = getStreak()
+        const multiplier = getStreakMultiplier(streak)
+        const earnedXP = Math.round(monster.xp * multiplier)
+        gamifyStorage.addXP(earnedXP)
         gamifyStorage.recordKill(monster.id)
+        // 每日挑戰：更新「擊殺怪獸」進度
+        const updatedCh = updateDailyChallenge('kill_monsters', 1)
+        setDailyChallenge({ ...updatedCh })
+        if (updatedCh.completed && !dailyChallenge?.completed) {
+          setChallengeDone(true)
+          if (challengeDoneTimer.current) clearTimeout(challengeDoneTimer.current)
+          challengeDoneTimer.current = setTimeout(() => setChallengeDone(false), 4000)
+        }
         // 戰果任何模式都顯示（墨水屏用靜態無動畫版本）；彩帶只在非墨水屏模式
-        // 唔再自動返回書架：由用戶喺勝利卡自己揀「再戰一場」或「返回書架」
         const totalXP = gamifyStorage.get().xp
-        setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, streak: getStreak(), todayKills: gamifyStorage.getTodayKills(), totalXP })
+        setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, earnedXP, multiplier, streak, todayKills: gamifyStorage.getTodayKills(), totalXP })
         if (!einkMode) fireConfetti(120)
       }
     }
@@ -561,6 +581,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (next !== -1) {
       vibrate(displaySettings.vibrationIntensity)
       historyStorage.recordRead(1)
+      // 📅 每日挑戰：讀句進度
+      if (!einkMode) {
+        const ch = updateDailyChallenge('read_sentences', 1)
+        if (ch.type === 'read_sentences') {
+          setDailyChallenge({ ...ch })
+          if (ch.completed && !dailyChallenge?.completed) {
+            setChallengeDone(true)
+            if (challengeDoneTimer.current) clearTimeout(challengeDoneTimer.current)
+            challengeDoneTimer.current = setTimeout(() => setChallengeDone(false), 4000)
+          }
+        }
+      }
+      // 💎 幸運加成：~6% 機率，非墨水屏、非已完成目標
+      if (!einkMode && !goalCompleted && Math.random() < 0.06) {
+        const bonusAmounts = [10, 20, 30, 50]
+        const bonus = bonusAmounts[Math.floor(Math.random() * bonusAmounts.length)]
+        gamifyStorage.addXP(bonus)
+        setLuckyBonus(bonus)
+        if (luckyBonusTimer.current) clearTimeout(luckyBonusTimer.current)
+        luckyBonusTimer.current = setTimeout(() => setLuckyBonus(null), 2500)
+      }
       triggerFade(() => setCurrentIndex(next))
     }
   }
@@ -1291,6 +1332,30 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
             />
           </div>
+
+          {/* 📅 每日挑戰進度條（普通模式，不在墨水屏顯示） */}
+          {dailyChallenge && !dailyChallenge.completed && (
+            <div className="flex items-center gap-2 mt-2 px-0.5">
+              <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                🎯 {dailyChallenge.type === 'kill_monsters'
+                  ? `今日挑戰：擊敗 ${dailyChallenge.target} 隻怪獸`
+                  : `今日挑戰：閱讀 ${dailyChallenge.target} 句`}
+              </span>
+              <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb', minWidth: 40 }}>
+                <div
+                  style={{ height: '100%', width: `${Math.min((dailyChallenge.progress / dailyChallenge.target) * 100, 100)}%`, background: 'linear-gradient(90deg,#6366f1,#8b5cf6)', borderRadius: 99, transition: 'width 350ms var(--ease-out)' }}
+                />
+              </div>
+              <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {dailyChallenge.progress}/{dailyChallenge.target}
+              </span>
+            </div>
+          )}
+          {dailyChallenge?.completed && (
+            <div className="flex items-center gap-1 mt-2 px-0.5">
+              <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 700 }}>✅ 今日挑戰已完成！+{dailyChallenge.bonusXP} XP</span>
+            </div>
+          )}
           </>
           ) : (
           /* ── 墨水屏：④合併循環條 + ①②戰鬥征途 + ⑤今日疆土（靜態高對比版，無動畫無轉場） ── */
@@ -1401,6 +1466,30 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {cpToast}
         </div>
       </div>
+
+      {/* 💎 幸運加成浮動 toast（非墨水屏） */}
+      {!isEink && luckyBonus && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ top: 88, left: '50%', transform: 'translateX(-50%)', animation: 'gamify-victory-pop 300ms both' }}
+        >
+          <div style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', color: '#fff', borderRadius: 99, padding: '8px 22px', fontWeight: 700, fontSize: 15, boxShadow: '0 4px 20px rgba(251,191,36,0.45)', whiteSpace: 'nowrap' }}>
+            💎 幸運加成！+{luckyBonus} XP
+          </div>
+        </div>
+      )}
+
+      {/* 📅 每日挑戰完成慶祝 toast（非墨水屏） */}
+      {!isEink && challengeDone && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ top: 88, left: '50%', transform: 'translateX(-50%)', animation: 'gamify-victory-pop 300ms both' }}
+        >
+          <div style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', borderRadius: 99, padding: '8px 22px', fontWeight: 700, fontSize: 15, boxShadow: '0 4px 20px rgba(99,102,241,0.45)', whiteSpace: 'nowrap' }}>
+            🎯 每日挑戰完成！+{dailyChallenge?.bonusXP ?? 0} XP 獎勵！
+          </div>
+        </div>
+      )}
 
       {/* 🌿 Flomo 浮動按鈕組（右下角，拇指易按，e-ink 和普通模式都有） */}
       <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2">
@@ -2032,7 +2121,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               /* ── 墨水屏：靜態純文字版 ── */
               <>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#000', marginTop: 8 }}>
-                  ⚡ +{victory.xp} XP{victory.streak > 1 ? ` ・ 🔥 連續 ${victory.streak} 天` : ''}
+                  ⚡ +{victory.earnedXP} XP{victory.multiplier > 1 ? ` ×${victory.multiplier}` : ''}{victory.streak > 1 ? ` ・ 🔥 連續 ${victory.streak} 天` : ''}
                 </p>
                 <p style={{ fontSize: 13, fontWeight: 600, color: '#000', marginTop: 6 }}>
                   🗡️ 今日擊殺 {victory.todayKills} 隻怪獸
@@ -2049,7 +2138,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <>
                 {/* XP + 連打卡 chips */}
                 <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 text-sm font-bold rounded-full">⚡ +{victory.xp} XP</span>
+                  <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 text-sm font-bold rounded-full">
+                    ⚡ +{victory.earnedXP} XP
+                    {victory.multiplier > 1 && <span className="ml-1 text-xs opacity-70">({victory.xp}×{victory.multiplier})</span>}
+                  </span>
                   {victory.streak > 1 && (
                     <span className="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-500 text-sm font-bold rounded-full">🔥 連續 {victory.streak} 天</span>
                   )}

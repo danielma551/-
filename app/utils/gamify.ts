@@ -197,6 +197,82 @@ export function getStreak(): number {
   return streak
 }
 
+// ── 連打卡 XP 倍數：連續天數越多，每次勝利 XP 越多 ──
+export function getStreakMultiplier(streak: number): number {
+  if (streak >= 30) return 2.5
+  if (streak >= 14) return 2.0
+  if (streak >= 7)  return 1.5
+  if (streak >= 3)  return 1.2
+  return 1.0
+}
+
+// ── 每日挑戰：由日期決定當天任務，進度跨 session 保存 ──
+export type ChallengeType = 'kill_monsters' | 'read_sentences'
+export interface DailyChallenge {
+  date: string
+  type: ChallengeType
+  target: number
+  progress: number
+  completed: boolean
+  bonusXP: number
+}
+
+const DAILY_CHALLENGE_KEY = 'reading-daily-challenge'
+
+// 以日期為種子的確定性隨機數，確保同一天的挑戰一樣
+function seededRand(seed: number): number {
+  const x = Math.sin(seed + 1) * 10000
+  return x - Math.floor(x)
+}
+
+function generateChallenge(date: string): DailyChallenge {
+  const seed = date.split('-').reduce((a, b) => a + parseInt(b), 0)
+  const r1 = seededRand(seed)
+  const r2 = seededRand(seed + 3)
+  const type: ChallengeType = r1 > 0.5 ? 'kill_monsters' : 'read_sentences'
+  let target: number, bonusXP: number
+  if (type === 'kill_monsters') {
+    target = Math.floor(r2 * 3) + 1          // 1–3 隻
+    bonusXP = target * 60
+  } else {
+    target = (Math.floor(r2 * 4) + 1) * 20  // 20 / 40 / 60 / 80 句
+    bonusXP = Math.round(target * 1.5)
+  }
+  return { date, type, target, progress: 0, completed: false, bonusXP }
+}
+
+export function getDailyChallenge(): DailyChallenge {
+  if (typeof window === 'undefined') {
+    return generateChallenge(new Date().toLocaleDateString('en-CA'))
+  }
+  try {
+    const raw = localStorage.getItem(DAILY_CHALLENGE_KEY)
+    if (raw) {
+      const saved = JSON.parse(raw) as DailyChallenge
+      const today = new Date().toLocaleDateString('en-CA')
+      if (saved.date === today) return saved
+    }
+  } catch {}
+  const today = new Date().toLocaleDateString('en-CA')
+  const ch = generateChallenge(today)
+  try { localStorage.setItem(DAILY_CHALLENGE_KEY, JSON.stringify(ch)) } catch {}
+  return ch
+}
+
+// 更新挑戰進度（讀句 / 擊殺）；完成時自動加 bonusXP；回傳最新挑戰
+export function updateDailyChallenge(type: ChallengeType, amount: number): DailyChallenge {
+  if (typeof window === 'undefined') return getDailyChallenge()
+  const ch = getDailyChallenge()
+  if (ch.completed || ch.type !== type) return ch
+  ch.progress = Math.min(ch.target, ch.progress + amount)
+  if (ch.progress >= ch.target && !ch.completed) {
+    ch.completed = true
+    gamifyStorage.addXP(ch.bonusXP)
+  }
+  try { localStorage.setItem(DAILY_CHALLENGE_KEY, JSON.stringify(ch)) } catch {}
+  return ch
+}
+
 // ── 勝利彩帶：純 DOM，自動清理，不依賴任何函式庫 ──
 // 只應在非墨水屏模式呼叫（呼叫端把關）
 const CONFETTI_COLORS = ['#6366f1', '#818cf8', '#22c55e', '#fcd34d', '#fb923c', '#f87171', '#60a5fa']
