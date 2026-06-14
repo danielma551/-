@@ -2071,7 +2071,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       }}
                     >關閉</button>
                   </div>
-                  {/* 注釋內容：顯示拼合後的完整句 */}
+                  {/* 注釋內容 */}
                   <div className="space-y-3">
                     {/* 完整句（前後拼合） */}
                     <p style={{
@@ -2081,13 +2081,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       fontFamily: textFontFamily,
                       margin: 0,
                     }}>{annotationBlock.fullSentence}</p>
-                    {/* 若有注圖，小圖顯示在下方供參考 */}
-                    {annotationBlock.annotationImage && (
+                    {/* 腳注文字（epub alt text）或備用注圖 */}
+                    {annotationBlock.annotationImage?.startsWith('data:image/annotation;') ? (
+                      <div style={{
+                        marginTop: 10,
+                        padding: '10px 14px',
+                        background: isEink ? '#f0f0f0' : '#f0fdf4',
+                        borderRadius: 8,
+                        borderLeft: `3px solid ${isEink ? '#000' : '#22c55e'}`,
+                        fontSize: isEink ? 18 : 14,
+                        color: isEink ? '#000' : '#166534',
+                        lineHeight: 1.7,
+                        fontFamily: textFontFamily,
+                      }}>
+                        <span style={{ fontSize: isEink ? 14 : 11, opacity: 0.6, display: 'block', marginBottom: 4 }}>📝 譯者注</span>
+                        {decodeURIComponent(annotationBlock.annotationImage.replace('data:image/annotation;charset=utf-8,', ''))}
+                      </div>
+                    ) : annotationBlock.annotationImage ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
                         <img src={annotationBlock.annotationImage} alt="注" style={{ height: 24, objectFit: 'contain' }} />
                         <span style={{ fontSize: 12, color: isEink ? '#555' : '#9ca3af' }}>原文含注釋標記</span>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>

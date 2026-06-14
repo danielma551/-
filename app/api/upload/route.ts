@@ -110,29 +110,27 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
 
     const newSentences = splitIntoSentences(cleanedText)
 
-    // ── 即將插入圖片：若最後一個新句無結尾標點（e.g. 「每周工钱一美元」），
-    //    視為前一句的延伸，合併進去而非獨立成句 ──
-    if (i < imgTags.length && newSentences.length > 0) {
+    // ── 即將插入圖片：若最後一個新句無結尾標點且足夠短（≤15字），
+    //    視為前句的尾巴，「只在本批內」合併（不跨越圖片邊界）──
+    if (i < imgTags.length && newSentences.length >= 2) {
       const last = newSentences[newSentences.length - 1]
       const hasPunct = /[.!?。！？;；,，:：]$/.test(last)
-      if (!hasPunct) {
-        const ti = lastTextIdx(items)
-        if (ti >= 0) {
-          items[ti] = items[ti].trimEnd() + last
-          items.push(...newSentences.slice(0, -1))
-        } else {
-          items.push(...newSentences)
-        }
-      } else {
-        items.push(...newSentences)
+      if (!hasPunct && last.length <= 15) {
+        newSentences[newSentences.length - 2] = newSentences[newSentences.length - 2].trimEnd() + last
+        newSentences.pop()
       }
-    } else {
-      items.push(...newSentences)
     }
+    items.push(...newSentences)
 
     if (i < imgTags.length) {
       const srcMatch = imgTags[i].match(/src=["']([^"']+)["']/i)
-      if (srcMatch) {
+      const altMatch = imgTags[i].match(/alt=["']([^"']*?)["']/i)
+      const altText = altMatch ? altMatch[1].trim() : ''
+      if (altText.length > 3) {
+        // 有意義的 alt 文字 = epub 腳注：改存注釋文字，不加載注圖
+        // 使用 data:image/annotation; 前綴，讓現有的 startsWith('data:image/') 檢查正常運作
+        items.push(`data:image/annotation;charset=utf-8,${encodeURIComponent(altText)}`)
+      } else if (srcMatch) {
         const dataUrl = await getImageBase64(epub, srcMatch[1])
         if (dataUrl) items.push(dataUrl)
       }
