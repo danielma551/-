@@ -17,17 +17,22 @@ function splitIntoSentences(text: string): string[] {
     .replace(/\n+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  if (!cleaned) return []
 
   const sentenceRegex = /[^.!?。！？;；,，:：]+[.!?。！？;；,，:：]+/g
-  const sentences = cleaned.match(sentenceRegex) || []
-  
-  if (sentences.length === 0 && cleaned.length > 0) {
-    return [cleaned]
+  const results: string[] = []
+  let lastEnd = 0
+  let m: RegExpExecArray | null
+  while ((m = sentenceRegex.exec(cleaned)) !== null) {
+    results.push(m[0])
+    lastEnd = m.index + m[0].length
   }
-  
-  return sentences
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
+  // 捕捉尾部沒有標點的碎片（e.g. 注圖前的「每周工钱一美元」）
+  const trail = cleaned.slice(lastEnd).trim()
+  if (trail) results.push(trail)
+
+  if (results.length === 0) return [cleaned]
+  return results.map(s => s.trim()).filter(s => s.length > 0)
 }
 
 function cleanHtmlText(html: string): string {
@@ -39,6 +44,8 @@ function cleanHtmlText(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    // 清除零寬空格等不可見字符（epub 常見殘留，會被 regex 誤判為「字」）
+    .replace(/[​-‍﻿­]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -69,6 +76,14 @@ function getImageBase64(epub: EPub, src: string): Promise<string | null> {
   })
 }
 
+// 找最後一個非圖片 item 的 index
+function lastTextIdx(items: string[]): number {
+  for (let j = items.length - 1; j >= 0; j--) {
+    if (!items[j].startsWith('data:image/')) return j
+  }
+  return -1
+}
+
 async function processChapter(epub: EPub, chapterId: string): Promise<string[]> {
   const html = await getChapterHTML(epub, chapterId)
   const items: string[] = []
@@ -80,7 +95,41 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
   while ((m = re.exec(html)) !== null) imgTags.push(m[0])
 
   for (let i = 0; i < parts.length; i++) {
-    items.push(...splitIntoSentences(cleanHtmlText(parts[i])))
+    let cleanedText = cleanHtmlText(parts[i])
+
+    // ── 圖片後的孤立開頭標點（如「。」）：合併回前一個文字句 ──
+    // e.g. <img/>​<wbr/>。他有... → 「。」應屬於圖前的「每周工钱一美元」
+    if (i > 0) {
+      const leadMatch = cleanedText.match(/^([.!?。！？;；]+)/)
+      if (leadMatch) {
+        const ti = lastTextIdx(items)
+        if (ti >= 0) items[ti] = items[ti].trimEnd() + leadMatch[1]
+        cleanedText = cleanedText.slice(leadMatch[0].length).trimStart()
+      }
+    }
+
+    const newSentences = splitIntoSentences(cleanedText)
+
+    // ── 即將插入圖片：若最後一個新句無結尾標點（e.g. 「每周工钱一美元」），
+    //    視為前一句的延伸，合併進去而非獨立成句 ──
+    if (i < imgTags.length && newSentences.length > 0) {
+      const last = newSentences[newSentences.length - 1]
+      const hasPunct = /[.!?。！？;；,，:：]$/.test(last)
+      if (!hasPunct) {
+        const ti = lastTextIdx(items)
+        if (ti >= 0) {
+          items[ti] = items[ti].trimEnd() + last
+          items.push(...newSentences.slice(0, -1))
+        } else {
+          items.push(...newSentences)
+        }
+      } else {
+        items.push(...newSentences)
+      }
+    } else {
+      items.push(...newSentences)
+    }
+
     if (i < imgTags.length) {
       const srcMatch = imgTags[i].match(/src=["']([^"']+)["']/i)
       if (srcMatch) {
