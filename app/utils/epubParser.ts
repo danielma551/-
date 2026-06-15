@@ -73,23 +73,26 @@ function lastTextIdx(items: string[]): number {
 
 // ── 從 ZIP 中讀圖片並轉 base64 data URL ──
 // resolvedPath：已根據章節文件位置解析好的 ZIP 內路徑
+const MIME_MAP: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+}
+
 async function getImageBase64FromZip(
   zip: JSZip,
   resolvedPath: string
 ): Promise<string | null> {
   const file =
     zip.file(resolvedPath) ??
-    zip.file(decodeURIComponent(resolvedPath)) ??
-    zip.file(encodeURIComponent(resolvedPath))
+    zip.file(decodeURIComponent(resolvedPath))
   if (!file) return null
 
-  const blob = await file.async('blob')
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => resolve(null)
-    reader.readAsDataURL(blob)
-  })
+  const ext = resolvedPath.split('.').pop()?.toLowerCase() ?? ''
+  const mimeType = MIME_MAP[ext] ?? 'image/jpeg'
+  const base64 = await file.async('base64')
+  return `data:${mimeType};base64,${base64}`
 }
 
 // ── 處理單個章節 HTML ──
@@ -215,13 +218,10 @@ export async function parseEpubClientSide(
     const coverPath = basePath ? `${basePath}/${coverEntry.href}` : coverEntry.href
     const coverFile = zip.file(coverPath) ?? zip.file(decodeURIComponent(coverPath))
     if (coverFile) {
-      const blob = await coverFile.async('blob')
-      coverImage = await new Promise<string | null>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = () => resolve(null)
-        reader.readAsDataURL(blob)
-      })
+      const ext = coverPath.split('.').pop()?.toLowerCase() ?? ''
+      const mimeType = MIME_MAP[ext] ?? 'image/jpeg'
+      const base64 = await coverFile.async('base64')
+      coverImage = `data:${mimeType};base64,${base64}`
     }
   }
 
