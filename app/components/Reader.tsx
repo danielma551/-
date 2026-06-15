@@ -537,6 +537,35 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setEinkDict({ word: cands[0], status: 'notfound' })
   }
 
+  // ── 🔍 普通模式：選字查詞（mouseUp / touchEnd 後讀取 selection）──
+  const selectionDictLookup = async () => {
+    if (isEink) return   // 墨水屏用長按，不用 selection
+    const sel = window.getSelection()
+    const text = sel?.toString().trim() ?? ''
+    if (!text || text.length > 8) return   // 超過 8 字通常是意外選中，忽略
+    dictOpenedAt.current = Date.now()
+    setEinkDict({ word: text, status: 'loading' })
+    // 對中文也試逐步縮短（先試整段，再試前4/3/2/1字）
+    const cands: string[] = [text]
+    if (/[一-鿿]/.test(text) && text.length > 1) {
+      for (let n = Math.min(text.length - 1, 4); n >= 1; n--) cands.push(text.slice(0, n))
+    }
+    for (const w of cands) {
+      try {
+        const res = await fetch(`/api/dict?word=${encodeURIComponent(w)}`)
+        const data = await res.json()
+        if (res.ok && data.definition) {
+          setEinkDict({ word: w, status: 'ok', definition: data.definition })
+          return
+        }
+      } catch {
+        setEinkDict({ word: text, status: 'error' })
+        return
+      }
+    }
+    setEinkDict({ word: text, status: 'notfound' })
+  }
+
   const LONG_PRESS_MS = 550
   const startLongPress = (x: number, y: number) => {
     if (!einkMode) return
@@ -1870,7 +1899,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 />
               ) : (
                 <div style={{ position: 'relative' }}>
-                  <p style={{
+                  <p
+                    onMouseUp={selectionDictLookup}
+                    onTouchEnd={selectionDictLookup}
+                    style={{
                     fontSize: `${displaySettings.fontSize}px`,
                     color: paperTheme.text,
                     textAlign: 'center',
@@ -1982,6 +2014,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   <p
                     className="leading-relaxed text-center"
                     {...einkPressHandlers}
+                    onMouseUp={!isEink ? selectionDictLookup : undefined}
+                    onTouchEnd={!isEink ? selectionDictLookup : undefined}
                     style={{
                       fontFamily: textFontFamily,
                       fontSize: `${displaySettings.fontSize}px`,
@@ -2279,8 +2313,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       )}
 
-      {/* 🔍 墨水屏長按查詞彈窗：黑框靜態底部卡，跟注釋彈窗同一風格（無動畫） */}
-      {isEink && einkDict && (
+      {/* 🔍 查詞彈窗：墨水屏長按 / 普通模式選字 */}
+      {einkDict && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center"
           style={{ background: 'rgba(0,0,0,0.5)' }}
@@ -2292,13 +2326,20 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         >
           <div
             className="w-full max-w-2xl"
-            style={{
+            style={isEink ? {
               background: '#fff',
               border: '2px solid #000',
               borderBottom: 'none',
               padding: '20px 20px 32px',
               maxHeight: '65vh',
               overflowY: 'auto',
+            } : {
+              background: '#fff',
+              borderRadius: '16px 16px 0 0',
+              padding: '20px 20px 32px',
+              maxHeight: '65vh',
+              overflowY: 'auto',
+              boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
             }}
             onClick={e => e.stopPropagation()}
           >
@@ -2307,29 +2348,33 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <div className="flex items-center gap-2">
                 <span
                   className="flex items-center justify-center rounded-full text-white text-sm font-bold"
-                  style={{ width: 28, height: 28, background: '#000', flexShrink: 0 }}
+                  style={{ width: 28, height: 28, background: isEink ? '#000' : '#1a3a2a', flexShrink: 0 }}
                 >詞</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: '#000' }}>{einkDict.word}</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: isEink ? '#000' : '#1a3a2a' }}>{einkDict.word}</span>
               </div>
               <button
                 onClick={() => setEinkDict(null)}
-                style={{ border: '1.5px solid #000', borderRadius: 4, padding: '4px 12px', fontSize: 13, fontWeight: 700, background: '#fff' }}
+                style={isEink ? {
+                  border: '1.5px solid #000', borderRadius: 4, padding: '4px 12px', fontSize: 13, fontWeight: 700, background: '#fff',
+                } : {
+                  border: 'none', background: '#f3f4f6', borderRadius: 8, padding: '4px 12px', fontSize: 13, cursor: 'pointer',
+                }}
               >關閉</button>
             </div>
             {/* 內容 */}
             {einkDict.status === 'loading' && (
-              <p style={{ fontSize: 15, color: '#000', margin: 0 }}>查詢中⋯</p>
+              <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>查詢中⋯</p>
             )}
             {einkDict.status === 'ok' && einkDict.definition && (
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.7, color: '#000' }}>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
                 {einkDict.definition}
               </div>
             )}
             {einkDict.status === 'notfound' && (
-              <p style={{ fontSize: 15, color: '#000', margin: 0 }}>字典中找不到「{einkDict.word}」</p>
+              <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>字典中找不到「{einkDict.word}」</p>
             )}
             {einkDict.status === 'error' && (
-              <p style={{ fontSize: 15, color: '#000', margin: 0 }}>網絡錯誤，請稍後再試</p>
+              <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>網絡錯誤，請稍後再試</p>
             )}
           </div>
         </div>
