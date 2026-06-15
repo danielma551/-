@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import { Target, X, History } from 'lucide-react'
-import { getMonsters, saveMonsterGoals, monsterForGoal, Monster } from '../utils/gamify'
+import { getMonsters, saveMonsterGoals, monsterForGoal, xpForGoal, Monster } from '../utils/gamify'
 
 const HISTORY_KEY = 'reading-goal-history'
 const MAX_HISTORY = 4
@@ -189,10 +189,12 @@ export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }:
             />
             {/* 即時預覽：自訂數字會召喚邊隻怪物 */}
             {goalInput && parseInt(goalInput) > 0 && (() => {
-              const m = monsterForGoal(parseInt(goalInput))
+              const goal = parseInt(goalInput)
+              const m = monsterForGoal(goal)
+              const xp = xpForGoal(goal)
               return (
                 <p className="text-xs text-gray-500 mt-2">
-                  本次召喚：{m.emoji} <span className="font-semibold">{m.name}</span> · 擊敗可得 <span className="text-indigo-600 font-semibold">⚡ {m.xp} XP</span>
+                  本次召喚：{m.emoji} <span className="font-semibold">{m.name}</span> · 擊敗可得 <span className="text-indigo-600 font-semibold">⚡ {xp} XP</span>
                 </p>
               )
             })()}

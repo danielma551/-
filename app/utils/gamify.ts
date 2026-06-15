@@ -63,6 +63,19 @@ export function monsterForGoal(goal: number): Monster {
   return result
 }
 
+// 根據實際句子數計算 XP（隨句數線性增長，和怪物 HP 掛鉤）
+// 公式：句數 × 3.6（魔王比率），最低按小怪物比率
+export function xpForGoal(goal: number): number {
+  const monsters = getMonsters().slice().sort((a, b) => a.hp - b.hp)
+  // 小目標：直接用最接近怪物的比率
+  for (const m of monsters) {
+    if (goal <= m.hp) return Math.round(goal * (m.xp / m.hp))
+  }
+  // 超過最大怪物（魔王）：按魔王比率線性延伸
+  const demon = monsters[monsters.length - 1]
+  return Math.round(goal * (demon.xp / demon.hp))
+}
+
 // ── XP / 擊殺記錄（localStorage） ──
 const GAMIFY_STORAGE_KEY = 'reading-gamify'
 

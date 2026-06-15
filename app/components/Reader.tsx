@@ -24,7 +24,7 @@ import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
-import { monsterForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
+import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 interface ReaderProps {
   sentences: string[]
@@ -71,6 +71,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const challengeDoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [articleCompleted, setArticleCompleted] = useState(false)
   const [fontFamily, setFontFamily] = useState('system-ui, -apple-system, sans-serif')
+  // 等級 XP 顯示：初始讀 localStorage，XP 有變化時更新
+  const [displayXP, setDisplayXP] = useState(() => gamifyStorage.get().xp)
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
   const [showSearch, setShowSearch] = useState(false)
@@ -303,7 +305,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         const monster = monsterForGoal(readingGoal)
         const streak = getStreak()
         const multiplier = getStreakMultiplier(streak)
-        const earnedXP = Math.round(monster.xp * multiplier)
+        const baseXP = xpForGoal(readingGoal)   // 按實際句數計算，不再用固定 monster.xp
+        const earnedXP = Math.round(baseXP * multiplier)
         gamifyStorage.addXP(earnedXP)
         gamifyStorage.recordKill(monster.id)
         // 每日挑戰：更新「擊殺怪獸」進度
@@ -316,7 +319,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         }
         // 戰果任何模式都顯示（墨水屏用靜態無動畫版本）；彩帶只在非墨水屏模式
         const totalXP = gamifyStorage.get().xp
-        setVictory({ emoji: monster.emoji, name: monster.name, xp: monster.xp, earnedXP, multiplier, streak, todayKills: gamifyStorage.getTodayKills(), totalXP })
+        setDisplayXP(totalXP)
+        setVictory({ emoji: monster.emoji, name: monster.name, xp: baseXP, earnedXP, multiplier, streak, todayKills: gamifyStorage.getTodayKills(), totalXP })
         if (!einkMode) fireConfetti(120)
       }
     }
@@ -650,6 +654,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         const bonus = bonusAmounts[Math.floor(Math.random() * bonusAmounts.length)]
         const type = LUCKY_TYPES[Math.floor(Math.random() * LUCKY_TYPES.length)]
         gamifyStorage.addXP(bonus)
+        setDisplayXP(gamifyStorage.get().xp)
         setLuckyFading(false)
         setLuckyReward({ xp: bonus, ...type })
         if (luckyBonusTimer.current) clearTimeout(luckyBonusTimer.current)
@@ -1142,6 +1147,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             {/* 右側工具列：橫向可滾動，手機可左滑看到更多 */}
             <div className="flex items-center gap-0.5 ml-auto overflow-x-auto scrollbar-hide flex-shrink-0 max-w-[60vw] sm:max-w-none">
+              {/* 等級 / XP 小徽章 */}
+              {(() => {
+                const li = levelForXP(displayXP)
+                const pct = Math.round(li.progress * 100)
+                return (
+                  <div
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg flex-shrink-0 select-none"
+                    style={{ background: '#f5f3ff', border: '1px solid #e0d9ff' }}
+                    title={`Lv.${li.level} — ${li.xpInLevel} / ${li.xpNeeded} XP`}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', lineHeight: 1 }}>Lv.{li.level}</span>
+                    <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e0d9ff', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: '#6366f1', borderRadius: 2, transition: 'width 0.4s ease' }} />
+                    </div>
+                  </div>
+                )
+              })()}
               {/* 書內搜索按鈕 */}
               {!showSearch && (
                 <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0" title="書內搜索">
@@ -1273,7 +1295,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   ? { fontSize: 13, fontWeight: 700, color: '#000' }
                   : { color: goalCompleted ? '#16a34a' : battleBarColor }}
               >
-                {goalCompleted ? `⚡ +${battleMonster.xp} XP` : `HP ${battleHp}/${readingGoal}`}
+                {goalCompleted ? `⚡ +${xpForGoal(readingGoal)} XP` : `HP ${battleHp}/${readingGoal}`}
               </span>
             </div>
           )}
