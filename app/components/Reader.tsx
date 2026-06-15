@@ -2159,9 +2159,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   {decodeURIComponent(annotationBlock.annotationImage.replace('data:image/annotation;charset=utf-8,', ''))}
                 </div>
               ) : annotationBlock.annotationImage ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                  <img src={annotationBlock.annotationImage} alt="注" style={{ height: 24, objectFit: 'contain' }} />
-                  <span style={{ fontSize: 12, color: isEink ? '#555' : '#9ca3af' }}>原文含注釋標記</span>
+                <div style={{ marginTop: 10, textAlign: 'center' }}>
+                  <img
+                    src={annotationBlock.annotationImage}
+                    alt="插圖"
+                    style={{ maxWidth: '100%', maxHeight: '45vh', objectFit: 'contain', borderRadius: 6 }}
+                  />
                 </div>
               ) : null}
             </div>
