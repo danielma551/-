@@ -11,6 +11,8 @@ import { writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 
+export const maxDuration = 300 // 5 分鐘，大檔案解析需要時間
+
 function splitIntoSentences(text: string): string[] {
   const cleaned = text
     .replace(/\r\n/g, '\n')

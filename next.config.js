@@ -7,6 +7,8 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['epub2', '@napi-rs/canvas', 'tesseract.js', 'pdfjs-dist'],
+    // 允許上傳最大 100MB 的文件（大型 epub）
+    serverActionsBodySizeLimit: '100mb',
   },
 }
 

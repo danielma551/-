@@ -275,8 +275,14 @@ export default function Home() {
         const formData = new FormData()
         formData.append('file', file)
         const response = await fetch('/api/upload', { method: 'POST', body: formData })
-        const data = await response.json()
-        if (!response.ok) throw new Error(data?.error || '上傳失敗')
+        const text = await response.text()
+        if (!response.ok) {
+          if (response.status === 413) throw new Error('文件太大，請確認文件小於 100MB')
+          let errMsg = '上傳失敗'
+          try { errMsg = JSON.parse(text)?.error || errMsg } catch {}
+          throw new Error(errMsg)
+        }
+        const data = JSON.parse(text)
         sentences = data.sentences
         coverImage = data.coverImage ?? null
       }
@@ -409,8 +415,14 @@ export default function Home() {
         const formData = new FormData()
         formData.append('file', file)
         const response = await fetch('/api/upload', { method: 'POST', body: formData })
-        const data = await response.json()
-        if (!response.ok) throw new Error(data?.error || '上傳失敗')
+        const text = await response.text()
+        if (!response.ok) {
+          if (response.status === 413) throw new Error('文件太大，請確認文件小於 100MB')
+          let errMsg = '上傳失敗'
+          try { errMsg = JSON.parse(text)?.error || errMsg } catch {}
+          throw new Error(errMsg)
+        }
+        const data = JSON.parse(text)
         newSentences = data.sentences
       }
       const updated: BookData = { ...book, sentences: [...book.sentences, ...newSentences] }
