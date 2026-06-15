@@ -21,6 +21,7 @@ import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
+import { parseEpubClientSide } from './utils/epubParser'
 
 // ── Vision OCR 設定型別 ──
 interface VisionOcrConfig {
@@ -270,14 +271,18 @@ export default function Home() {
       if (file.name.toLowerCase().endsWith('.pdf')) {
         // PDF：瀏覽器端處理（支援 OCR），不需要經過 server
         sentences = await processPdfClientSide(file, setOcrProgress, getVisionConfig())
+      } else if (file.name.toLowerCase().endsWith('.epub')) {
+        // EPUB：瀏覽器端直接解析 ZIP，避免 Vercel 4.5MB 上傳限制
+        const result = await parseEpubClientSide(file, setOcrProgress)
+        sentences = result.sentences
+        coverImage = result.coverImage
       } else {
-        // TXT / EPUB：送 server 處理（EPUB 需要解析章節+封面）
+        // TXT：送 server 處理
         const formData = new FormData()
         formData.append('file', file)
         const response = await fetch('/api/upload', { method: 'POST', body: formData })
         const text = await response.text()
         if (!response.ok) {
-          if (response.status === 413) throw new Error('文件太大，請確認文件小於 100MB')
           let errMsg = '上傳失敗'
           try { errMsg = JSON.parse(text)?.error || errMsg } catch {}
           throw new Error(errMsg)
@@ -411,13 +416,17 @@ export default function Home() {
       if (file.name.toLowerCase().endsWith('.pdf')) {
         // PDF：瀏覽器端 OCR
         newSentences = await processPdfClientSide(file, setOcrProgress, getVisionConfig())
+      } else if (file.name.toLowerCase().endsWith('.epub')) {
+        // EPUB：瀏覽器端直接解析
+        const result = await parseEpubClientSide(file, setOcrProgress)
+        newSentences = result.sentences
       } else {
+        // TXT：送 server 處理
         const formData = new FormData()
         formData.append('file', file)
         const response = await fetch('/api/upload', { method: 'POST', body: formData })
         const text = await response.text()
         if (!response.ok) {
-          if (response.status === 413) throw new Error('文件太大，請確認文件小於 100MB')
           let errMsg = '上傳失敗'
           try { errMsg = JSON.parse(text)?.error || errMsg } catch {}
           throw new Error(errMsg)
