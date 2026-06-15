@@ -2025,88 +2025,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               )}
             </div>
 
-            {/* ── 注釋彈窗 ── */}
-            {showAnnotation && annotationBlock && (
-              <div
-                className="fixed inset-0 z-50 flex items-end justify-center"
-                style={{ background: 'rgba(0,0,0,0.5)' }}
-                onClick={() => setShowAnnotation(false)}
-              >
-                <div
-                  className="w-full max-w-2xl"
-                  style={isEink ? {
-                    background: '#fff',
-                    border: '2px solid #000',
-                    borderBottom: 'none',
-                    padding: '24px 20px 32px',
-                    maxHeight: '60vh',
-                    overflowY: 'auto',
-                  } : {
-                    background: '#fff',
-                    borderRadius: '16px 16px 0 0',
-                    padding: '20px 20px 32px',
-                    maxHeight: '55vh',
-                    overflowY: 'auto',
-                    boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
-                  }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  {/* 標題欄 */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="flex items-center justify-center rounded-full text-white text-sm font-bold"
-                        style={{ width: 28, height: 28, background: isEink ? '#000' : '#1a3a2a', flexShrink: 0 }}
-                      >注</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: isEink ? '#000' : '#374151' }}>注釋</span>
-                    </div>
-                    <button
-                      onClick={() => setShowAnnotation(false)}
-                      style={isEink ? {
-                        border: '1.5px solid #000', borderRadius: 4,
-                        padding: '4px 12px', fontSize: 13, fontWeight: 700, background: '#fff',
-                      } : {
-                        border: 'none', background: '#f3f4f6', borderRadius: 8,
-                        padding: '4px 12px', fontSize: 13, cursor: 'pointer',
-                      }}
-                    >關閉</button>
-                  </div>
-                  {/* 注釋內容 */}
-                  <div className="space-y-3">
-                    {/* 完整句（前後拼合） */}
-                    <p style={{
-                      fontSize: isEink ? 22 : 16,
-                      color: isEink ? '#000' : '#374151',
-                      lineHeight: 1.8,
-                      fontFamily: textFontFamily,
-                      margin: 0,
-                    }}>{annotationBlock.fullSentence}</p>
-                    {/* 腳注文字（epub alt text）或備用注圖 */}
-                    {annotationBlock.annotationImage?.startsWith('data:image/annotation;') ? (
-                      <div style={{
-                        marginTop: 10,
-                        padding: '10px 14px',
-                        background: isEink ? '#f0f0f0' : '#f0fdf4',
-                        borderRadius: 8,
-                        borderLeft: `3px solid ${isEink ? '#000' : '#22c55e'}`,
-                        fontSize: isEink ? 18 : 14,
-                        color: isEink ? '#000' : '#166534',
-                        lineHeight: 1.7,
-                        fontFamily: textFontFamily,
-                      }}>
-                        <span style={{ fontSize: isEink ? 14 : 11, opacity: 0.6, display: 'block', marginBottom: 4 }}>📝 譯者注</span>
-                        {decodeURIComponent(annotationBlock.annotationImage.replace('data:image/annotation;charset=utf-8,', ''))}
-                      </div>
-                    ) : annotationBlock.annotationImage ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                        <img src={annotationBlock.annotationImage} alt="注" style={{ height: 24, objectFit: 'contain' }} />
-                        <span style={{ fontSize: 12, color: isEink ? '#555' : '#9ca3af' }}>原文含注釋標記</span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* 電腦：顯示按鈕；eink 模式下隱藏（用實體按鍵）；手機/平板：隱藏按鈕，改用觸摸分區 */}
             {!isEink && (
@@ -2167,6 +2085,89 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         )}
       </main>
 
+
+      {/* ── 注釋彈窗：全局 fixed，paper / default / eink 三種模式通用 ── */}
+      {showAnnotation && annotationBlock && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowAnnotation(false)}
+        >
+          <div
+            className="w-full max-w-2xl"
+            style={isEink ? {
+              background: '#fff',
+              border: '2px solid #000',
+              borderBottom: 'none',
+              padding: '24px 20px 32px',
+              maxHeight: '60vh',
+              overflowY: 'auto',
+            } : {
+              background: '#fff',
+              borderRadius: '16px 16px 0 0',
+              padding: '20px 20px 32px',
+              maxHeight: '55vh',
+              overflowY: 'auto',
+              boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 標題欄 */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex items-center justify-center rounded-full text-white text-sm font-bold"
+                  style={{ width: 28, height: 28, background: isEink ? '#000' : '#1a3a2a', flexShrink: 0 }}
+                >注</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: isEink ? '#000' : '#374151' }}>注釋</span>
+              </div>
+              <button
+                onClick={() => setShowAnnotation(false)}
+                style={isEink ? {
+                  border: '1.5px solid #000', borderRadius: 4,
+                  padding: '4px 12px', fontSize: 13, fontWeight: 700, background: '#fff',
+                } : {
+                  border: 'none', background: '#f3f4f6', borderRadius: 8,
+                  padding: '4px 12px', fontSize: 13, cursor: 'pointer',
+                }}
+              >關閉</button>
+            </div>
+            {/* 注釋內容 */}
+            <div className="space-y-3">
+              {/* 完整句（前後拼合） */}
+              <p style={{
+                fontSize: isEink ? 22 : 16,
+                color: isEink ? '#000' : '#374151',
+                lineHeight: 1.8,
+                fontFamily: textFontFamily,
+                margin: 0,
+              }}>{annotationBlock.fullSentence}</p>
+              {/* 腳注文字（epub alt text）或備用注圖 */}
+              {annotationBlock.annotationImage?.startsWith('data:image/annotation;') ? (
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 14px',
+                  background: isEink ? '#f0f0f0' : '#f0fdf4',
+                  borderRadius: 8,
+                  borderLeft: `3px solid ${isEink ? '#000' : '#22c55e'}`,
+                  fontSize: isEink ? 18 : 14,
+                  color: isEink ? '#000' : '#166534',
+                  lineHeight: 1.7,
+                  fontFamily: textFontFamily,
+                }}>
+                  <span style={{ fontSize: isEink ? 14 : 11, opacity: 0.6, display: 'block', marginBottom: 4 }}>📝 譯者注</span>
+                  {decodeURIComponent(annotationBlock.annotationImage.replace('data:image/annotation;charset=utf-8,', ''))}
+                </div>
+              ) : annotationBlock.annotationImage ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <img src={annotationBlock.annotationImage} alt="注" style={{ height: 24, objectFit: 'contain' }} />
+                  <span style={{ fontSize: 12, color: isEink ? '#555' : '#9ca3af' }}>原文含注釋標記</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 🏆 勝利彈框：擊敗怪物後置中顯示（普通版有動畫 + 彩帶；墨水屏版黑框靜態） */}
       {/* 必須喺框內作出選擇：背景冇 onClick，唔揀唔會關 */}
