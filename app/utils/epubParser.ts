@@ -4,6 +4,27 @@
 
 import JSZip from 'jszip'
 
+// ── 路徑解析：將相對路徑 href 根據當前文件路徑 fromPath 解析為絕對 ZIP 路徑 ──
+// 例：fromPath="OEBPS/Text/ch1.xhtml", href="../Images/img.jpg"
+//    → "OEBPS/Images/img.jpg"
+function resolvePath(fromPath: string, href: string): string {
+  if (href.startsWith('http://') || href.startsWith('https://')) return href
+  if (href.startsWith('/')) return href.slice(1)
+
+  // 取 fromPath 的目錄部分
+  const dir = fromPath.includes('/') ? fromPath.split('/').slice(0, -1) : []
+  const parts = href.split('/')
+
+  for (const part of parts) {
+    if (part === '..') {
+      dir.pop()
+    } else if (part !== '.') {
+      dir.push(part)
+    }
+  }
+  return dir.join('/')
+}
+
 // ── 句子切分（與 server 端一致）──
 function splitIntoSentences(text: string): string[] {
   const cleaned = text
@@ -51,43 +72,36 @@ function lastTextIdx(items: string[]): number {
 }
 
 // ── 從 ZIP 中讀圖片並轉 base64 data URL ──
+// resolvedPath：已根據章節文件位置解析好的 ZIP 內路徑
 async function getImageBase64FromZip(
   zip: JSZip,
-  href: string,
-  basePath: string
+  resolvedPath: string
 ): Promise<string | null> {
-  // 嘗試幾個常見路徑
-  const candidates = [
-    href,
-    `${basePath}/${href}`,
-    href.replace(/^\.\.\//, ''),
-    href.replace(/^\//, ''),
-  ]
-  for (const path of candidates) {
-    const file = zip.file(path) ?? zip.file(decodeURIComponent(path))
-    if (file) {
-      const blob = await file.async('blob')
-      return new Promise((resolve) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = () => resolve(null)
-        reader.readAsDataURL(blob)
-      })
-    }
-  }
-  return null
+  const file =
+    zip.file(resolvedPath) ??
+    zip.file(decodeURIComponent(resolvedPath)) ??
+    zip.file(encodeURIComponent(resolvedPath))
+  if (!file) return null
+
+  const blob = await file.async('blob')
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => resolve(null)
+    reader.readAsDataURL(blob)
+  })
 }
 
 // ── 處理單個章節 HTML ──
+// chapterPath：該章節在 ZIP 內的完整路徑（用於解析圖片相對路徑）
 async function processChapter(
   chapterHtml: string,
   zip: JSZip,
-  basePath: string
+  chapterPath: string
 ): Promise<string[]> {
   const items: string[] = []
-  const imgRegex = /<img[^>]*>/gi
 
-  const parts = chapterHtml.split(imgRegex)
+  const parts = chapterHtml.split(/<img[^>]*>/gi)
   const imgTags: string[] = []
   let m: RegExpExecArray | null
   const re = /<img[^>]*>/gi
@@ -128,7 +142,9 @@ async function processChapter(
       if (isFootnoteIcon && altText.length > 3) {
         items.push(`data:image/annotation;charset=utf-8,${encodeURIComponent(altText)}`)
       } else if (srcMatch) {
-        const dataUrl = await getImageBase64FromZip(zip, srcMatch[1], basePath)
+        // 相對於章節文件位置解析圖片路徑
+        const imgPath = resolvePath(chapterPath, srcMatch[1])
+        const dataUrl = await getImageBase64FromZip(zip, imgPath)
         if (dataUrl) items.push(dataUrl)
       }
     }
@@ -188,12 +204,12 @@ export async function parseEpubClientSide(
   const coverIdMatch = opfContent.match(/name=["']cover["'][^>]*content=["']([^"']+)["']/i)
     ?? opfContent.match(/content=["']([^"']+)["'][^>]*name=["']cover["']/i)
   const coverId = coverIdMatch?.[1]
-  const coverEntry = coverId && manifest[coverId]
+  const coverEntry = (coverId && manifest[coverId])
     ? manifest[coverId]
     : Object.values(manifest).find(
         (item) =>
           item.mediaType?.startsWith('image/') &&
-          (item.href.toLowerCase().includes('cover'))
+          item.href.toLowerCase().includes('cover')
       )
   if (coverEntry) {
     const coverPath = basePath ? `${basePath}/${coverEntry.href}` : coverEntry.href
@@ -209,21 +225,27 @@ export async function parseEpubClientSide(
     }
   }
 
-  // 5. 逐章處理
+  // 5. 逐章處理（傳入完整 chapterPath 讓圖片路徑能正確解析）
   const allItems: string[] = []
   const total = spineItems.length
   for (let idx = 0; idx < spineItems.length; idx++) {
     const idref = spineItems[idx]
     const entry = manifest[idref]
     if (!entry) continue
-    if (!entry.mediaType.includes('html') && !entry.mediaType.includes('xml') && !entry.href.match(/\.(html|xhtml|htm)$/i)) continue
+    if (
+      !entry.mediaType.includes('html') &&
+      !entry.mediaType.includes('xml') &&
+      !entry.href.match(/\.(html|xhtml|htm)$/i)
+    ) continue
 
     onProgress?.(`解析章節 ${idx + 1} / ${total}...`)
     const chapterPath = basePath ? `${basePath}/${entry.href}` : entry.href
     const chapterFile = zip.file(chapterPath) ?? zip.file(decodeURIComponent(chapterPath))
     if (!chapterFile) continue
     const html = await chapterFile.async('string')
-    const items = await processChapter(html, zip, basePath)
+
+    // 傳入 chapterPath，讓 processChapter 能用 resolvePath 解析圖片
+    const items = await processChapter(html, zip, chapterPath)
     allItems.push(...items)
   }
 
