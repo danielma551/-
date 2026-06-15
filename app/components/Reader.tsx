@@ -566,29 +566,32 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),   // 阻止長按彈出系統選單
   } : {}
 
-  // 短碎片判斷：注圖後緊接的短文字（≤8字）視為前句的尾巴，合併顯示
+  // 純文字注釋（epub footnote）才是「注」；真正的圖片是獨立頁面
+  const isAnnotationItem = (s: string) => s?.startsWith('data:image/annotation;')
+
+  // 短碎片判斷：注文後緊接的短文字（≤8字）視為前句的尾巴，合併顯示
   const isAnnotationTail = (idx: number) =>
     idx >= 0 &&
     idx < sentences.length &&
     !sentences[idx]?.startsWith('data:image/') &&
     sentences[idx].length <= 8 &&
-    sentences[idx - 1]?.startsWith('data:image/')
+    isAnnotationItem(sentences[idx - 1])
 
-  // 找下一個真正的「主句」index：跳過注圖 + 注尾碎片
+  // 找下一個可停留的 index：跳過注文碎片 + 注尾碎片，但真實圖片是合法停留點
   const nextTextIndex = (from: number) => {
     let i = from + 1
     while (i < sentences.length) {
-      if (sentences[i]?.startsWith('data:image/')) { i++; continue }
-      if (isAnnotationTail(i)) { i++; continue }  // 跳過已合併的尾巴
+      if (isAnnotationItem(sentences[i])) { i++; continue }   // 跳過注文（附屬於前句）
+      if (isAnnotationTail(i)) { i++; continue }              // 跳過已合併的尾巴
       break
     }
     return i < sentences.length ? i : -1
   }
-  // 找上一個主句 index：跳過注圖 + 注尾碎片
+  // 找上一個可停留的 index
   const prevTextIndex = (from: number) => {
     let i = from - 1
     while (i >= 0) {
-      if (sentences[i]?.startsWith('data:image/')) { i--; continue }
+      if (isAnnotationItem(sentences[i])) { i--; continue }
       if (isAnnotationTail(i)) { i--; continue }
       break
     }
@@ -737,48 +740,45 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── 注釋偵測：當前是文字句，且下一句是圖片（注釋圖）時 ──
   // 把注前文字 + 注後緊接的文字碎片拼合為完整句，供彈窗顯示
+  // 只有 data:image/annotation; 才是「注」；真實圖片不觸發此邏輯
   const annotationBlock = useMemo(() => {
     const cur = sentences[currentIndex]
     if (!cur || cur.startsWith('data:image/')) return null
     const nextIdx = currentIndex + 1
     if (nextIdx >= sentences.length) return null
-    if (!sentences[nextIdx]?.startsWith('data:image/')) return null
+    if (!isAnnotationItem(sentences[nextIdx])) return null   // 只對注文生效
 
-    // 收集注圖後面的文字碎片（直到遇到另一張圖或明顯的長文句）
+    // 收集注文後面的文字碎片
     const afterFragments: string[] = []
-    let i = nextIdx + 1  // 跳過注圖本身
+    let i = nextIdx + 1
     while (i < sentences.length && afterFragments.length < 6) {
       const s = sentences[i]
-      if (s.startsWith('data:image/')) break           // 另一張圖 = 結束
-      if (afterFragments.length > 0 && s.length > 30) break  // 長文句 = 主內容回來了
+      if (s.startsWith('data:image/')) break
+      if (afterFragments.length > 0 && s.length > 30) break
       afterFragments.push(s)
       i++
     }
 
-    // 拼合：前半句 + 後半句碎片（去掉注圖，直接顯示文字）
     const fullSentence = cur + afterFragments.join('')
-
     return {
-      fullSentence,          // 拼合後的完整句（或盡量接近的版本）
-      afterFragments,        // 注後的文字碎片列表
-      annotationImage: sentences[nextIdx],  // 注圖本身（備用）
+      fullSentence,
+      afterFragments,
+      annotationImage: sentences[nextIdx],
     }
   }, [currentIndex, sentences])
 
-  // ── 有效顯示句：當前句 + 注圖後的短尾巴碎片（合併顯示，不讓「演。」成為孤立頁） ──
+  // ── 有效顯示句：當前句 + 注文後的短尾巴碎片 ──
   const effectiveSentence = useMemo(() => {
     const cur = sentences[currentIndex]
     if (!cur || cur.startsWith('data:image/')) return cur ?? ''
     const nextIdx = currentIndex + 1
-    // 下一句不是注圖 → 直接返回原句
-    if (nextIdx >= sentences.length || !sentences[nextIdx]?.startsWith('data:image/')) return cur
-    // 收集注圖後面的短尾巴（≤8 字，遇到長句或另一張圖就停）
+    if (nextIdx >= sentences.length || !isAnnotationItem(sentences[nextIdx])) return cur
     let tail = ''
     let i = nextIdx + 1
     while (i < sentences.length) {
       const s = sentences[i]
-      if (s.startsWith('data:image/')) break  // 另一張圖 = 停
-      if (s.length > 8) break                  // 正常新句 = 停
+      if (s.startsWith('data:image/')) break
+      if (s.length > 8) break
       tail += s
       i++
     }
