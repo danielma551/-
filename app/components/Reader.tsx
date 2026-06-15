@@ -1147,23 +1147,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             {/* 右側工具列：橫向可滾動，手機可左滑看到更多 */}
             <div className="flex items-center gap-0.5 ml-auto overflow-x-auto scrollbar-hide flex-shrink-0 max-w-[60vw] sm:max-w-none">
-              {/* 等級 / XP 小徽章 */}
-              {(() => {
-                const li = levelForXP(displayXP)
-                const pct = Math.round(li.progress * 100)
-                return (
-                  <div
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg flex-shrink-0 select-none"
-                    style={{ background: '#f5f3ff', border: '1px solid #e0d9ff' }}
-                    title={`Lv.${li.level} — ${li.xpInLevel} / ${li.xpNeeded} XP`}
-                  >
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', lineHeight: 1 }}>Lv.{li.level}</span>
-                    <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e0d9ff', overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: '#6366f1', borderRadius: 2, transition: 'width 0.4s ease' }} />
-                    </div>
-                  </div>
-                )
-              })()}
               {/* 書內搜索按鈕 */}
               {!showSearch && (
                 <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0" title="書內搜索">
@@ -2141,6 +2124,37 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         )}
       </main>
 
+
+      {/* ── 等級 / XP 徽章：左下角固定，不遮擋主內容 ── */}
+      {!isEink && (() => {
+        const li = levelForXP(displayXP)
+        const pct = Math.round(li.progress * 100)
+        return (
+          <div
+            className="fixed bottom-4 left-4 select-none pointer-events-none z-40"
+            style={{
+              background: 'rgba(245, 243, 255, 0.92)',
+              border: '1.5px solid #e0d9ff',
+              borderRadius: 12,
+              padding: '8px 12px',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 12px rgba(99,102,241,0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#6366f1', lineHeight: 1 }}>Lv.{li.level}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ width: 64, height: 5, borderRadius: 3, background: '#e0d9ff', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: '#6366f1', borderRadius: 3, transition: 'width 0.5s ease' }} />
+                </div>
+                <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, lineHeight: 1 }}>
+                  {li.xpInLevel} / {li.xpNeeded} XP
+                </span>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── 注釋彈窗：全局 fixed，paper / default / eink 三種模式通用 ── */}
       {showAnnotation && annotationBlock && (
