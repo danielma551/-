@@ -126,9 +126,10 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
       const srcMatch = imgTags[i].match(/src=["']([^"']+)["']/i)
       const altMatch = imgTags[i].match(/alt=["']([^"']*?)["']/i)
       const altText = altMatch ? altMatch[1].trim() : ''
-      if (altText.length > 3) {
-        // 有意義的 alt 文字 = epub 腳注：改存注釋文字，不加載注圖
-        // 使用 data:image/annotation; 前綴，讓現有的 startsWith('data:image/') 檢查正常運作
+      // 只有 epub 腳注圖示（class="qqreader-footnote"）才改存注釋文字
+      // 普通章節插圖照常加載 base64，不受影響
+      const isFootnoteIcon = /qqreader-footnote/i.test(imgTags[i])
+      if (isFootnoteIcon && altText.length > 3) {
         items.push(`data:image/annotation;charset=utf-8,${encodeURIComponent(altText)}`)
       } else if (srcMatch) {
         const dataUrl = await getImageBase64(epub, srcMatch[1])
