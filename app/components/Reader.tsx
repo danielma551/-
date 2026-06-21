@@ -145,6 +145,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   })
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [hasMusicFile, setHasMusicFile] = useState(false)
+  const [musicCurrentTime, setMusicCurrentTime] = useState(0)
+  const [musicDuration, setMusicDuration] = useState(0)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -375,6 +377,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       audio.loop = true
       audio.volume = parseFloat(localStorage.getItem('reader-music-volume') ?? '0.4')
       audioRef.current = audio
+      audio.addEventListener('timeupdate', () => setMusicCurrentTime(audio.currentTime))
+      audio.addEventListener('durationchange', () => setMusicDuration(audio.duration || 0))
+      audio.addEventListener('loadedmetadata', () => setMusicDuration(audio.duration || 0))
       const enabled = localStorage.getItem('reader-music-enabled')
       if (enabled === null || enabled === 'true') {
         audio.play().catch(() => {
@@ -1368,60 +1373,57 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <CloudRain className="w-4 h-4" />
               </button>
 
-              {/* 🎵 背景音樂控制（有音樂文件才顯示）*/}
-              {hasMusicFile && (
-                <div className="relative flex-shrink-0">
-                  <button
-                    onClick={() => {
-                      if (!musicEnabled) {
-                        setMusicEnabled(true)
-                        setShowVolumeSlider(true)
-                      } else {
-                        setShowVolumeSlider(v => !v)
-                      }
-                    }}
-                    onContextMenu={e => { e.preventDefault(); setMusicEnabled(v => !v) }}
-                    className={`p-1.5 rounded-lg transition-colors ${musicEnabled ? 'bg-purple-100 text-purple-600' : 'text-gray-400 hover:bg-gray-100'}`}
-                    title={musicEnabled ? '音樂播放中（點擊調音量 / 右鍵靜音）' : '點擊開啟背景音樂'}
-                  >
-                    {musicEnabled ? <Music className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                  </button>
+              {/* 🎵 背景音樂播放器（有音樂文件才顯示）*/}
+              {hasMusicFile && (() => {
+                const fmt = (s: number) => {
+                  if (!isFinite(s)) return '--:--'
+                  const m = Math.floor(s / 60)
+                  const sec = Math.floor(s % 60)
+                  return `${m}:${sec.toString().padStart(2, '0')}`
+                }
+                return (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-purple-50 border border-purple-100 flex-shrink-0">
+                    {/* 靜音/播放切換 */}
+                    <button
+                      onClick={() => {
+                        if (!musicEnabled) {
+                          setMusicEnabled(true)
+                          audioRef.current?.play().catch(() => {})
+                        } else {
+                          setMusicEnabled(false)
+                        }
+                      }}
+                      className="text-purple-500 hover:text-purple-700 transition-colors flex-shrink-0"
+                      title={musicEnabled ? '靜音' : '播放'}
+                    >
+                      {musicEnabled
+                        ? <Music className="w-3.5 h-3.5" />
+                        : <VolumeX className="w-3.5 h-3.5" />}
+                    </button>
 
-                  {/* 音量滑桿浮窗 */}
-                  {showVolumeSlider && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowVolumeSlider(false)} />
-                      <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-44">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-gray-500 font-medium">背景音樂</span>
-                          <button
-                            onClick={() => setMusicEnabled(v => !v)}
-                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${musicEnabled ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-500'}`}
-                          >
-                            {musicEnabled ? '開啟' : '已靜音'}
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <VolumeX className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={musicVolume}
-                            onChange={e => setMusicVolume(parseFloat(e.target.value))}
-                            className="flex-1 h-1.5 accent-purple-500"
-                          />
-                          <Volume2 className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                        </div>
-                        <div className="text-center text-xs text-gray-300 mt-1">
-                          {Math.round(musicVolume * 100)}%
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                    {/* 時間顯示 */}
+                    <span className="text-[10px] text-purple-400 font-mono tabular-nums whitespace-nowrap">
+                      {fmt(musicCurrentTime)}<span className="opacity-50"> / {fmt(musicDuration)}</span>
+                    </span>
+
+                    {/* 音量滑桿（永遠可見）*/}
+                    <div className="flex items-center gap-1 ml-1">
+                      <VolumeX className="w-3 h-3 text-purple-300 flex-shrink-0" />
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={musicVolume}
+                        onChange={e => setMusicVolume(parseFloat(e.target.value))}
+                        className="w-16 h-1 accent-purple-500 cursor-pointer"
+                        title={`音量 ${Math.round(musicVolume * 100)}%`}
+                      />
+                      <Volume2 className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                    </div>
+                  </div>
+                )
+              })()}
               <button
                 onClick={toggleEinkMode}
                 className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg flex-shrink-0"
