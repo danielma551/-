@@ -12,8 +12,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData } from '../utils/storage'
+import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain, List } from 'lucide-react'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, speedStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
@@ -32,6 +32,7 @@ interface ReaderProps {
   bookId: string
   initialIndex: number
   readingGoal: number
+  chapters?: ChapterMark[]
   onReset: () => void
   onArticleFinished?: () => void
   onOpenBook?: (book: BookData, sentenceIndex: number) => void
@@ -55,7 +56,7 @@ const LUCKY_TYPES = [
   { emoji: '⭐', label: '流星！',     color: '#f472b6', shadow: 'rgba(244,114,182,0.35)' },
 ]
 
-export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
+export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
@@ -123,6 +124,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showFlomoNPicker, setShowFlomoNPicker] = useState(false)
   // 預覽模態框：null = 關閉，有內容 = 顯示預覽
   const [flomoPreview, setFlomoPreview] = useState<string[] | null>(null)
+  // 章節目錄側邊欄
+  const [showToc, setShowToc] = useState(false)
+  // 閱讀速度追蹤：session 開始時間 + 開始句子 index
+  const sessionStartRef = useRef<{ time: number; index: number }>({ time: Date.now(), index: initialIndex })
+  // 最新 currentIndex 的 ref（讓 unmount 清理函數能讀到最新值）
+  const currentIndexRef = useRef(initialIndex)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -341,6 +348,20 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       updateBookProgressInIDB(bookId, currentIndex)
     }
   }, [currentIndex, bookId])
+
+  // 速度追蹤：每次 currentIndex 變化時同步到 ref
+  useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
+
+  // 速度追蹤：session 結束（組件 unmount）時記錄
+  useEffect(() => {
+    sessionStartRef.current = { time: Date.now(), index: initialIndex }
+    return () => {
+      const { time, index } = sessionStartRef.current
+      const sentences_read = currentIndexRef.current - index
+      speedStorage.record(sentences_read, Date.now() - time)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -999,6 +1020,59 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         paddingRight: (!isEink && showSidebar) ? SIDEBAR_WIDTH : 0,
       }}
     >
+      {/* 章節目錄抽屜（非墨水屏模式，有 chapters 才顯示）*/}
+      {!isEink && showToc && chapters && chapters.length > 0 && (
+        <>
+          {/* 半透明遮罩 */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-20 z-40"
+            onClick={() => setShowToc(false)}
+          />
+          {/* 側邊抽屜 */}
+          <div
+            className="fixed left-0 top-0 bottom-0 z-50 bg-white shadow-2xl flex flex-col"
+            style={{ width: 280, maxWidth: '80vw' }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <List className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm font-semibold text-gray-800">章節目錄</span>
+              </div>
+              <button
+                onClick={() => setShowToc(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ul className="flex-1 overflow-y-auto py-2">
+              {chapters.map((ch, i) => {
+                const isActive = i === chapters.length - 1
+                  ? currentIndex >= ch.startIndex
+                  : currentIndex >= ch.startIndex && currentIndex < chapters[i + 1].startIndex
+                return (
+                  <li key={i}>
+                    <button
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-indigo-50 ${isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700'}`}
+                      onClick={() => {
+                        setCurrentIndex(ch.startIndex)
+                        setShowToc(false)
+                      }}
+                    >
+                      <span className="text-gray-300 mr-2 text-xs">#{i + 1}</span>
+                      {ch.title}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="px-4 py-2 border-t border-gray-50 text-xs text-gray-400">
+              共 {chapters.length} 章
+            </div>
+          </div>
+        </>
+      )}
+
       {/* 下雨特效畫布：固定在全螢幕，不攔截點擊事件；eink 模式下隱藏 */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 1, display: isEink ? 'none' : 'block' }} />
       {/* 隱藏量尺：e-ink 自適應字體大小的 binary search 用 */}
@@ -1151,6 +1225,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               {!showSearch && (
                 <button onClick={() => setShowSearch(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0" title="書內搜索">
                   <Search className="w-4 h-4 text-gray-500" />
+                </button>
+              )}
+              {/* 章節目錄（只有 EPUB 有 chapters 才顯示）*/}
+              {chapters && chapters.length > 0 && (
+                <button
+                  onClick={() => setShowToc(v => !v)}
+                  className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${showToc ? 'bg-indigo-100 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="章節目錄"
+                >
+                  <List className="w-4 h-4" />
                 </button>
               )}
               {onOpenBook && <span className="hidden md:block flex-shrink-0"><SearchPanel onOpenBook={onOpenBook} /></span>}

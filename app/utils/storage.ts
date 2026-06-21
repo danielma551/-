@@ -7,6 +7,11 @@
 //   - 書籍的格式定義（BookData）與 ID 產生方法
 //   - 每日閱讀記錄（用於 30 天趨勢圖）
 
+export interface ChapterMark {
+  title: string
+  startIndex: number
+}
+
 export interface BookData {
   id: string
   title: string
@@ -16,6 +21,7 @@ export interface BookData {
   lastReadDate: number
   coverColor?: string
   coverImage?: string
+  chapters?: ChapterMark[]   // EPUB 章節目錄（非 EPUB 書本為 undefined）
 }
 
 const STORAGE_KEY = 'reading_website_books'
@@ -396,5 +402,61 @@ export const historyStorage = {
       result.push({ date: key, count: history[key] ?? 0 })
     }
     return result
+  },
+
+  // 取得最近 364 天（52 週）的資料，從最舊到最新，補齊週數為 52 的整數倍
+  getLast364Days(): { date: string; count: number }[] {
+    const history = historyStorage.getHistory()
+    const result: { date: string; count: number }[] = []
+    for (let i = 363; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const key = d.toLocaleDateString('en-CA')
+      result.push({ date: key, count: history[key] ?? 0 })
+    }
+    return result
+  }
+}
+
+// ── 閱讀速度記錄 ──
+export interface SpeedRecord {
+  date: string      // 'YYYY-MM-DD'
+  speed: number     // sentences per minute（四捨五入至整數）
+  sentences: number // 本次 session 讀了幾句
+  duration: number  // 本次 session 持續幾分鐘
+}
+
+const SPEED_STORAGE_KEY = 'reading-speed-history'
+
+export const speedStorage = {
+  getAll(): SpeedRecord[] {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = localStorage.getItem(SPEED_STORAGE_KEY)
+      return raw ? JSON.parse(raw) : []
+    } catch { return [] }
+  },
+
+  // 記錄一次 session 的速度（sentences ≥ 5 且 duration ≥ 0.5 分鐘才記錄）
+  record(sentences: number, durationMs: number): void {
+    if (typeof window === 'undefined') return
+    const durationMin = durationMs / 60000
+    if (sentences < 5 || durationMin < 0.5) return
+    try {
+      const all = speedStorage.getAll()
+      const speed = Math.round(sentences / durationMin)
+      const date = new Date().toLocaleDateString('en-CA')
+      all.push({ date, speed, sentences, duration: Math.round(durationMin * 10) / 10 })
+      // 最多保留 200 筆
+      if (all.length > 200) all.splice(0, all.length - 200)
+      localStorage.setItem(SPEED_STORAGE_KEY, JSON.stringify(all))
+    } catch (e) {
+      console.error('[speedStorage] record failed:', e)
+    }
+  },
+
+  // 取最近 30 筆 session（最舊→最新）
+  getLast30(): SpeedRecord[] {
+    return speedStorage.getAll().slice(-30)
   }
 }

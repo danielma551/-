@@ -15,6 +15,8 @@ import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
+import ReadingHeatmap from './components/ReadingHeatmap'
+import SpeedChart from './components/SpeedChart'
 import FeedPanel from './components/FeedPanel'
 import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
@@ -213,6 +215,7 @@ export default function Home() {
   const [bookTitle, setBookTitle] = useState<string>('')
   const [bookId, setBookId] = useState<string>('')
   const [currentIndex, setCurrentIndex] = useState<number>(0)
+  const [activeChapters, setActiveChapters] = useState<import('./utils/storage').ChapterMark[] | undefined>(undefined)
   const [isUploading, setIsUploading] = useState(false)
   const [savedBooks, setSavedBooks] = useState<BookData[]>([])
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -222,6 +225,7 @@ export default function Home() {
     title: string
     id: string
     index: number
+    chapters?: import('./utils/storage').ChapterMark[]
   } | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
   const [readingArticleLink, setReadingArticleLink] = useState<string>('')
@@ -267,6 +271,7 @@ export default function Home() {
     try {
       let sentences: string[] = []
       let coverImage: string | null = null
+      let epubChapters: import('./utils/storage').ChapterMark[] | undefined
 
       if (file.name.toLowerCase().endsWith('.pdf')) {
         // PDF：瀏覽器端處理（支援 OCR），不需要經過 server
@@ -276,6 +281,7 @@ export default function Home() {
         const result = await parseEpubClientSide(file, setOcrProgress)
         sentences = result.sentences
         coverImage = result.coverImage
+        epubChapters = result.chapters.length > 0 ? result.chapters : undefined
       } else {
         // TXT：送 server 處理
         const formData = new FormData()
@@ -301,12 +307,13 @@ export default function Home() {
         currentIndex: 0,
         uploadDate: Date.now(),
         lastReadDate: Date.now(),
-        ...(coverImage ? { coverImage } : {})
+        ...(coverImage ? { coverImage } : {}),
+        ...(epubChapters ? { chapters: epubChapters } : {}),
       }
 
       await saveBookToIDB(bookData)
       getAllBooksFromIDB().then(setSavedBooks)
-      setPendingBook({ sentences, title, id, index: 0 })
+      setPendingBook({ sentences, title, id, index: 0, chapters: epubChapters })
       setShowGoalModal(true)
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -324,7 +331,8 @@ export default function Home() {
       sentences: book.sentences,
       title: book.title,
       id: book.id,
-      index: book.currentIndex
+      index: book.currentIndex,
+      chapters: book.chapters,
     })
     setShowGoalModal(true)
   }
@@ -335,6 +343,7 @@ export default function Home() {
       setBookTitle(pendingBook.title)
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
+      setActiveChapters(pendingBook.chapters)
       setReadingGoal(goal)
       setShowGoalModal(false)
       setPendingBook(null)
@@ -347,6 +356,7 @@ export default function Home() {
       setBookTitle(pendingBook.title)
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
+      setActiveChapters(pendingBook.chapters)
       setReadingGoal(0)
       setShowGoalModal(false)
       setPendingBook(null)
@@ -452,6 +462,7 @@ export default function Home() {
     setBookTitle(book.title)
     setBookId(book.id)
     setCurrentIndex(sentenceIndex)
+    setActiveChapters(book.chapters)
     setReadingGoal(0)
     setShowGoalModal(false)
     setPendingBook(null)
@@ -612,6 +623,8 @@ export default function Home() {
 
           {/* 30天閱讀趨勢圖（有資料時才顯示） */}
           <ReadingTrend />
+          <ReadingHeatmap />
+          <SpeedChart />
 
           {/* 閱讀冒險：等級 / XP / 連續打卡 / 怪物擊殺 */}
           <GamifyBar />
@@ -781,6 +794,7 @@ export default function Home() {
           bookId={bookId}
           initialIndex={currentIndex}
           readingGoal={readingGoal}
+          chapters={activeChapters}
           onReset={handleReset}
           onArticleFinished={readingArticleLink ? handleArticleFinished : undefined}
           onOpenBook={handleOpenBookAtSentence}

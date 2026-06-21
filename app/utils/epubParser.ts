@@ -155,11 +155,19 @@ async function processChapter(
   return items
 }
 
+// ── 從 HTML 萃取第一個標題文字（h1/h2/h3/title 標籤）──
+function extractHeading(html: string): string | null {
+  const headingMatch = html.match(/<(?:h[123]|title)[^>]*>([\s\S]*?)<\/(?:h[123]|title)>/i)
+  if (!headingMatch) return null
+  const text = headingMatch[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  return text.length > 1 && text.length < 80 ? text : null
+}
+
 // ── 主入口：解析整本 EPUB ──
 export async function parseEpubClientSide(
   file: File,
   onProgress?: (msg: string) => void
-): Promise<{ sentences: string[]; coverImage: string | null }> {
+): Promise<{ sentences: string[]; coverImage: string | null; chapters: { title: string; startIndex: number }[] }> {
   onProgress?.('解壓縮 EPUB...')
   const zip = await JSZip.loadAsync(file)
 
@@ -227,6 +235,7 @@ export async function parseEpubClientSide(
 
   // 5. 逐章處理（傳入完整 chapterPath 讓圖片路徑能正確解析）
   const allItems: string[] = []
+  const chapterMarks: { title: string; startIndex: number }[] = []
   const total = spineItems.length
   for (let idx = 0; idx < spineItems.length; idx++) {
     const idref = spineItems[idx]
@@ -244,10 +253,19 @@ export async function parseEpubClientSide(
     if (!chapterFile) continue
     const html = await chapterFile.async('string')
 
+    // 從 HTML 提取章節標題
+    const heading = extractHeading(html)
+    if (heading) {
+      chapterMarks.push({ title: heading, startIndex: allItems.length })
+    }
+
     // 傳入 chapterPath，讓 processChapter 能用 resolvePath 解析圖片
     const items = await processChapter(html, zip, chapterPath)
     allItems.push(...items)
   }
 
-  return { sentences: allItems, coverImage }
+  // 章節數量過多（每個 xhtml 都有標題）時，合併重複、過短的標題
+  const chapters = chapterMarks.length > 1 ? chapterMarks : []
+
+  return { sentences: allItems, coverImage, chapters }
 }
