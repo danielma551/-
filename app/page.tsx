@@ -24,6 +24,7 @@ import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 import { parseEpubClientSide } from './utils/epubParser'
+import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './utils/musicDB'
 
 // ── Vision OCR 設定型別 ──
 interface VisionOcrConfig {
@@ -216,6 +217,9 @@ export default function Home() {
   const [bookId, setBookId] = useState<string>('')
   const [currentIndex, setCurrentIndex] = useState<number>(0)
   const [activeChapters, setActiveChapters] = useState<import('./utils/storage').ChapterMark[] | undefined>(undefined)
+  const [musicMeta, setMusicMeta] = useState<MusicMeta | null>(null)
+  const [isSavingMusic, setIsSavingMusic] = useState(false)
+  const musicInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [savedBooks, setSavedBooks] = useState<BookData[]>([])
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -248,6 +252,7 @@ export default function Home() {
 
   useEffect(() => {
     getAllBooksFromIDB().then(setSavedBooks)
+    getMusicMeta().then(setMusicMeta)
   }, [])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -397,6 +402,30 @@ export default function Home() {
     getAllBooksFromIDB().then(setSavedBooks)
   }
 
+  const handleMusicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|m4a|aac|ogg|flac|wav)$/i)) {
+      alert('請上傳音頻文件（MP3、AAC、OGG 等）')
+      return
+    }
+    setIsSavingMusic(true)
+    try {
+      await saveMusicToIDB(file)
+      const meta = await getMusicMeta()
+      setMusicMeta(meta)
+    } finally {
+      setIsSavingMusic(false)
+      if (musicInputRef.current) musicInputRef.current.value = ''
+    }
+  }
+
+  const handleDeleteMusic = async () => {
+    await deleteMusicFromIDB()
+    setMusicMeta(null)
+    localStorage.removeItem('reader-music-enabled')
+  }
+
   // 儲存 Vision OCR 設定到 localStorage
   const saveVisionSettings = () => {
     localStorage.setItem('vision-ocr-provider', visionProvider)
@@ -537,6 +566,46 @@ export default function Home() {
               </button>
               <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
+
+              {/* 🎵 背景音樂管理 */}
+              <div className="relative">
+                {musicMeta ? (
+                  <div className="flex items-center gap-1">
+                    <div
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium"
+                      title={musicMeta.name}
+                    >
+                      <span>🎵</span>
+                      <span className="hidden sm:inline max-w-[120px] truncate">{musicMeta.name.replace(/\.[^.]+$/, '')}</span>
+                    </div>
+                    <button
+                      onClick={handleDeleteMusic}
+                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-50 rounded-full transition-colors"
+                      title="移除背景音樂"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="music-upload"
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-500 cursor-pointer transition-colors hover:bg-gray-50 ${isSavingMusic ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="上傳閱讀背景音樂"
+                  >
+                    {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
+                    <span className="hidden sm:inline">{isSavingMusic ? '存儲中...' : '背景音樂'}</span>
+                  </label>
+                )}
+                <input
+                  id="music-upload"
+                  ref={musicInputRef}
+                  type="file"
+                  accept="audio/*,.mp3,.m4a,.aac,.ogg,.flac,.wav"
+                  className="hidden"
+                  onChange={handleMusicUpload}
+                  disabled={isSavingMusic}
+                />
+              </div>
               <label
                 htmlFor="file-upload"
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700 cursor-pointer transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50'}`}
