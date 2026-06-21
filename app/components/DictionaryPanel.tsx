@@ -16,6 +16,8 @@ export default function DictionaryPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 })
 
   useEffect(() => {
     if (isOpen) {
@@ -114,7 +116,14 @@ export default function DictionaryPanel() {
     <div className="relative">
       {/* 查詞按鈕 */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={() => {
+          if (!isOpen && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect()
+            setDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+          }
+          setIsOpen(!isOpen)
+        }}
         className="flex items-center space-x-1 px-2 sm:px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
         title="查詞"
       >
@@ -128,7 +137,10 @@ export default function DictionaryPanel() {
           <div className="fixed inset-0 z-40" onClick={handleClose} />
 
           {/* 面板本體 */}
-          <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50">
+          <div
+            className="w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50"
+            style={{ position: 'fixed', top: dropdownPos.top, right: dropdownPos.right }}
+          >
             {/* 標題列 */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div className="flex items-center space-x-2">
