@@ -27,10 +27,16 @@ const DEFAULT_FONTS = [
 // 需要從網路動態下載的字型
 const WEB_FONTS = [
   {
+    name: '霞鶩文楷',
+    value: 'LXGW WenKai',
+    url: 'https://raw.githubusercontent.com/lxgw/LxgwWenKai/main/fonts/TTF/LXGWWenKai-Regular.ttf',
+    desc: '簡繁通用楷書，基於 Klee One',
+  },
+  {
     name: '芫荽',
     value: 'Iansui',
     url: 'https://raw.githubusercontent.com/ButTaiwan/iansui/main/fonts/ttf/Iansui-Regular.ttf',
-    desc: '台灣教育楷書，基於 Klee One',
+    desc: '台灣教育楷書（繁體為主）',
   },
 ]
 
