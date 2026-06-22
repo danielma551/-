@@ -163,6 +163,8 @@ export interface DisplaySettings {
   progressColor: string
   vibrationIntensity: number   // 保留舊欄位向後相容
   vibrationPattern: VibrationPattern
+  lineHeight: number            // 行距，預設 1.8
+  letterSpacing: number         // 字距 (em)，預設 0.05
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -172,6 +174,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   progressColor: '#6366f1',
   vibrationIntensity: 60,
   vibrationPattern: 'standard',
+  lineHeight: 1.8,
+  letterSpacing: 0.05,
 }
 
 export const displayStorage = {

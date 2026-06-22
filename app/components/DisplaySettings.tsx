@@ -30,6 +30,8 @@ export interface DisplaySettings {
   progressColor: string
   vibrationIntensity: number
   vibrationPattern: VibrationPattern
+  lineHeight: number
+  letterSpacing: number
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -39,6 +41,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   progressColor: '#6366f1',
   vibrationIntensity: 60,
   vibrationPattern: 'standard',
+  lineHeight: 1.8,
+  letterSpacing: 0.05,
 }
 
 interface DisplaySettingsProps {
@@ -151,20 +155,75 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                   </div>
                 </div>
 
+                {/* Line Height */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">行距</label>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="range"
+                      min="1.2"
+                      max="2.5"
+                      step="0.05"
+                      value={editingSettings.lineHeight ?? 1.8}
+                      onChange={(e) => setEditingSettings(prev => ({
+                        ...prev,
+                        lineHeight: parseFloat(e.target.value)
+                      }))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <span className="text-sm font-semibold text-gray-800 w-10 text-right">
+                      {(editingSettings.lineHeight ?? 1.8).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>緊湊</span>
+                    <span>寬鬆</span>
+                  </div>
+                </div>
+
+                {/* Letter Spacing */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">字距</label>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="range"
+                      min="0"
+                      max="0.3"
+                      step="0.01"
+                      value={editingSettings.letterSpacing ?? 0.05}
+                      onChange={(e) => setEditingSettings(prev => ({
+                        ...prev,
+                        letterSpacing: parseFloat(e.target.value)
+                      }))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <span className="text-sm font-semibold text-gray-800 w-10 text-right">
+                      {(editingSettings.letterSpacing ?? 0.05).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>無間距</span>
+                    <span>舒展</span>
+                  </div>
+                </div>
+
                 {/* Preview */}
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    預覽
-                  </label>
-                  <div 
+                  <label className="block text-sm font-medium text-gray-700">預覽</label>
+                  <div
                     className="p-6 rounded-lg border-2 border-gray-200 min-h-[120px] flex items-center justify-center"
-                    style={{ 
+                    style={{
                       backgroundColor: editingSettings.backgroundColor,
                       color: editingSettings.textColor
                     }}
                   >
-                    <p style={{ fontSize: `${editingSettings.fontSize}px` }}>
-                      這是預覽文字
+                    <p style={{
+                      fontSize: `${editingSettings.fontSize}px`,
+                      lineHeight: editingSettings.lineHeight ?? 1.8,
+                      letterSpacing: `${editingSettings.letterSpacing ?? 0.05}em`,
+                      textAlign: 'center',
+                    }}>
+                      這是預覽文字<br />閱讀美感調整
                     </p>
                   </div>
                 </div>
