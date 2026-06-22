@@ -80,6 +80,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSearch, setShowSearch] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
+  const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
   // 閱讀模式：'default'（現有樣式）或 'paper'（紙本質感）
   const [readerMode, setReaderMode] = useState<'default' | 'paper'>(() => {
     if (typeof window !== 'undefined') {
@@ -514,8 +515,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   const triggerFade = (action: () => void) => {
-    // 墨水屏模式：跳過淡入淡出，直接切換（避免殘影）
+    // 墨水屏模式：跳過動畫，直接切換（避免殘影）
     if (einkMode) { action(); return }
+    const style = displaySettings.animationStyle ?? 'rise'
+    if (style === 'rise') {
+      // rise 模式：直接更新內容，key 變化觸發 CSS entrance 動畫
+      action()
+      setAnimKey(k => k + 1)
+      return
+    }
+    // fade 模式（原有行為）
     setFadeVisible(false)
     setTimeout(() => {
       action()
@@ -2211,7 +2220,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 width: '100%',
               } : {}}
             >
-              {sentences[currentIndex]?.startsWith('data:image/') ? (
+              {(() => {
+                const animStyle = displaySettings.animationStyle ?? 'rise'
+                const speedMs = { slow: 500, normal: 280, fast: 150 }[displaySettings.animationSpeed ?? 'normal']
+                const colMaxWidth = isEink ? undefined : ({
+                  narrow: `${displaySettings.fontSize * 15}px`,
+                  medium: `${displaySettings.fontSize * 22}px`,
+                  wide: '100%',
+                }[displaySettings.columnWidth ?? 'medium'])
+                return sentences[currentIndex]?.startsWith('data:image/') ? (
                 <img
                   src={sentences[currentIndex]}
                   alt="圖片"
@@ -2224,11 +2241,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               ) : (
                 <div className="relative w-full flex items-center justify-center">
                   <p
-                    className="leading-relaxed text-center"
+                    key={isEink ? undefined : (animStyle === 'rise' ? animKey : undefined)}
+                    className={`leading-relaxed text-center${!isEink && animStyle === 'rise' ? ' sentence-rise' : ''}`}
                     {...einkPressHandlers}
                     onMouseUp={!isEink ? selectionDictLookup : undefined}
                     onTouchEnd={!isEink ? selectionDictLookup : undefined}
                     style={{
+                      '--sentence-anim-speed': `${speedMs}ms`,
                       fontFamily: textFontFamily,
                       fontSize: `${displaySettings.fontSize}px`,
                       color: isEink ? einkTheme.text : displaySettings.textColor,
@@ -2236,9 +2255,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       fontWeight: isEink ? 700 : undefined,
                       letterSpacing: isEink ? '0.02em' : `${displaySettings.letterSpacing ?? 0.05}em`,
                       lineHeight: isEink ? 1.5 : (displaySettings.lineHeight ?? 1.8),
-                      opacity: isEink ? 1 : (fadeVisible ? 1 : 0),
-                      transition: isEink ? 'none' : (fadeVisible ? 'opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1)' : 'opacity 0.12s ease-out'),
-                      // 墨水屏：禁用原生選字，長按專用嚟查詞
+                      maxWidth: colMaxWidth,
+                      // fade 模式沿用 opacity transition；rise 模式由 CSS animation 接管，opacity 常態 1
+                      opacity: isEink ? 1 : (animStyle === 'rise' ? 1 : (fadeVisible ? 1 : 0)),
+                      transition: isEink ? 'none' : (animStyle === 'rise' ? 'none' : (fadeVisible ? 'opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1)' : 'opacity 0.12s ease-out')),
                       userSelect: isEink ? 'none' : undefined,
                       WebkitUserSelect: isEink ? 'none' : undefined,
                       WebkitTouchCallout: isEink ? 'none' : undefined,
@@ -2268,7 +2288,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     </button>
                   )}
                 </div>
-              )}
+              )
+              })()}
             </div>
 
 

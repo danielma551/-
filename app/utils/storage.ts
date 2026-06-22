@@ -165,6 +165,9 @@ export interface DisplaySettings {
   vibrationPattern: VibrationPattern
   lineHeight: number            // 行距，預設 1.8
   letterSpacing: number         // 字距 (em)，預設 0.05
+  animationStyle: 'fade' | 'rise'  // 句子過場：淡入 / 向上浮現
+  animationSpeed: 'slow' | 'normal' | 'fast'  // 過場速度
+  columnWidth: 'narrow' | 'medium' | 'wide'   // 閱讀欄寬
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -176,6 +179,9 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   vibrationPattern: 'standard',
   lineHeight: 1.8,
   letterSpacing: 0.05,
+  animationStyle: 'rise',
+  animationSpeed: 'normal',
+  columnWidth: 'medium',
 }
 
 export const displayStorage = {

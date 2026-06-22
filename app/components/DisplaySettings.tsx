@@ -32,6 +32,9 @@ export interface DisplaySettings {
   vibrationPattern: VibrationPattern
   lineHeight: number
   letterSpacing: number
+  animationStyle: 'fade' | 'rise'
+  animationSpeed: 'slow' | 'normal' | 'fast'
+  columnWidth: 'narrow' | 'medium' | 'wide'
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -43,6 +46,9 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   vibrationPattern: 'standard',
   lineHeight: 1.8,
   letterSpacing: 0.05,
+  animationStyle: 'rise',
+  animationSpeed: 'normal',
+  columnWidth: 'medium',
 }
 
 interface DisplaySettingsProps {
@@ -302,6 +308,77 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                       className="w-16 h-10 rounded border border-gray-300 cursor-pointer"
                     />
                     <span className="text-sm text-gray-600">{editingSettings.progressColor}</span>
+                  </div>
+                </div>
+
+                {/* Animation Style */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">句子過場動畫</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { key: 'fade', label: '淡入淡出', desc: '柔和漸變' },
+                      { key: 'rise', label: '向上浮現', desc: '翻頁儀式感' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setEditingSettings(prev => ({ ...prev, animationStyle: opt.key }))}
+                        className={`flex flex-col items-center py-2.5 px-2 rounded-xl border-2 transition-all ${
+                          (editingSettings.animationStyle ?? 'rise') === opt.key
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        <span className="text-xs text-gray-400 mt-0.5">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Animation Speed */}
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {([
+                      { key: 'slow', label: '慢', ms: '500ms' },
+                      { key: 'normal', label: '標準', ms: '280ms' },
+                      { key: 'fast', label: '快', ms: '150ms' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setEditingSettings(prev => ({ ...prev, animationSpeed: opt.key }))}
+                        className={`flex flex-col items-center py-2 px-1 rounded-xl border-2 transition-all ${
+                          (editingSettings.animationSpeed ?? 'normal') === opt.key
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        <span className="text-xs text-gray-400">{opt.ms}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Column Width */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">閱讀欄寬</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { key: 'narrow', label: '窄欄', desc: '書本感' },
+                      { key: 'medium', label: '中欄', desc: '舒適' },
+                      { key: 'wide',   label: '全寬', desc: '螢幕優先' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setEditingSettings(prev => ({ ...prev, columnWidth: opt.key }))}
+                        className={`flex flex-col items-center py-2.5 px-1 rounded-xl border-2 transition-all ${
+                          (editingSettings.columnWidth ?? 'medium') === opt.key
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        <span className="text-xs text-gray-400 mt-0.5">{opt.desc}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
