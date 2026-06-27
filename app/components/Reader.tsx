@@ -944,6 +944,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setTimeout(() => setFlomoAddFlash(false), 600)
   }
 
+  // 抓最近 N 句（過濾圖片句 + PARA_SEP）→ 顯示預覽
+  const sendLastN = (n: number) => {
+    setShowFlomoNPicker(false)
+    const collected: string[] = []
+    for (let i = currentIndex; i >= 0 && collected.length < n; i--) {
+      const s = sentences[i]
+      if (s && !s.startsWith('data:image/') && s !== ' ') collected.unshift(s)
+    }
+    if (collected.length === 0) return
+    setFlomoPreview(collected)
+  }
+
   // 以當前句為中心，按書本段落邊界取前後 N 段
   // 有 PARA_SEP 標記時（重新上傳的書）按真實段落；否則退化為句子偏移
   const sendContext = (paragraphsBefore: number, paragraphsAfter: number) => {
@@ -1880,8 +1892,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             className="flex flex-col items-end gap-1.5 mb-1"
             style={{ animation: 'panel-in 180ms cubic-bezier(0.23,1,0.32,1) both' }}
           >
+            {/* 段落模式 */}
             <p className="text-xs font-medium px-2" style={{ color: isEink ? '#333' : '#6b7280' }}>
-              發送範圍
+              按段落
             </p>
             {([
               { label: '這一段',     before: 0, after: 0 },
@@ -1906,6 +1919,32 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 {opt.label}
               </button>
             ))}
+
+            {/* 分隔線 */}
+            <div style={{ width: '100%', height: 1, background: isEink ? '#000' : '#e5e7eb', margin: '4px 0' }} />
+
+            {/* 最近 N 句模式 */}
+            <p className="text-xs font-medium px-2" style={{ color: isEink ? '#333' : '#6b7280' }}>
+              最近幾句
+            </p>
+            {[3, 5, 10, 15, 20].map(n => (
+              <button
+                key={n}
+                onClick={() => sendLastN(n)}
+                className="rounded-xl font-bold text-sm shadow"
+                style={{
+                  padding: '8px 18px',
+                  background: isEink ? '#fff' : '#f0faf4',
+                  color: isEink ? '#000' : '#166534',
+                  border: isEink ? '2px solid #000' : '1.5px solid #bbf7d0',
+                  boxShadow: isEink ? '2px 2px 0 #000' : '0 3px 8px rgba(0,0,0,0.08)',
+                  minWidth: 100,
+                }}
+              >
+                最近 {n} 句
+              </button>
+            ))}
+
             <button
               onClick={() => setShowFlomoNPicker(false)}
               className="text-xs px-3 py-1 rounded-lg"
