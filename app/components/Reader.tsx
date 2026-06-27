@@ -132,6 +132,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const sessionStartRef = useRef<{ time: number; index: number }>({ time: Date.now(), index: initialIndex })
   // 最新 currentIndex 的 ref（讓 unmount 清理函數能讀到最新值）
   const currentIndexRef = useRef(initialIndex)
+  // 速度計時：只計算 Tab 可見期間的時間，排除鎖屏/切Tab
+  const activeTimeRef = useRef(0)          // 累計有效毫秒
+  const lastVisibleRef = useRef(Date.now()) // 最後一次進入前台的時間
   // 背景音樂
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const musicUrlRef = useRef<string | null>(null)
@@ -435,13 +438,32 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 速度追蹤：每次 currentIndex 變化時同步到 ref
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
 
-  // 速度追蹤：session 結束（組件 unmount）時記錄
+  // 速度追蹤：只計 Tab 可見時間，排除鎖屏/切Tab
   useEffect(() => {
     sessionStartRef.current = { time: Date.now(), index: initialIndex }
+    activeTimeRef.current = 0
+    lastVisibleRef.current = Date.now()
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // 進入後台：把這段可見時間加到累計
+        activeTimeRef.current += Date.now() - lastVisibleRef.current
+      } else {
+        // 回到前台：重設計時起點
+        lastVisibleRef.current = Date.now()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
-      const { time, index } = sessionStartRef.current
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      // 結束時加上最後一段可見時間
+      if (document.visibilityState !== 'hidden') {
+        activeTimeRef.current += Date.now() - lastVisibleRef.current
+      }
+      const { index } = sessionStartRef.current
       const sentences_read = currentIndexRef.current - index
-      speedStorage.record(sentences_read, Date.now() - time)
+      speedStorage.record(sentences_read, activeTimeRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
