@@ -162,9 +162,9 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
   const draggingRef = useRef<Node | null>(null)
   const dragOffsetRef = useRef({ x: 0, y: 0 })
 
-  // Analyze on mount
+  // Analyze on mount（稍微延遲讓 Loading 動畫先渲染）
   useEffect(() => {
-    setTimeout(() => {
+    const t = setTimeout(() => {
       const result = analyzeCharacters(sentences)
       if (result.characters.length === 0) {
         setNoData(true)
@@ -178,7 +178,8 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
       setNodes([...ns])
       setEdges([...es])
       setAnalyzing(false)
-    }, 50)
+    }, 80)
+    return () => clearTimeout(t)
   }, [sentences])
 
   // Force simulation loop
@@ -409,7 +410,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
               共識別 <span className="font-medium text-gray-600">{graphData.characters.length}</span> 個主要人物、
               <span className="font-medium text-gray-600"> {graphData.relations.length}</span> 條關係線
             </p>
-            <p className="text-xs text-gray-400 ml-auto">可拖動節點 · 基於前800句分析</p>
+            <p className="text-xs text-gray-400 ml-auto">可拖動節點 · 全文分析（{sentences.filter(s => s && s !== ' ' && !s.startsWith('data:')).length.toLocaleString()} 句）</p>
           </div>
         )}
       </div>

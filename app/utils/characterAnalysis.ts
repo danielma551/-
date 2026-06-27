@@ -103,11 +103,10 @@ function extractCandidatesFromText(text: string): string[] {
 }
 
 // ── 主分析函數 ──
-export function analyzeCharacters(sentences: string[], maxSentences = 800): CharacterGraph {
-  // 過濾 PARA_SEP 和圖片句，取前 N 句分析
+export function analyzeCharacters(sentences: string[]): CharacterGraph {
+  // 過濾 PARA_SEP 和圖片句，全文分析
   const textSentences = sentences
     .filter(s => s && s !== ' ' && !s.startsWith('data:'))
-    .slice(0, maxSentences)
 
   // 第一遍：統計候選人名出現次數
   const freq = new Map<string, number>()
@@ -135,12 +134,13 @@ export function analyzeCharacters(sentences: string[], maxSentences = 800): Char
     }
   }
 
-  // 篩選：出現 3 次以上，取前 20 個
-  const minCount = Math.max(2, Math.floor(textSentences.length / 80))
+  // 篩選：動態門檻（短書低些，長書高些），取前 25 個
+  // 全書句數 / 200 作為最小出現次數（最低 2，最高 15）
+  const minCount = Math.min(15, Math.max(2, Math.floor(textSentences.length / 200)))
   const topChars: Character[] = Array.from(freq.entries())
     .filter(([name, count]) => count >= minCount && !BLACKLIST.has(name))
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
+    .slice(0, 25)
     .map(([name, count]) => ({
       name,
       count,
@@ -172,8 +172,8 @@ export function analyzeCharacters(sentences: string[], maxSentences = 800): Char
     }
   }
 
-  // 篩選關係：共現 2 次以上
-  const minRelation = Math.max(2, Math.floor(textSentences.length / 200))
+  // 篩選關係：動態門檻
+  const minRelation = Math.max(2, Math.floor(textSentences.length / 400))
   const relations: Relation[] = Array.from(coOccur.entries())
     .filter(([, strength]) => strength >= minRelation)
     .map(([key, strength]) => {
