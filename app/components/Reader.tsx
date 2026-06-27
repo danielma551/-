@@ -700,6 +700,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   } : {}
 
   // 純文字注釋（epub footnote）才是「注」；真正的圖片是獨立頁面
+  const PARA_SEP = ' '  // 段落分隔符（與 epubParser.ts 一致）
+  const isParaSep = (s: string) => s === PARA_SEP
   const isAnnotationItem = (s: string) => s?.startsWith('data:image/annotation;')
 
   // 短碎片判斷：注文後緊接的短文字（≤8字）視為前句的尾巴，合併顯示
@@ -714,6 +716,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const nextTextIndex = (from: number) => {
     let i = from + 1
     while (i < sentences.length) {
+      if (isParaSep(sentences[i])) { i++; continue }          // 跳過段落分隔符
       if (isAnnotationItem(sentences[i])) { i++; continue }   // 跳過注文（附屬於前句）
       if (isAnnotationTail(i)) { i++; continue }              // 跳過已合併的尾巴
       break
@@ -724,6 +727,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const prevTextIndex = (from: number) => {
     let i = from - 1
     while (i >= 0) {
+      if (isParaSep(sentences[i])) { i--; continue }          // 跳過段落分隔符
       if (isAnnotationItem(sentences[i])) { i--; continue }
       if (isAnnotationTail(i)) { i--; continue }
       break
@@ -928,15 +932,53 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setTimeout(() => setFlomoAddFlash(false), 600)
   }
 
-  // 以當前句為中心，取前後 N 段（過濾圖片句）→ 顯示預覽
-  const sendContext = (before: number, after: number) => {
+  // 以當前句為中心，按書本段落邊界取前後 N 段
+  // 有 PARA_SEP 標記時（重新上傳的書）按真實段落；否則退化為句子偏移
+  const sendContext = (paragraphsBefore: number, paragraphsAfter: number) => {
     setShowFlomoNPicker(false)
-    const collected: string[] = []
-    for (let i = currentIndex - before; i <= currentIndex + after; i++) {
-      if (i < 0 || i >= sentences.length) continue
-      const s = sentences[i]
-      if (s && !s.startsWith('data:image/')) collected.push(s)
+    const hasPara = sentences.some(s => s === PARA_SEP)
+
+    if (!hasPara) {
+      // 舊書沒有段落標記：退化為 ±N 句
+      const collected: string[] = []
+      for (let i = currentIndex - paragraphsBefore * 3; i <= currentIndex + paragraphsAfter * 3; i++) {
+        if (i < 0 || i >= sentences.length) continue
+        const s = sentences[i]
+        if (s && !s.startsWith('data:image/') && s !== PARA_SEP) collected.push(s)
+      }
+      if (collected.length === 0) return
+      setFlomoPreview(collected)
+      return
     }
+
+    // 找當前段落的起止 index
+    let paraStart = currentIndex
+    while (paraStart > 0 && sentences[paraStart - 1] !== PARA_SEP) paraStart--
+
+    let paraEnd = currentIndex
+    while (paraEnd < sentences.length - 1 && sentences[paraEnd + 1] !== PARA_SEP) paraEnd++
+
+    // 向前擴展 N 個段落
+    let start = paraStart
+    for (let p = 0; p < paragraphsBefore; p++) {
+      // 跳過 PARA_SEP
+      if (start <= 0) break
+      start-- // 進入上一個 PARA_SEP
+      // 再往前找那個段落的起點
+      while (start > 0 && sentences[start - 1] !== PARA_SEP) start--
+    }
+
+    // 向後擴展 N 個段落
+    let end = paraEnd
+    for (let p = 0; p < paragraphsAfter; p++) {
+      if (end >= sentences.length - 1) break
+      end++ // 跳過 PARA_SEP
+      while (end < sentences.length - 1 && sentences[end + 1] !== PARA_SEP) end++
+    }
+
+    const collected = sentences
+      .slice(start, end + 1)
+      .filter(s => s !== PARA_SEP && !s.startsWith('data:image/'))
     if (collected.length === 0) return
     setFlomoPreview(collected)
   }

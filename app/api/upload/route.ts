@@ -13,6 +13,9 @@ import { randomUUID } from 'crypto'
 
 export const maxDuration = 300 // 5 分鐘，大檔案解析需要時間
 
+// 段落分隔符（與 epubParser.ts 保持一致）
+const PARA_SEP = ' '
+
 function splitIntoSentences(text: string): string[] {
   const cleaned = text
     .replace(/\r\n/g, '\n')
@@ -97,32 +100,43 @@ async function processChapter(epub: EPub, chapterId: string): Promise<string[]> 
   while ((m = re.exec(html)) !== null) imgTags.push(m[0])
 
   for (let i = 0; i < parts.length; i++) {
-    let cleanedText = cleanHtmlText(parts[i])
+    // 按 </p> 切割取得段落列表，保留原書段落結構
+    const pBlocks = parts[i].split(/<\/p>/gi)
+    let isFirstBlockInPart = true
 
-    // ── 圖片後的孤立開頭標點（如「。」）：合併回前一個文字句 ──
-    // e.g. <img/>​<wbr/>。他有... → 「。」應屬於圖前的「每周工钱一美元」
-    if (i > 0) {
-      const leadMatch = cleanedText.match(/^([.!?。！？;；]+)/)
-      if (leadMatch) {
-        const ti = lastTextIdx(items)
-        if (ti >= 0) items[ti] = items[ti].trimEnd() + leadMatch[1]
-        cleanedText = cleanedText.slice(leadMatch[0].length).trimStart()
+    for (let pi = 0; pi < pBlocks.length; pi++) {
+      let cleanedText = cleanHtmlText(pBlocks[pi])
+
+      // 圖片後第一個 block 的孤立開頭標點：合併回前一個文字句
+      if (i > 0 && isFirstBlockInPart) {
+        const leadMatch = cleanedText.match(/^([.!?。！？;；]+)/)
+        if (leadMatch) {
+          const ti = lastTextIdx(items)
+          if (ti >= 0) items[ti] = items[ti].trimEnd() + leadMatch[1]
+          cleanedText = cleanedText.slice(leadMatch[0].length).trimStart()
+        }
       }
-    }
 
-    const newSentences = splitIntoSentences(cleanedText)
+      const newSentences = splitIntoSentences(cleanedText)
+      if (newSentences.length === 0) continue
 
-    // ── 即將插入圖片：若最後一個新句無結尾標點且足夠短（≤15字），
-    //    視為前句的尾巴，「只在本批內」合併（不跨越圖片邊界）──
-    if (i < imgTags.length && newSentences.length >= 2) {
-      const last = newSentences[newSentences.length - 1]
-      const hasPunct = /[.!?。！？;；,，:：]$/.test(last)
-      if (!hasPunct && last.length <= 15) {
-        newSentences[newSentences.length - 2] = newSentences[newSentences.length - 2].trimEnd() + last
-        newSentences.pop()
+      // 在非首個非空段落前插入段落分隔符
+      if (!isFirstBlockInPart && items.length > 0 && items[items.length - 1] !== PARA_SEP) {
+        items.push(PARA_SEP)
       }
+
+      // 即將插入圖片：若最後一句無標點且足夠短（≤15字），在本批內合併
+      if (pi === pBlocks.length - 1 && i < imgTags.length && newSentences.length >= 2) {
+        const last = newSentences[newSentences.length - 1]
+        const hasPunct = /[.!?。！？;；,，:：]$/.test(last)
+        if (!hasPunct && last.length <= 15) {
+          newSentences[newSentences.length - 2] = newSentences[newSentences.length - 2].trimEnd() + last
+          newSentences.pop()
+        }
+      }
+      items.push(...newSentences)
+      isFirstBlockInPart = false
     }
-    items.push(...newSentences)
 
     if (i < imgTags.length) {
       const srcMatch = imgTags[i].match(/src=["']([^"']+)["']/i)
