@@ -104,11 +104,11 @@ function buildGraph(data: GraphData, width: number, height: number): { nodes: No
 }
 
 function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
-  const REPULSION = 4000
-  const SPRING_LEN = 130
-  const SPRING_K = 0.06
+  const REPULSION = 7200
+  const SPRING_LEN = 165
+  const SPRING_K = 0.05
   const DAMP = 0.82
-  const GRAVITY = 0.015
+  const GRAVITY = 0.022
   const cx = width / 2
   const cy = height / 2
 
@@ -123,7 +123,7 @@ function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
       const dy = b.y - a.y || 0.01
       const dist2 = dx * dx + dy * dy
       const dist = Math.sqrt(dist2)
-      const minDist = a.r + b.r + 20
+      const minDist = a.r + b.r + 34
       const force = REPULSION / dist2
       const fx = (dx / dist) * force
       const fy = (dy / dist) * force
@@ -174,8 +174,8 @@ function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
 }
 
 export default function CharacterGraph({ sentences, bookTitle, onClose, deepseekKey, bookId }: Props) {
-  const canvasW = 760
-  const canvasH = 480
+  const canvasW = 800
+  const canvasH = 560
   const svgRef = useRef<SVGSVGElement>(null)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [analyzing, setAnalyzing] = useState(true)
@@ -186,8 +186,6 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [hoveredNode, setHoveredNode] = useState<Node | null>(null)
-  const animRef = useRef<number>(0)
-  const tickRef = useRef(0)
   const nodesRef = useRef<Node[]>([])
   const edgesRef = useRef<Edge[]>([])
   const draggingRef = useRef<Node | null>(null)
@@ -216,6 +214,8 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
       setFromCache(cached)
       setGraphData(result)
       const { nodes: ns, edges: es } = buildGraph(result, canvasW, canvasH)
+      // 一次過跑完模擬，定格佈局（唔再飄來飄去）
+      for (let k = 0; k < 480; k++) runTick(ns, es, canvasW, canvasH)
       nodesRef.current = ns
       edgesRef.current = es
       setNodes([...ns])
@@ -261,22 +261,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
     runAnalysis(true)
   }, [bookId, runAnalysis])
 
-  // Force simulation loop
-  useEffect(() => {
-    if (!graphData || nodes.length === 0) return
-    tickRef.current = 0
-
-    const tick = () => {
-      if (tickRef.current < 350) {
-        runTick(nodesRef.current, edgesRef.current, canvasW, canvasH)
-        tickRef.current++
-        setNodes([...nodesRef.current])
-        animRef.current = requestAnimationFrame(tick)
-      }
-    }
-    animRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(animRef.current)
-  }, [graphData])
+  // 佈局已在 applyResult 同步定格，唔再用動畫迴圈（避免飄動）
 
   // Drag handlers (SVG coordinates)
   const getSVGPoint = (e: React.MouseEvent): { x: number; y: number } => {
@@ -297,7 +282,6 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
     draggingRef.current = node
     const pt = getSVGPoint(e)
     dragOffsetRef.current = { x: pt.x - node.x, y: pt.y - node.y }
-    cancelAnimationFrame(animRef.current)
   }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -305,25 +289,14 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
     const pt = getSVGPoint(e)
     draggingRef.current.x = pt.x - dragOffsetRef.current.x
     draggingRef.current.y = pt.y - dragOffsetRef.current.y
-    draggingRef.current.vx = 0
-    draggingRef.current.vy = 0
     setNodes([...nodesRef.current])
   }, [])
 
+  // 放手即定格，唔再重新模擬（保持穩定不飄）
   const handleMouseUp = useCallback(() => {
     if (!draggingRef.current) return
     draggingRef.current = null
-    // Resume simulation briefly to settle
-    tickRef.current = 0
-    const tick = () => {
-      if (tickRef.current < 120) {
-        runTick(nodesRef.current, edgesRef.current, canvasW, canvasH)
-        tickRef.current++
-        setNodes([...nodesRef.current])
-        animRef.current = requestAnimationFrame(tick)
-      }
-    }
-    animRef.current = requestAnimationFrame(tick)
+    setNodes([...nodesRef.current])
   }, [])
 
   // Backdrop click to close
@@ -332,7 +305,21 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
   }
 
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
-  const maxStrength = Math.max(...edges.map(e => e.strength), 0.01)
+  const hoveredId = hoveredNode?.id
+  // hover 時，與該人物有關係嘅鄰居集合（用嚟突出顯示）
+  const neighborIds = new Set<string>()
+  if (hoveredId) {
+    neighborIds.add(hoveredId)
+    for (const e of edges) {
+      if (e.source === hoveredId) neighborIds.add(e.target)
+      if (e.target === hoveredId) neighborIds.add(e.source)
+    }
+  }
+  // 由人物次序對應調色盤顏色（給下方關係清單用）
+  const colorOf = (name: string) => {
+    const idx = graphData?.characters.findIndex(c => c.name === name) ?? -1
+    return idx >= 0 ? PALETTE[idx % PALETTE.length] : '#9ca3af'
+  }
 
   return (
     <div
@@ -340,7 +327,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
       onClick={handleBackdrop}
     >
       <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden"
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -351,7 +338,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {graphData?.source === 'llm'
-                ? 'AI 智能分析 · 節點大小 = 重要度 · 連線 = 人物關係'
+                ? '節點大小 = 重要度 · 滑過人物即顯示其關係 · 下方有完整清單'
                 : '基於共現分析 · 節點大小 = 出現頻率 · 連線粗細 = 互動頻率'}
             </p>
           </div>
@@ -400,12 +387,13 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
             >
-              {/* Edges */}
+              {/* Edges：hover 某人物時，只突出佢嘅連線，其餘淡化 */}
               {edges.map((edge, i) => {
                 const a = nodeMap.get(edge.source)
                 const b = nodeMap.get(edge.target)
                 if (!a || !b) return null
-                const strokeW = 1 + edge.strength * 5
+                const connected = !hoveredId || edge.source === hoveredId || edge.target === hoveredId
+                const strokeW = 1.5 + edge.strength * 5
                 return (
                   <line
                     key={i}
@@ -413,48 +401,44 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                     x2={b.x} y2={b.y}
                     stroke={a.color}
                     strokeWidth={strokeW}
-                    strokeOpacity={0.25 + edge.strength * 0.45}
+                    strokeOpacity={connected ? 0.3 + edge.strength * 0.45 : 0.06}
                     strokeLinecap="round"
                   />
                 )
               })}
 
-              {/* Edge labels：AI 模式顯示關係名（夫妻/兄妹…），否則顯示強度 % */}
-              {edges
-                .filter(edge => edge.label || edge.strength > maxStrength * 0.5)
-                .slice(0, edges.some(e => e.label) ? 25 : 8)
+              {/* Edge labels：只喺 hover 人物時顯示佢嘅關係（保持平時乾淨，完整清單在下方） */}
+              {hoveredId && edges
+                .filter(edge => edge.label && (edge.source === hoveredId || edge.target === hoveredId))
                 .map((edge, i) => {
                   const a = nodeMap.get(edge.source)
                   const b = nodeMap.get(edge.target)
-                  if (!a || !b) return null
+                  if (!a || !b || !edge.label) return null
                   const mx = (a.x + b.x) / 2
                   const my = (a.y + b.y) / 2
-                  const text = edge.label ?? `${Math.round(edge.strength * 100 / maxStrength)}%`
+                  const w = edge.label.length * 12 + 8
                   return (
                     <g key={`elabel-${i}`} style={{ pointerEvents: 'none' }}>
-                      {edge.label && (
-                        <rect
-                          x={mx - text.length * 6 - 3} y={my - 13}
-                          width={text.length * 12 + 6} height={15}
-                          rx={4} fill="white" fillOpacity={0.82}
-                        />
-                      )}
-                      <text x={mx} y={my} textAnchor="middle" dy="-3"
-                        fontSize={edge.label ? '10' : '9'}
-                        fontWeight={edge.label ? '600' : '400'}
-                        fill={edge.label ? '#4b5563' : '#9ca3af'}>
-                        {text}
+                      <rect x={mx - w / 2} y={my - 11} width={w} height={17} rx={5}
+                        fill="white" stroke="#e5e7eb" strokeWidth={0.5} />
+                      <text x={mx} y={my} textAnchor="middle" dy="1"
+                        fontSize="11" fontWeight="600" fill="#4b5563">
+                        {edge.label}
                       </text>
                     </g>
                   )
                 })}
 
               {/* Nodes */}
-              {nodes.map((node) => (
+              {nodes.map((node) => {
+                const dimmed = hoveredId ? !neighborIds.has(node.id) : false
+                const maxChars = Math.max(3, Math.floor(node.r / 6))
+                const display = node.id.length > maxChars ? node.id.slice(0, maxChars - 1) + '…' : node.id
+                return (
                 <g
                   key={node.id}
                   transform={`translate(${node.x},${node.y})`}
-                  style={{ cursor: 'grab' }}
+                  style={{ cursor: 'grab', opacity: dimmed ? 0.25 : 1, transition: 'opacity .15s' }}
                   onMouseDown={e => handleMouseDown(e, node)}
                   onMouseEnter={() => setHoveredNode(node)}
                   onMouseLeave={() => setHoveredNode(null)}
@@ -473,7 +457,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                     stroke="white"
                     strokeWidth={2}
                   />
-                  {/* Name label */}
+                  {/* Name label（過長自動截斷，完整名見 tooltip 與下方清單）*/}
                   <text
                     textAnchor="middle"
                     dy="0.35em"
@@ -482,7 +466,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                     fill="white"
                     style={{ pointerEvents: 'none' }}
                   >
-                    {node.id}
+                    {display}
                   </text>
                   {/* Tooltip on hover */}
                   {hoveredNode?.id === node.id && (
@@ -508,8 +492,32 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                     </g>
                   )}
                 </g>
-              ))}
+                )
+              })}
             </svg>
+          )}
+
+          {/* 人物關係清單（hover 上方氣泡可高亮對應人物）*/}
+          {!analyzing && !noData && graphData && graphData.relations.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-100 bg-white">
+              <p className="text-xs font-semibold text-gray-500 mb-2.5">人物關係清單（{graphData.relations.length}）</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 max-h-44 overflow-y-auto pr-1">
+                {[...graphData.relations]
+                  .sort((a, b) => b.strength - a.strength)
+                  .map((rel, i) => {
+                    const active = !hoveredId || rel.source === hoveredId || rel.target === hoveredId
+                    return (
+                      <div key={i} className="flex items-center gap-1.5 text-sm" style={{ opacity: active ? 1 : 0.35, transition: 'opacity .15s' }}>
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorOf(rel.source) }} />
+                        <span className="font-medium text-gray-700 truncate">{rel.source}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{rel.label || '相關'}</span>
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorOf(rel.target) }} />
+                        <span className="font-medium text-gray-700 truncate">{rel.target}</span>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
           )}
         </div>
 
@@ -527,7 +535,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
               <span className="font-medium text-gray-600"> {graphData.relations.length}</span> 條關係線
             </p>
             {warning && <p className="text-xs text-amber-600">⚠️ {warning}</p>}
-            <p className="text-xs text-gray-400 ml-auto">可拖動節點 · 全文分析（{sentences.filter(s => s && s !== ' ' && !s.startsWith('data:')).length.toLocaleString()} 句）</p>
+            <p className="text-xs text-gray-400 ml-auto">可拖動節點 · 滑過高亮 · 全文分析（{sentences.filter(s => s && s !== ' ' && !s.startsWith('data:')).length.toLocaleString()} 句）</p>
           </div>
         )}
       </div>
