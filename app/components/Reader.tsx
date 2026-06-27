@@ -939,12 +939,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const hasPara = sentences.some(s => s === PARA_SEP)
 
     if (!hasPara) {
-      // 舊書沒有段落標記：退化為 ±N 句
+      // 舊書沒有段落標記：退化為 ±N 句（仍 join 顯示）
+      const fallbackN = paragraphsBefore === 0 ? 0 : paragraphsBefore === 1 ? 2 : 5
       const collected: string[] = []
-      for (let i = currentIndex - paragraphsBefore * 3; i <= currentIndex + paragraphsAfter * 3; i++) {
+      for (let i = currentIndex - fallbackN; i <= currentIndex + fallbackN; i++) {
         if (i < 0 || i >= sentences.length) continue
         const s = sentences[i]
-        if (s && !s.startsWith('data:image/') && s !== PARA_SEP) collected.push(s)
+        if (s && !s.startsWith('data:image/')) collected.push(s)
       }
       if (collected.length === 0) return
       setFlomoPreview(collected)
@@ -976,9 +977,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       while (end < sentences.length - 1 && sentences[end + 1] !== PARA_SEP) end++
     }
 
+    // 保留 PARA_SEP 作段落分隔，過濾圖片句
     const collected = sentences
       .slice(start, end + 1)
-      .filter(s => s !== PARA_SEP && !s.startsWith('data:image/'))
+      .filter(s => !s.startsWith('data:image/'))
+    // 去掉首尾多餘的 PARA_SEP
+    while (collected.length > 0 && collected[0] === PARA_SEP) collected.shift()
+    while (collected.length > 0 && collected[collected.length - 1] === PARA_SEP) collected.pop()
     if (collected.length === 0) return
     setFlomoPreview(collected)
   }
@@ -989,7 +994,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (!url) { setFlomoStatus('setup'); return }
     if (!toSend[0] || toSend[0].startsWith('data:image/')) return
     const today = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${toSend.join('\n')}`
+    // 按 PARA_SEP 分段，段內句子 join 成一行，段間用 \n\n
+    const paragraphs: string[] = []
+    let cur: string[] = []
+    for (const s of toSend) {
+      if (s === PARA_SEP) {
+        if (cur.length > 0) { paragraphs.push(cur.join('')); cur = [] }
+      } else {
+        cur.push(s)
+      }
+    }
+    if (cur.length > 0) paragraphs.push(cur.join(''))
+    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${paragraphs.join('\n\n')}`
     setFlomoStatus('sending')
     try {
       await fetch(url, {
@@ -1996,38 +2012,40 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   🌿 預覽 · 確認後發送
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: isEink ? '#555' : '#6b7280' }}>
-                  📖 {bookTitle} · {flomoPreview.length} 句
+                  📖 {bookTitle}
                 </p>
               </div>
               <button onClick={() => setFlomoPreview(null)}
                 className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
             </div>
 
-            {/* 句子列表（可滾動） */}
-            <div className="px-5 py-4 max-h-64 overflow-y-auto space-y-2">
-              {flomoPreview.map((s, i) => (
-                <div key={i} className="flex gap-2 items-start">
-                  <span className="text-xs mt-1 flex-shrink-0 w-4 text-right"
-                    style={{ color: isEink ? '#555' : '#9ca3af' }}>
-                    {i + 1}
-                  </span>
-                  <p className="text-sm leading-relaxed flex-1"
-                    style={{ color: isEink ? '#000' : '#374151' }}>
-                    {s}
-                  </p>
-                  {/* 移除單句按鈕 */}
-                  <button
-                    onClick={() => {
-                      const updated = flomoPreview.filter((_, idx) => idx !== i)
-                      if (updated.length === 0) setFlomoPreview(null)
-                      else setFlomoPreview(updated)
+            {/* 段落預覽（可滾動）：PARA_SEP 顯示為段落間距 */}
+            <div className="px-5 py-4 max-h-64 overflow-y-auto">
+              {(() => {
+                // 按 PARA_SEP 切出各段，每段 join 成完整文字
+                const paragraphs: string[] = []
+                let cur: string[] = []
+                for (const s of flomoPreview) {
+                  if (s === PARA_SEP) {
+                    if (cur.length > 0) { paragraphs.push(cur.join('')); cur = [] }
+                  } else {
+                    cur.push(s)
+                  }
+                }
+                if (cur.length > 0) paragraphs.push(cur.join(''))
+                return paragraphs.map((para, i) => (
+                  <p
+                    key={i}
+                    className="text-sm leading-loose"
+                    style={{
+                      color: isEink ? '#000' : '#374151',
+                      marginBottom: i < paragraphs.length - 1 ? '1em' : 0,
                     }}
-                    className="text-xs flex-shrink-0 mt-1"
-                    style={{ color: isEink ? '#555' : '#d1d5db' }}
-                    title="移除這句"
-                  >✕</button>
-                </div>
-              ))}
+                  >
+                    {para}
+                  </p>
+                ))
+              })()}
             </div>
 
             {/* 操作按鈕 */}
