@@ -5,13 +5,39 @@
 // 純客戶端，不需要 D3 或 API key。
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Loader2 } from 'lucide-react'
-import { analyzeCharacters, CharacterGraph as GraphData } from '../utils/characterAnalysis'
+import { X, Loader2, RefreshCw } from 'lucide-react'
+import { analyzeCharacters, analyzeCharactersWithLLM, CharacterGraph as GraphData } from '../utils/characterAnalysis'
 
 interface Props {
   sentences: string[]
   bookTitle: string
   onClose: () => void
+  deepseekKey?: string    // 有 DeepSeek key 時用 AI 分析（更準），否則退回啟發式
+  bookId?: string         // 用於快取：每本書只跑一次 AI
+}
+
+// ── 結果快取（localStorage）：每本書只需呼叫一次 AI ──
+const CACHE_PREFIX = 'char-graph:v1:'
+
+function loadCache(bookId?: string): GraphData | null {
+  if (!bookId || typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + bookId)
+    if (!raw) return null
+    const data = JSON.parse(raw) as GraphData
+    if (data && Array.isArray(data.characters) && data.characters.length > 0) return data
+  } catch { /* 忽略損壞快取 */ }
+  return null
+}
+
+function saveCache(bookId: string | undefined, data: GraphData) {
+  if (!bookId || typeof window === 'undefined') return
+  try { localStorage.setItem(CACHE_PREFIX + bookId, JSON.stringify(data)) } catch { /* 配額滿則略過 */ }
+}
+
+function clearCache(bookId?: string) {
+  if (!bookId || typeof window === 'undefined') return
+  try { localStorage.removeItem(CACHE_PREFIX + bookId) } catch { /* ignore */ }
 }
 
 // ── 顏色調色盤（依角色重要性排序）──
@@ -39,6 +65,7 @@ interface Edge {
   source: string
   target: string
   strength: number
+  label?: string
 }
 
 function buildGraph(data: GraphData, width: number, height: number): { nodes: Node[]; edges: Edge[] } {
@@ -70,6 +97,7 @@ function buildGraph(data: GraphData, width: number, height: number): { nodes: No
     source: rel.source,
     target: rel.target,
     strength: rel.strength / maxStrength,
+    label: rel.label,
   }))
 
   return { nodes, edges }
@@ -145,13 +173,16 @@ function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
   })
 }
 
-export default function CharacterGraph({ sentences, bookTitle, onClose }: Props) {
+export default function CharacterGraph({ sentences, bookTitle, onClose, deepseekKey, bookId }: Props) {
   const canvasW = 760
   const canvasH = 480
   const svgRef = useRef<SVGSVGElement>(null)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [analyzing, setAnalyzing] = useState(true)
   const [noData, setNoData] = useState(false)
+  const [warning, setWarning] = useState<string | null>(null)
+  const [fromCache, setFromCache] = useState(false)
+  const mountedRef = useRef(true)
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [hoveredNode, setHoveredNode] = useState<Node | null>(null)
@@ -162,15 +193,27 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
   const draggingRef = useRef<Node | null>(null)
   const dragOffsetRef = useRef({ x: 0, y: 0 })
 
-  // Analyze on mount（稍微延遲讓 Loading 動畫先渲染）
+  // 追蹤掛載狀態，避免 await 期間 modal 被關閉後仍 setState
   useEffect(() => {
-    const t = setTimeout(() => {
-      const result = analyzeCharacters(sentences)
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  // 分析：快取優先 → AI（有 key）→ 啟發式。force=true 跳過快取重新分析。
+  const runAnalysis = useCallback(async (force: boolean) => {
+    setAnalyzing(true)
+    setNoData(false)
+    setWarning(null)
+    setFromCache(false)
+
+    const applyResult = (result: GraphData, cached: boolean) => {
+      if (!mountedRef.current) return
       if (result.characters.length === 0) {
         setNoData(true)
         setAnalyzing(false)
         return
       }
+      setFromCache(cached)
       setGraphData(result)
       const { nodes: ns, edges: es } = buildGraph(result, canvasW, canvasH)
       nodesRef.current = ns
@@ -178,9 +221,45 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
       setNodes([...ns])
       setEdges([...es])
       setAnalyzing(false)
-    }, 80)
+    }
+
+    // 1. 快取優先（每本書只需一次 AI 呼叫）
+    if (!force) {
+      const cached = loadCache(bookId)
+      if (cached) { applyResult(cached, true); return }
+    }
+
+    // 2. 有 DeepSeek key → AI 分析，成功才寫入快取
+    if (deepseekKey) {
+      try {
+        const result = await analyzeCharactersWithLLM(sentences, deepseekKey)
+        saveCache(bookId, result)
+        applyResult(result, false)
+        return
+      } catch (err) {
+        if (mountedRef.current) {
+          const msg = err instanceof Error ? err.message : '未知錯誤'
+          setWarning(`AI 分析失敗（${msg}），已改用基礎分析`)
+        }
+      }
+    }
+
+    // 3. 退回啟發式（不寫快取，保留日後用 AI 重算的機會）
+    applyResult(analyzeCharacters(sentences), false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentences, bookId, deepseekKey])
+
+  // 掛載時分析（稍微延遲讓 Loading 動畫先渲染）
+  useEffect(() => {
+    const t = setTimeout(() => { runAnalysis(false) }, 80)
     return () => clearTimeout(t)
-  }, [sentences])
+  }, [runAnalysis])
+
+  // 重新分析：清快取後強制重跑（會再用一次 AI）
+  const handleReanalyze = useCallback(() => {
+    clearCache(bookId)
+    runAnalysis(true)
+  }, [bookId, runAnalysis])
 
   // Force simulation loop
   useEffect(() => {
@@ -271,15 +350,28 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
               《{bookTitle}》人物關係圖
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              基於共現分析 · 節點大小 = 出現頻率 · 連線粗細 = 互動頻率
+              {graphData?.source === 'llm'
+                ? 'AI 智能分析 · 節點大小 = 重要度 · 連線 = 人物關係'
+                : '基於共現分析 · 節點大小 = 出現頻率 · 連線粗細 = 互動頻率'}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {deepseekKey && !analyzing && (
+              <button
+                onClick={handleReanalyze}
+                title="重新用 AI 分析（會再花一次 API 呼叫）"
+                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -287,7 +379,7 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
           {analyzing && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10" style={{ minHeight: 320 }}>
               <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-              <p className="text-sm text-gray-500">分析人物中…</p>
+              <p className="text-sm text-gray-500">{deepseekKey ? 'DeepSeek AI 分析人物關係中…' : '分析人物中…'}</p>
             </div>
           )}
 
@@ -327,21 +419,33 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
                 )
               })}
 
-              {/* Edge labels for strong connections */}
+              {/* Edge labels：AI 模式顯示關係名（夫妻/兄妹…），否則顯示強度 % */}
               {edges
-                .filter(edge => edge.strength > maxStrength * 0.5)
-                .slice(0, 8)
+                .filter(edge => edge.label || edge.strength > maxStrength * 0.5)
+                .slice(0, edges.some(e => e.label) ? 25 : 8)
                 .map((edge, i) => {
                   const a = nodeMap.get(edge.source)
                   const b = nodeMap.get(edge.target)
                   if (!a || !b) return null
                   const mx = (a.x + b.x) / 2
                   const my = (a.y + b.y) / 2
+                  const text = edge.label ?? `${Math.round(edge.strength * 100 / maxStrength)}%`
                   return (
-                    <text key={`elabel-${i}`} x={mx} y={my} textAnchor="middle" dy="-4"
-                      fontSize="9" fill="#9ca3af" style={{ pointerEvents: 'none' }}>
-                      {Math.round(edge.strength * 100 / maxStrength)}%
-                    </text>
+                    <g key={`elabel-${i}`} style={{ pointerEvents: 'none' }}>
+                      {edge.label && (
+                        <rect
+                          x={mx - text.length * 6 - 3} y={my - 13}
+                          width={text.length * 12 + 6} height={15}
+                          rx={4} fill="white" fillOpacity={0.82}
+                        />
+                      )}
+                      <text x={mx} y={my} textAnchor="middle" dy="-3"
+                        fontSize={edge.label ? '10' : '9'}
+                        fontWeight={edge.label ? '600' : '400'}
+                        fill={edge.label ? '#4b5563' : '#9ca3af'}>
+                        {text}
+                      </text>
+                    </g>
                   )
                 })}
 
@@ -393,8 +497,14 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
                         filter="drop-shadow(0 2px 4px rgba(0,0,0,.12))"
                       />
                       <text x={8} y={16} fontSize="11" fill="#374151" fontWeight="600">{node.id}</text>
-                      <text x={8} y={30} fontSize="10" fill="#6b7280">出現 {node.count} 次</text>
-                      <text x={8} y={43} fontSize="10" fill="#6b7280">對話 {node.dialogues} 句</text>
+                      {graphData?.source === 'llm' ? (
+                        <text x={8} y={30} fontSize="10" fill="#6b7280">重要度 {node.count}/100</text>
+                      ) : (
+                        <>
+                          <text x={8} y={30} fontSize="10" fill="#6b7280">出現 {node.count} 次</text>
+                          <text x={8} y={43} fontSize="10" fill="#6b7280">對話 {node.dialogues} 句</text>
+                        </>
+                      )}
                     </g>
                   )}
                 </g>
@@ -405,11 +515,18 @@ export default function CharacterGraph({ sentences, bookTitle, onClose }: Props)
 
         {/* Footer legend */}
         {!analyzing && !noData && graphData && (
-          <div className="px-6 py-3 border-t border-gray-100 flex items-center gap-6">
+          <div className="px-6 py-3 border-t border-gray-100 flex items-center gap-3 flex-wrap">
+            {graphData.source === 'llm' && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">✨ AI 分析</span>
+            )}
+            {fromCache && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600" title="讀取自快取，未耗用 API">💾 已快取</span>
+            )}
             <p className="text-xs text-gray-400">
               共識別 <span className="font-medium text-gray-600">{graphData.characters.length}</span> 個主要人物、
               <span className="font-medium text-gray-600"> {graphData.relations.length}</span> 條關係線
             </p>
+            {warning && <p className="text-xs text-amber-600">⚠️ {warning}</p>}
             <p className="text-xs text-gray-400 ml-auto">可拖動節點 · 全文分析（{sentences.filter(s => s && s !== ' ' && !s.startsWith('data:')).length.toLocaleString()} 句）</p>
           </div>
         )}

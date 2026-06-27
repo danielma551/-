@@ -5,20 +5,25 @@
 
 export interface Character {
   name: string
-  count: number       // 出現次數
-  dialogues: number   // 說話次數
+  count: number          // 出現次數（LLM 模式下＝重要度 0-100）
+  dialogues: number      // 說話次數（LLM 模式下為 0）
+  importance?: number    // LLM 給出的重要度 0-100
 }
 
 export interface Relation {
   source: string
   target: string
-  strength: number    // 同句共現次數
+  strength: number       // 互動強度（共現次數，或 LLM 給出的 0-100）
+  label?: string         // 關係描述，例如「夫妻」「兄妹」（僅 LLM 模式）
 }
 
 export interface CharacterGraph {
   characters: Character[]
   relations: Relation[]
+  source?: 'llm' | 'heuristic'   // 分析來源
 }
+
+// 人物分析使用 DeepSeek（OpenAI 相容、文字模型、價格極低）。
 
 // ── 常見中文姓氏（前150個）──
 const COMMON_SURNAMES = new Set('王李張劉陳楊黃趙吳周徐孫馬朱胡郭何高林鄭謝沈羅韓唐馮于董蕭程曹袁鄧許傅曾彭呂蘇盧蔣蔡賈丁魏薛葉閻余潘杜戴夏鐘汪田任姜范方石姚譚廖鄒熊金陸郝孔白崔康毛邱秦江史顧侯邵孟龍萬段雷錢湯尹黎易常武喬賀賴龔文王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林郑谢沈罗韩唐冯于董萧程曹袁邓许傅曾彭吕苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏钟汪田任姜范方石姚谭廖邹熊金陆郝孔白崔康毛邱秦江史顾侯邵孟龙万段雷钱汤尹黎易常武乔贺赖龚文'.split(''))
@@ -183,5 +188,129 @@ export function analyzeCharacters(sentences: string[]): CharacterGraph {
     .sort((a, b) => b.strength - a.strength)
     .slice(0, 40)
 
-  return { characters: topChars, relations }
+  return { characters: topChars, relations, source: 'heuristic' }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 【LLM 模式】用 AI 模型分析人物關係（準確度遠高於啟發式規則）
+// 適合翻譯小說／外國人名，能合併別名、輸出關係標籤（夫妻、兄妹…）。
+// ════════════════════════════════════════════════════════════════
+
+// 從全書句子中抽樣，取分散在全書的多段連續文字，控制在 token 預算內。
+function buildSample(sentences: string[], maxChars = 20000): string {
+  const valid = sentences.filter(s => s && s !== ' ' && !s.startsWith('data:'))
+  const full = valid.join(' ')
+  if (full.length <= maxChars) return full
+  // 取 15 段分散在全書的連續片段，保留上下文以便判斷關係
+  const blocks = 15
+  const blockLen = Math.floor(maxChars / blocks)
+  const out: string[] = []
+  for (let b = 0; b < blocks; b++) {
+    const start = Math.floor((full.length - blockLen) * b / (blocks - 1))
+    out.push(full.slice(start, start + blockLen))
+  }
+  return out.join('\n……\n')
+}
+
+const ANALYSIS_PROMPT = `你是專業的文學分析助手。下面是一本小說的節選（可能不連續，用「……」分隔不同片段）。請分析書中的人物與人物關係。
+
+嚴格要求：
+1. 只輸出真正的「人物角色」。絕對不要把地名、國家、機構、職業、種族（如「白人」）、或普通詞語（如「於是」「高興」「知道」「州」）當作人物。
+2. 同一個人物的不同稱呼（暱稱、全名、姓氏、名字、外號）必須合併成一個，使用書中最常見的稱呼作為 name。
+3. 最多輸出 18 個最主要的人物。
+4. relation 用 2-4 個中文字描述兩人關係，例如：夫妻、兄妹、母子、父女、戀人、伴侶、朋友、主僕、敵對、同事、師徒。
+5. importance 為 1-100 的整數，表示角色在書中的重要程度；strength 為 1-100 的整數，表示兩人關係的緊密與互動程度。
+6. 只輸出主要的關係（最多 25 條）。
+7. 嚴格只輸出 JSON，不要任何解釋或 markdown 標記。格式：
+{"characters":[{"name":"露絲","importance":90}],"relations":[{"source":"艾吉","target":"露絲","relation":"伴侶","strength":95}]}
+
+小說節選：
+`
+
+interface RawCharacter { name?: string; importance?: number }
+interface RawRelation { source?: string; target?: string; relation?: string; strength?: number }
+
+// 從 LLM 回傳文字中擷取並解析 JSON（容錯：去除 ```json 圍欄、取第一個 {...}）
+function parseLLMJson(raw: string): { characters: RawCharacter[]; relations: RawRelation[] } {
+  let text = raw.trim()
+  text = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    text = text.slice(start, end + 1)
+  }
+  const parsed = JSON.parse(text)
+  return {
+    characters: Array.isArray(parsed.characters) ? parsed.characters : [],
+    relations: Array.isArray(parsed.relations) ? parsed.relations : [],
+  }
+}
+
+// 將 LLM 原始結果轉成 CharacterGraph（清洗、過濾無效項、只保留兩端都存在的關係）
+function normalizeLLMResult(raw: { characters: RawCharacter[]; relations: RawRelation[] }): CharacterGraph {
+  const characters: Character[] = raw.characters
+    .filter(c => c && typeof c.name === 'string' && c.name.trim().length > 0)
+    .map(c => {
+      const importance = Math.max(1, Math.min(100, Math.round(Number(c.importance) || 50)))
+      return { name: c.name!.trim(), count: importance, dialogues: 0, importance }
+    })
+    .slice(0, 18)
+
+  const nameSet = new Set(characters.map(c => c.name))
+
+  const relations: Relation[] = raw.relations
+    .filter(r => r && typeof r.source === 'string' && typeof r.target === 'string')
+    .map(r => ({
+      source: r.source!.trim(),
+      target: r.target!.trim(),
+      label: typeof r.relation === 'string' ? r.relation.trim() : undefined,
+      strength: Math.max(1, Math.min(100, Math.round(Number(r.strength) || 50))),
+    }))
+    .filter(r => r.source !== r.target && nameSet.has(r.source) && nameSet.has(r.target))
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, 25)
+
+  return { characters, relations, source: 'llm' }
+}
+
+// DeepSeek API（OpenAI 相容端點）
+const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
+const DEEPSEEK_MODEL = 'deepseek-chat'
+
+export async function analyzeCharactersWithLLM(
+  sentences: string[],
+  apiKey: string
+): Promise<CharacterGraph> {
+  const sample = buildSample(sentences)
+  const userContent = ANALYSIS_PROMPT + sample
+
+  const res = await fetch(DEEPSEEK_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      messages: [{ role: 'user', content: userContent }],
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+      max_tokens: 2048,
+    }),
+  })
+
+  const data = await res.json()
+  if (!res.ok) {
+    const msg = data?.error?.message ?? data?.message ?? res.status
+    throw new Error(`DeepSeek API 錯誤: ${msg}`)
+  }
+
+  const content: string = data.choices?.[0]?.message?.content ?? ''
+  if (!content) throw new Error('AI 沒有回傳內容')
+
+  const result = normalizeLLMResult(parseLLMJson(content))
+  if (result.characters.length === 0) {
+    throw new Error('AI 未能識別出人物')
+  }
+  return result
 }

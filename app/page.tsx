@@ -251,6 +251,11 @@ export default function Home() {
     typeof window !== 'undefined' ? (localStorage.getItem('vision-ocr-key') || '') : ''
   )
   const [visionKeyInput, setVisionKeyInput] = useState('')
+  // 人物關係分析：DeepSeek API key（與 OCR 分開，DeepSeek 文字模型不支援圖片）
+  const [deepseekKey, setDeepseekKey] = useState<string>(() =>
+    typeof window !== 'undefined' ? (localStorage.getItem('deepseek-api-key') || '') : ''
+  )
+  const [deepseekKeyInput, setDeepseekKeyInput] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -449,6 +454,17 @@ export default function Home() {
   const getVisionConfig = (): VisionOcrConfig | undefined =>
     visionApiKey ? { provider: visionProvider, apiKey: visionApiKey } : undefined
 
+  // 儲存／清除 DeepSeek（人物分析）key
+  const saveDeepseekKey = () => {
+    localStorage.setItem('deepseek-api-key', deepseekKeyInput.trim())
+    setDeepseekKey(deepseekKeyInput.trim())
+  }
+  const clearDeepseekKey = () => {
+    localStorage.removeItem('deepseek-api-key')
+    setDeepseekKey('')
+    setDeepseekKeyInput('')
+  }
+
   // 追加內容：把新文件的句子接在現有書本尾部
   const handleAppendContent = async (book: BookData, file: File) => {
     setAppendingBookId(book.id)
@@ -554,7 +570,9 @@ export default function Home() {
         <CharacterGraph
           sentences={graphBook.sentences}
           bookTitle={graphBook.title}
+          bookId={graphBook.id}
           onClose={() => setGraphBook(null)}
+          deepseekKey={deepseekKey || undefined}
         />
       )}
 
@@ -569,7 +587,7 @@ export default function Home() {
             <div className="flex items-center space-x-3">
               {/* Vision OCR 設定按鈕 */}
               <button
-                onClick={() => { setVisionKeyInput(visionApiKey); setShowVisionSettings(true) }}
+                onClick={() => { setVisionKeyInput(visionApiKey); setDeepseekKeyInput(deepseekKey); setShowVisionSettings(true) }}
                 className={`flex items-center space-x-1.5 px-3 py-2 rounded-full border text-sm font-medium transition-colors ${visionApiKey ? 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}
                 title="設定 AI 視覺 OCR（掃描 PDF 識別）"
               >
@@ -681,6 +699,33 @@ export default function Home() {
                 {visionApiKey && (
                   <button onClick={clearVisionSettings} className="px-4 py-2 text-red-600 border border-red-200 rounded-lg text-sm hover:bg-red-50">清除</button>
                 )}
+              </div>
+
+              {/* ── 人物關係分析：DeepSeek ── */}
+              <div className="mt-6 pt-5 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-semibold text-gray-800">🐳 人物關係分析（DeepSeek）</span>
+                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">新帳號免費額度</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">用 AI 準確識別人物與關係（夫妻、兄妹…）。新帳號有免費 token，每本書只分析一次並快取。前往 platform.deepseek.com → API Keys 取得 key。</p>
+                <input
+                  type="password"
+                  placeholder="貼上 DeepSeek API key（platform.deepseek.com → API Keys）"
+                  value={deepseekKeyInput}
+                  onChange={e => setDeepseekKeyInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-400 mb-3"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveDeepseekKey}
+                    disabled={!deepseekKeyInput.trim()}
+                    className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >儲存</button>
+                  {deepseekKey && (
+                    <button onClick={clearDeepseekKey} className="px-4 py-2 text-red-600 border border-red-200 rounded-lg text-sm hover:bg-red-50">清除</button>
+                  )}
+                </div>
+                {deepseekKey && <p className="text-xs text-emerald-600 mt-2">✓ 已設定，開啟人物關係圖即會用 AI 分析</p>}
               </div>
             </div>
           )}
