@@ -25,6 +25,7 @@ import { generateBookId, BookData } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 import { parseEpubClientSide } from './utils/epubParser'
 import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './utils/musicDB'
+import CharacterGraph from './components/CharacterGraph'
 
 // ── Vision OCR 設定型別 ──
 interface VisionOcrConfig {
@@ -237,6 +238,8 @@ export default function Home() {
   const [showVocab, setShowVocab] = useState(false)
   // 追加內容：記錄哪本書正在處理中
   const [appendingBookId, setAppendingBookId] = useState<string | null>(null)
+  // 人物關係圖
+  const [graphBook, setGraphBook] = useState<BookData | null>(null)
   // OCR 進度提示文字
   const [ocrProgress, setOcrProgress] = useState<string>('')
   // Vision OCR 設定
@@ -546,6 +549,15 @@ export default function Home() {
         />
       )}
 
+      {/* 人物關係圖 Modal */}
+      {graphBook && (
+        <CharacterGraph
+          sentences={graphBook.sentences}
+          bookTitle={graphBook.title}
+          onClose={() => setGraphBook(null)}
+        />
+      )}
+
       {sentences.length === 0 ? (
         <div className="max-w-6xl mx-auto px-6 py-8">
           {/* Header */}
@@ -850,6 +862,13 @@ export default function Home() {
                         </p>
                       )}
                     </div>
+                    {/* 人物關係圖入口 */}
+                    <button
+                      onClick={e => { e.stopPropagation(); setGraphBook(book) }}
+                      className="mt-1.5 w-full text-[10px] text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded px-1.5 py-0.5 transition-colors text-left"
+                    >
+                      🎭 人物關係圖
+                    </button>
                   </div>
                 )
               })}
