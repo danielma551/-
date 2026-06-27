@@ -928,16 +928,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setTimeout(() => setFlomoAddFlash(false), 600)
   }
 
-  // 抓最近 N 句（過濾圖片句）→ 顯示預覽，讓用戶確認再發
-  const sendLastN = (n: number) => {
+  // 以當前句為中心，取前後 N 段（過濾圖片句）→ 顯示預覽
+  const sendContext = (before: number, after: number) => {
     setShowFlomoNPicker(false)
     const collected: string[] = []
-    for (let i = currentIndex; i >= 0 && collected.length < n; i--) {
+    for (let i = currentIndex - before; i <= currentIndex + after; i++) {
+      if (i < 0 || i >= sentences.length) continue
       const s = sentences[i]
-      if (s && !s.startsWith('data:image/')) collected.unshift(s)
+      if (s && !s.startsWith('data:image/')) collected.push(s)
     }
     if (collected.length === 0) return
-    setFlomoPreview(collected)   // 先預覽，不直接發
+    setFlomoPreview(collected)
   }
 
   // 🌿 核心發送函數（接受要發送的句子陣列）
@@ -1803,19 +1804,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       {/* 🌿 Flomo 浮動按鈕組（右下角，拇指易按，e-ink 和普通模式都有） */}
       <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2">
 
-        {/* N 句快選選單（點 🌿 且暫存為空時出現） */}
+        {/* 上下文選擇器（點 🌿 且暫存為空時出現） */}
         {showFlomoNPicker && flomoBuffer.length === 0 && (
           <div
             className="flex flex-col items-end gap-1.5 mb-1"
             style={{ animation: 'panel-in 180ms cubic-bezier(0.23,1,0.32,1) both' }}
           >
             <p className="text-xs font-medium px-2" style={{ color: isEink ? '#333' : '#6b7280' }}>
-              發送最近幾句？
+              發送範圍
             </p>
-            {[3, 5, 10, 15, 20].map(n => (
+            {([
+              { label: '這一段',     before: 0, after: 0 },
+              { label: '加前後一段', before: 1, after: 1 },
+              { label: '加前後兩段', before: 2, after: 2 },
+            ] as const).map(opt => (
               <button
-                key={n}
-                onClick={() => sendLastN(n)}
+                key={opt.label}
+                onClick={() => sendContext(opt.before, opt.after)}
                 className="rounded-xl font-bold text-sm shadow"
                 style={{
                   padding: '8px 18px',
@@ -1823,10 +1828,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   color: isEink ? '#000' : '#15803d',
                   border: isEink ? '2px solid #000' : '1.5px solid #86efac',
                   boxShadow: isEink ? '2px 2px 0 #000' : '0 3px 8px rgba(0,0,0,0.1)',
-                  minWidth: 80,
+                  minWidth: 100,
                 }}
               >
-                最近 {n} 句
+                {opt.label}
               </button>
             ))}
             <button
