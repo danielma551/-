@@ -157,6 +157,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     passedCheckpoints.current = new Set()   // 重置檢查點旗仔
   }, [initialIndex])
 
+  // 安全網：若 currentIndex 落在 PARA_SEP 上（段落標記），自動跳到最近有效句
+  useEffect(() => {
+    if (sentences[currentIndex] === ' ') {
+      let next = currentIndex + 1
+      while (next < sentences.length && sentences[next] === ' ') next++
+      if (next < sentences.length) { setCurrentIndex(next); return }
+      let prev = currentIndex - 1
+      while (prev >= 0 && sentences[prev] === ' ') prev--
+      if (prev >= 0) setCurrentIndex(prev)
+    }
+  }, [currentIndex, sentences])
+
   // 下雨特效動畫（eink 模式下強制關閉）
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1875,7 +1887,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               { label: '這一段',     before: 0, after: 0 },
               { label: '加前後一段', before: 1, after: 1 },
               { label: '加前後兩段', before: 2, after: 2 },
-            ] as const).map(opt => (
+              { label: '加前後三段', before: 3, after: 3 },
+              { label: '加前後四段', before: 4, after: 4 },
+            ] as { label: string; before: number; after: number }[]).map(opt => (
               <button
                 key={opt.label}
                 onClick={() => sendContext(opt.before, opt.after)}
@@ -2034,16 +2048,20 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 }
                 if (cur.length > 0) paragraphs.push(cur.join(''))
                 return paragraphs.map((para, i) => (
-                  <p
-                    key={i}
-                    className="text-sm leading-loose"
-                    style={{
-                      color: isEink ? '#000' : '#374151',
-                      marginBottom: i < paragraphs.length - 1 ? '1em' : 0,
-                    }}
-                  >
-                    {para}
-                  </p>
+                  <div key={i} style={{ marginBottom: i < paragraphs.length - 1 ? '1.2em' : 0 }}>
+                    {paragraphs.length > 1 && (
+                      <p className="text-[10px] font-semibold mb-1"
+                        style={{ color: isEink ? '#555' : '#9ca3af', letterSpacing: '0.05em' }}>
+                        第{['一','二','三','四','五','六','七','八','九'][i] ?? i + 1}段
+                      </p>
+                    )}
+                    <p
+                      className="text-sm leading-loose"
+                      style={{ color: isEink ? '#000' : '#374151' }}
+                    >
+                      {para}
+                    </p>
+                  </div>
                 ))
               })()}
             </div>
