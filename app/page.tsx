@@ -10,7 +10,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, Sparkles } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -21,11 +21,12 @@ import FeedPanel from './components/FeedPanel'
 import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
-import { generateBookId, BookData } from './utils/storage'
+import { generateBookId, BookData, reviewStorage } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 import { parseEpubClientSide } from './utils/epubParser'
 import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './utils/musicDB'
 import CharacterGraph from './components/CharacterGraph'
+import ReviewCards from './components/ReviewCards'
 
 // ── Vision OCR 設定型別 ──
 interface VisionOcrConfig {
@@ -241,6 +242,9 @@ export default function Home() {
   const [appendingBookId, setAppendingBookId] = useState<string | null>(null)
   // 人物關係圖
   const [graphBook, setGraphBook] = useState<BookData | null>(null)
+  // 每日温習
+  const [showReview, setShowReview] = useState(false)
+  const [reviewDue, setReviewDue] = useState(0)
   // OCR 進度提示文字
   const [ocrProgress, setOcrProgress] = useState<string>('')
   // Vision OCR 設定
@@ -262,6 +266,7 @@ export default function Home() {
   useEffect(() => {
     getAllBooksFromIDB().then(setSavedBooks)
     getMusicMeta().then(setMusicMeta)
+    setReviewDue(reviewStorage.stats().due)
   }, [])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -577,6 +582,11 @@ export default function Home() {
         />
       )}
 
+      {/* 每日温習卡片 */}
+      {showReview && (
+        <ReviewCards onClose={() => { setShowReview(false); setReviewDue(reviewStorage.stats().due) }} />
+      )}
+
       {sentences.length === 0 ? (
         <div className="max-w-6xl mx-auto px-6 py-8">
           {/* Header */}
@@ -586,6 +596,18 @@ export default function Home() {
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
             <div className="flex items-center space-x-3">
+              {/* 每日温習按鈕 */}
+              <button
+                onClick={() => setShowReview(true)}
+                className="relative flex items-center space-x-1.5 px-3 py-2 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-sm font-medium transition-colors"
+                title="每日温習（你儲存到 Flomo 的筆記）"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">每日温習</span>
+                {reviewDue > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">{reviewDue}</span>
+                )}
+              </button>
               {/* Vision OCR 設定按鈕 */}
               <button
                 onClick={() => { setVisionKeyInput(visionApiKey); setDeepseekKeyInput(deepseekKey); setShowVisionSettings(true) }}

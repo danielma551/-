@@ -286,6 +286,83 @@ export const flomoStorage = {
   }
 }
 
+// ── 每日温習筆記（本機儲存 + 間隔重溫 SRS）──
+export interface ReviewNote {
+  id: string
+  text: string          // 筆記內容（通常為句子／段落）
+  source?: string       // 來源書名
+  createdAt: number
+  box: number           // SRS 盒子 0..5，越高間隔越長
+  due: number           // 下次該温習的時間戳
+  reviewCount: number   // 已温習次數
+}
+
+const REVIEW_KEY = 'review-notes'
+const DAY_MS = 86400000
+// 各盒子的間隔天數（index = box）：今天、1、2、4、7、15 天
+const BOX_DAYS = [0, 1, 2, 4, 7, 15]
+
+export const reviewStorage = {
+  getAll(): ReviewNote[] {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = localStorage.getItem(REVIEW_KEY)
+      return raw ? (JSON.parse(raw) as ReviewNote[]) : []
+    } catch { return [] }
+  },
+  saveAll(list: ReviewNote[]): void {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(REVIEW_KEY, JSON.stringify(list)) } catch { /* 配額滿則略過 */ }
+  },
+  // 批量加入（依文字去重，已存在則略過），回傳實際新增數量
+  addMany(texts: string[], source?: string): number {
+    const list = this.getAll()
+    const seen = new Set(list.map(n => n.text.trim()))
+    const now = Date.now()
+    let added = 0
+    for (const raw of texts) {
+      const text = (raw || '').trim()
+      if (!text || text.startsWith('data:image/') || seen.has(text)) continue
+      seen.add(text)
+      list.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, source, createdAt: now, box: 0, due: now, reviewCount: 0 })
+      added++
+    }
+    if (added > 0) this.saveAll(list)
+    return added
+  },
+  remove(id: string): void {
+    this.saveAll(this.getAll().filter(n => n.id !== id))
+  },
+  // 標記「記得」：升一格，依新盒子排下次温習
+  markKnown(id: string): void {
+    const list = this.getAll()
+    const n = list.find(x => x.id === id)
+    if (!n) return
+    n.box = Math.min(BOX_DAYS.length - 1, n.box + 1)
+    n.due = Date.now() + BOX_DAYS[n.box] * DAY_MS
+    n.reviewCount++
+    this.saveAll(list)
+  },
+  // 標記「要再温」：歸零，今天再出現
+  markAgain(id: string): void {
+    const list = this.getAll()
+    const n = list.find(x => x.id === id)
+    if (!n) return
+    n.box = 0
+    n.due = Date.now()
+    n.reviewCount++
+    this.saveAll(list)
+  },
+  // 今天到期（含逾期）的卡片，依到期時間排序
+  dueToday(): ReviewNote[] {
+    const end = new Date(); end.setHours(23, 59, 59, 999)
+    return this.getAll().filter(n => n.due <= end.getTime()).sort((a, b) => a.due - b.due)
+  },
+  stats(): { total: number; due: number } {
+    return { total: this.getAll().length, due: this.dueToday().length }
+  },
+}
+
 // RSS 訂閱來源的格式：名稱 + RSS 網址
 export interface FeedSource {
   id: string       // 唯一 ID，用 Date.now() 產生

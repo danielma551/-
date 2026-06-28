@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, speedStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, speedStorage, reviewStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { getMusicObjectURL } from '../utils/musicDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
@@ -1118,6 +1118,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         body: JSON.stringify({ content }),
       })
       setFlomoStatus('ok')
+      // 同時存一份到本機「每日温習」（每段為一張卡，依文字去重）
+      reviewStorage.addMany(paragraphs, bookTitle)
       setFlomoBuffer([])
       setTimeout(() => setFlomoStatus('idle'), 2000)
     } catch {
