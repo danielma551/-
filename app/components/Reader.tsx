@@ -577,6 +577,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   } | null>(null)
   // AI 上下文釋義（DeepSeek）：與字典彈窗共用，context 為該詞所在句子
   const dictContext = useRef('')
+  const dictOriginalWord = useRef('')   // 使用者實際選中的完整詞（字典可能縮短，AI 用呢個）
   const [aiDef, setAiDef] = useState<{ status: 'idle' | 'loading' | 'ok' | 'error'; text?: string }>({ status: 'idle' })
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)        // 長按已觸發：抑制隨後嘅 click 翻頁
@@ -663,8 +664,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     vibrate(30)
     dictOpenedAt.current = Date.now()
     dictContext.current = pos.text && !pos.text.startsWith('data:') ? pos.text : ''
-    setAiDef({ status: 'idle' })
+    dictOriginalWord.current = cands[0]
     setEinkDict({ word: cands[0], status: 'loading' })
+    aiDefine(cands[0])
 
     for (const w of cands) {
       try {
@@ -691,8 +693,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     dictOpenedAt.current = Date.now()
     const cur = sentences[currentIndex]
     dictContext.current = cur && !cur.startsWith('data:') ? cur : ''
-    setAiDef({ status: 'idle' })
+    dictOriginalWord.current = text
     setEinkDict({ word: text, status: 'loading' })
+    // 自動先跑 AI 釋義（有 key 才跑），AI 結果會置頂顯示
+    aiDefine(text)
     // 對中文也試逐步縮短（先試整段，再試前4/3/2/1字）
     const cands: string[] = [text]
     if (/[一-鿿]/.test(text) && text.length > 1) {
@@ -2808,7 +2812,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   className="flex items-center justify-center rounded-full text-white text-sm font-bold"
                   style={{ width: 28, height: 28, background: isEink ? '#000' : '#1a3a2a', flexShrink: 0 }}
                 >詞</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: isEink ? '#000' : '#1a3a2a' }}>{einkDict.word}</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: isEink ? '#000' : '#1a3a2a' }}>{dictOriginalWord.current || einkDict.word}</span>
               </div>
               <button
                 onClick={() => setEinkDict(null)}
@@ -2819,48 +2823,54 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 }}
               >關閉</button>
             </div>
-            {/* 內容 */}
-            {einkDict.status === 'loading' && (
-              <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>查詢中⋯</p>
-            )}
-            {einkDict.status === 'ok' && einkDict.definition && (
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
-                {einkDict.definition}
-              </div>
-            )}
-            {einkDict.status === 'notfound' && (
-              <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>字典中找不到「{einkDict.word}」</p>
-            )}
-            {einkDict.status === 'error' && (
-              <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>網絡錯誤，請稍後再試</p>
-            )}
 
-            {/* ── ✨ AI 上下文釋義 ── */}
-            <div style={{ marginTop: 16, paddingTop: 14, borderTop: isEink ? '1.5px dashed #000' : '1px solid #eee' }}>
-              {aiDef.status === 'idle' && (
-                <button
-                  onClick={() => aiDefine(einkDict.word)}
-                  style={isEink ? {
-                    border: '1.5px solid #000', borderRadius: 4, padding: '8px 14px', fontSize: 14, fontWeight: 700, background: '#fff', cursor: 'pointer',
-                  } : {
-                    border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                    color: '#fff', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                  }}
-                >✨ AI 結合上下文解釋</button>
-              )}
+            {/* ── ✨ AI 上下文釋義（置頂，自動先出）── */}
+            <div style={{ marginBottom: 4 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#6366f1', margin: '0 0 6px' }}>✨ AI 釋義（結合上下文）</p>
               {aiDef.status === 'loading' && (
                 <p style={{ fontSize: 14, color: isEink ? '#000' : '#6b7280', margin: 0 }}>AI 思考中⋯ 🤔</p>
               )}
               {aiDef.status === 'ok' && (
-                <div>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#6366f1', margin: '0 0 6px' }}>✨ AI 釋義</p>
-                  <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
-                    {aiDef.text}
-                  </div>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
+                  {aiDef.text}
                 </div>
               )}
-              {aiDef.status === 'error' && (
-                <p style={{ fontSize: 13, color: isEink ? '#000' : '#dc2626', margin: 0 }}>⚠️ {aiDef.text}</p>
+              {(aiDef.status === 'idle' || aiDef.status === 'error') && (
+                <div>
+                  {aiDef.status === 'error' && (
+                    <p style={{ fontSize: 13, color: isEink ? '#000' : '#dc2626', margin: '0 0 8px' }}>⚠️ {aiDef.text}</p>
+                  )}
+                  <button
+                    onClick={() => aiDefine(dictOriginalWord.current || einkDict.word)}
+                    style={isEink ? {
+                      border: '1.5px solid #000', borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 700, background: '#fff', cursor: 'pointer',
+                    } : {
+                      border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      color: '#fff', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                    }}
+                  >{aiDef.status === 'error' ? '重試' : '✨ AI 解釋'}</button>
+                </div>
+              )}
+            </div>
+
+            {/* ── 📖 字典（次要，置於 AI 之下）── */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: isEink ? '1.5px dashed #000' : '1px solid #eee' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#1a3a2a', margin: '0 0 6px' }}>
+                📖 字典{einkDict.status === 'ok' && einkDict.word !== dictOriginalWord.current ? `（「${einkDict.word}」）` : ''}
+              </p>
+              {einkDict.status === 'loading' && (
+                <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>查詢中⋯</p>
+              )}
+              {einkDict.status === 'ok' && einkDict.definition && (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
+                  {einkDict.definition}
+                </div>
+              )}
+              {einkDict.status === 'notfound' && (
+                <p style={{ fontSize: 14, color: isEink ? '#000' : '#9ca3af', margin: 0 }}>字典中找不到「{einkDict.word}」</p>
+              )}
+              {einkDict.status === 'error' && (
+                <p style={{ fontSize: 14, color: isEink ? '#000' : '#9ca3af', margin: 0 }}>網絡錯誤，請稍後再試</p>
               )}
             </div>
           </div>
