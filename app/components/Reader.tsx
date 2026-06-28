@@ -575,6 +575,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     status: 'loading' | 'ok' | 'notfound' | 'error'
     definition?: string
   } | null>(null)
+  // AI 上下文釋義（DeepSeek）：與字典彈窗共用，context 為該詞所在句子
+  const dictContext = useRef('')
+  const [aiDef, setAiDef] = useState<{ status: 'idle' | 'loading' | 'ok' | 'error'; text?: string }>({ status: 'idle' })
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)        // 長按已觸發：抑制隨後嘅 click 翻頁
   const longPressStart = useRef<{ x: number; y: number } | null>(null)
@@ -659,6 +662,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setTimeout(() => { longPressFired.current = false }, 700)   // 自動復位，避免食咗下一次翻頁
     vibrate(30)
     dictOpenedAt.current = Date.now()
+    dictContext.current = pos.text && !pos.text.startsWith('data:') ? pos.text : ''
+    setAiDef({ status: 'idle' })
     setEinkDict({ word: cands[0], status: 'loading' })
 
     for (const w of cands) {
@@ -684,6 +689,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const text = sel?.toString().trim() ?? ''
     if (!text || text.length > 8) return   // 超過 8 字通常是意外選中，忽略
     dictOpenedAt.current = Date.now()
+    const cur = sentences[currentIndex]
+    dictContext.current = cur && !cur.startsWith('data:') ? cur : ''
+    setAiDef({ status: 'idle' })
     setEinkDict({ word: text, status: 'loading' })
     // 對中文也試逐步縮短（先試整段，再試前4/3/2/1字）
     const cands: string[] = [text]
@@ -704,6 +712,42 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }
     }
     setEinkDict({ word: text, status: 'notfound' })
+  }
+
+  // ── ✨ AI 上下文釋義（DeepSeek）：用該詞所在句子解釋詞義 ──
+  const aiDefine = async (word: string) => {
+    const key = typeof window !== 'undefined' ? (localStorage.getItem('deepseek-api-key') || '') : ''
+    if (!key) {
+      setAiDef({ status: 'error', text: '未設定 DeepSeek key，請到書架頁右上角「Vision OCR / 設定」貼上 DeepSeek key。' })
+      return
+    }
+    setAiDef({ status: 'loading' })
+    const ctx = dictContext.current
+    const prompt = ctx
+      ? `下面是一本書中的句子：\n「${ctx}」\n\n請用淺白中文解釋句中「${word}」一詞在此語境下的意思（如有古義、引申義或雙關，亦請點出）。控制在 80 字內，直接給解釋，不要重複句子、不要客套。`
+      : `請用淺白中文解釋「${word}」的意思，控制在 80 字內，直接給解釋。`
+    try {
+      const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: 300,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        const msg = data?.error?.message ?? data?.message ?? res.status
+        setAiDef({ status: 'error', text: `DeepSeek 錯誤：${msg}` })
+        return
+      }
+      const txt: string = data.choices?.[0]?.message?.content?.trim() ?? ''
+      setAiDef(txt ? { status: 'ok', text: txt } : { status: 'error', text: 'AI 沒有回傳內容' })
+    } catch {
+      setAiDef({ status: 'error', text: '網絡錯誤，請稍後再試' })
+    }
   }
 
   const LONG_PRESS_MS = 550
@@ -2790,6 +2834,35 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {einkDict.status === 'error' && (
               <p style={{ fontSize: 15, color: isEink ? '#000' : '#374151', margin: 0 }}>網絡錯誤，請稍後再試</p>
             )}
+
+            {/* ── ✨ AI 上下文釋義 ── */}
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: isEink ? '1.5px dashed #000' : '1px solid #eee' }}>
+              {aiDef.status === 'idle' && (
+                <button
+                  onClick={() => aiDefine(einkDict.word)}
+                  style={isEink ? {
+                    border: '1.5px solid #000', borderRadius: 4, padding: '8px 14px', fontSize: 14, fontWeight: 700, background: '#fff', cursor: 'pointer',
+                  } : {
+                    border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    color: '#fff', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                  }}
+                >✨ AI 結合上下文解釋</button>
+              )}
+              {aiDef.status === 'loading' && (
+                <p style={{ fontSize: 14, color: isEink ? '#000' : '#6b7280', margin: 0 }}>AI 思考中⋯ 🤔</p>
+              )}
+              {aiDef.status === 'ok' && (
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#6366f1', margin: '0 0 6px' }}>✨ AI 釋義</p>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
+                    {aiDef.text}
+                  </div>
+                </div>
+              )}
+              {aiDef.status === 'error' && (
+                <p style={{ fontSize: 13, color: isEink ? '#000' : '#dc2626', margin: 0 }}>⚠️ {aiDef.text}</p>
+              )}
+            </div>
           </div>
         </div>
       )}
