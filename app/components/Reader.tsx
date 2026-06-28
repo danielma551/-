@@ -12,7 +12,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain, List, Music, VolumeX, Volume2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, speedStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { getMusicObjectURL } from '../utils/musicDB'
@@ -25,6 +25,7 @@ import ContextModal from './ContextModal'
 import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
+import CharacterGraph from './CharacterGraph'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 interface ReaderProps {
@@ -78,6 +79,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [shortcuts, setShortcuts] = useState<KeyboardShortcuts>(DEFAULT_SHORTCUTS)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
   const [showSearch, setShowSearch] = useState(false)
+  const [showGraph, setShowGraph] = useState(false)   // 閱讀時開啟人物關係圖
   const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
@@ -1411,6 +1413,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   <Search className="w-4 h-4 text-gray-500" />
                 </button>
               )}
+              {/* 人物關係圖按鈕 */}
+              <button onClick={() => setShowGraph(true)} className="p-1.5 hover:bg-indigo-50 rounded-lg transition-colors flex-shrink-0" title="人物關係圖">
+                <Network className="w-4 h-4 text-indigo-500" />
+              </button>
               {/* 章節目錄（只有 EPUB 有 chapters 才顯示）*/}
               {chapters && chapters.length > 0 && (
                 <button
@@ -2814,6 +2820,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 選字圖片彈窗 */}
       <ImagePopup />
+
+      {/* 人物關係圖（閱讀時可開啟）*/}
+      {showGraph && (
+        <CharacterGraph
+          sentences={sentences}
+          bookTitle={bookTitle}
+          bookId={bookId}
+          deepseekKey={typeof window !== 'undefined' ? (localStorage.getItem('deepseek-api-key') || undefined) : undefined}
+          onClose={() => setShowGraph(false)}
+        />
+      )}
     </div>
   )
 }
