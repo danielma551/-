@@ -49,7 +49,8 @@ function splitIntoSentences(text: string): string[] {
   const trail = cleaned.slice(lastEnd).trim()
   if (trail) results.push(trail)
   if (results.length === 0) return [cleaned]
-  return results.map(s => s.trim()).filter(s => s.length > 0)
+  // 過濾空句與只含空白/零寬字元的句子，避免閱讀時出現空白頁
+  return results.map(s => s.trim()).filter(s => s.replace(/[\s　 ​‌‍﻿]/g, '').length > 0)
 }
 
 // ── HTML 清理（與 server 端一致）──

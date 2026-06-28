@@ -28,6 +28,14 @@ import ImagePopup from './ImagePopup'
 import CharacterGraph from './CharacterGraph'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
+// 「空白句」判定：空字串、純空白（含全形/不換行/零寬空格）都當作要跳過的空句；
+// 圖片句（data:image/）屬有效內容，不算空白。涵蓋 PARA_SEP 段落標記與舊書殘留的空句。
+const isBlankSentence = (s: string | undefined): boolean => {
+  if (!s) return true
+  if (s.startsWith('data:image/')) return false
+  return s.replace(/[\s　 ​‌‍﻿]/g, '') === ''
+}
+
 interface ReaderProps {
   sentences: string[]
   bookTitle: string
@@ -162,14 +170,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     passedCheckpoints.current = new Set()   // 重置檢查點旗仔
   }, [initialIndex])
 
-  // 安全網：若 currentIndex 落在 PARA_SEP 上（段落標記），自動跳到最近有效句
+  // 安全網：若 currentIndex 落在空白句（PARA_SEP 段落標記或分句殘留的空句）上，自動跳到最近有效句
   useEffect(() => {
-    if (sentences[currentIndex] === ' ') {
+    if (isBlankSentence(sentences[currentIndex])) {
       let next = currentIndex + 1
-      while (next < sentences.length && sentences[next] === ' ') next++
+      while (next < sentences.length && isBlankSentence(sentences[next])) next++
       if (next < sentences.length) { setCurrentIndex(next); return }
       let prev = currentIndex - 1
-      while (prev >= 0 && sentences[prev] === ' ') prev--
+      while (prev >= 0 && isBlankSentence(sentences[prev])) prev--
       if (prev >= 0) setCurrentIndex(prev)
     }
   }, [currentIndex, sentences])
@@ -800,7 +808,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const nextTextIndex = (from: number) => {
     let i = from + 1
     while (i < sentences.length) {
-      if (isParaSep(sentences[i])) { i++; continue }          // 跳過段落分隔符
+      if (isBlankSentence(sentences[i])) { i++; continue }    // 跳過段落分隔符與空白句
       if (isAnnotationItem(sentences[i])) { i++; continue }   // 跳過注文（附屬於前句）
       if (isAnnotationTail(i)) { i++; continue }              // 跳過已合併的尾巴
       break
@@ -811,7 +819,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const prevTextIndex = (from: number) => {
     let i = from - 1
     while (i >= 0) {
-      if (isParaSep(sentences[i])) { i--; continue }          // 跳過段落分隔符
+      if (isBlankSentence(sentences[i])) { i--; continue }    // 跳過段落分隔符與空白句
       if (isAnnotationItem(sentences[i])) { i--; continue }
       if (isAnnotationTail(i)) { i--; continue }
       break

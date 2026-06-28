@@ -83,7 +83,8 @@ function splitSentencesClient(text: string): string[] {
   const sentenceRegex = /[^.!?。！？;；,，:：]+[.!?。！？;；,，:：]+/g
   const sentences = cleaned.match(sentenceRegex) || []
   if (sentences.length === 0 && cleaned.length > 0) return [cleaned]
-  return sentences.map(s => s.trim()).filter(s => s.length > 0)
+  // 過濾空句與只含空白/零寬字元的句子，避免閱讀時出現空白頁
+  return sentences.map(s => s.trim()).filter(s => s.replace(/[\s　 ​‌‍﻿]/g, '').length > 0)
 }
 
 // ── 瀏覽器端 PDF 處理：先提取文字，失敗則用 Vision OCR 或 Tesseract ──
