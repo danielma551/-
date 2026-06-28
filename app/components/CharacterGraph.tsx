@@ -1,11 +1,12 @@
 'use client'
 
-// 【人物關係圖】
-// 力導向圖（force-directed graph）：節點=人物，連線=共現關係。
-// 純客戶端，不需要 D3 或 API key。
+// 【人物關係圖】— 視覺升級版
+// 力導向圖（force-directed graph）：節點=人物，連線=共現／關係。
+// 純客戶端，不需要 D3。視覺：曲線連線 + 光澤節點 + 自動置中。
+// 邏輯（LLM 分析、快取、啟發式退回、拖動、hover）與原版完全相同。
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Loader2, RefreshCw } from 'lucide-react'
+import { X, Loader2, RefreshCw, BookOpen } from 'lucide-react'
 import { analyzeCharacters, analyzeCharactersWithLLM, CharacterGraph as GraphData } from '../utils/characterAnalysis'
 
 interface Props {
@@ -42,10 +43,10 @@ function clearCache(bookId?: string) {
 
 // ── 顏色調色盤（依角色重要性排序）──
 const PALETTE = [
-  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
-  '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#14b8a6',
-  '#a855f7', '#eab308', '#22c55e', '#f43f5e', '#0ea5e9',
-  '#d946ef', '#84cc16', '#fb923c', '#4ade80', '#38bdf8',
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9',
+  '#8b5cf6', '#f43f5e', '#14b8a6', '#f97316', '#a855f7',
+  '#22c55e', '#3b82f6', '#eab308', '#06b6d4', '#d946ef',
+  '#84cc16', '#fb923c', '#4ade80', '#38bdf8', '#ef4444',
 ]
 
 // ── 力導向物理模擬 ──
@@ -72,13 +73,13 @@ function buildGraph(data: GraphData, width: number, height: number): { nodes: No
   const n = data.characters.length
   const cx = width / 2
   const cy = height / 2
-  const initR = Math.min(width, height) * 0.3
+  const initR = Math.min(width, height) * 0.32
 
   const maxCount = Math.max(...data.characters.map(c => c.count), 1)
 
   const nodes: Node[] = data.characters.map((char, i) => {
     const angle = (2 * Math.PI * i) / n - Math.PI / 2
-    const r = 18 + Math.sqrt(char.count / maxCount) * 24
+    const r = 20 + Math.sqrt(char.count / maxCount) * 26
     return {
       id: char.name,
       x: cx + initR * Math.cos(angle) + (Math.random() - 0.5) * 10,
@@ -104,8 +105,8 @@ function buildGraph(data: GraphData, width: number, height: number): { nodes: No
 }
 
 function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
-  const REPULSION = 7200
-  const SPRING_LEN = 165
+  const REPULSION = 7600
+  const SPRING_LEN = 158
   const SPRING_K = 0.05
   const DAMP = 0.82
   const GRAVITY = 0.022
@@ -123,7 +124,7 @@ function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
       const dy = b.y - a.y || 0.01
       const dist2 = dx * dx + dy * dy
       const dist = Math.sqrt(dist2)
-      const minDist = a.r + b.r + 34
+      const minDist = a.r + b.r + 36
       const force = REPULSION / dist2
       const fx = (dx / dist) * force
       const fy = (dy / dist) * force
@@ -169,8 +170,39 @@ function runTick(nodes: Node[], edges: Edge[], width: number, height: number) {
     n.x += n.vx
     n.y += n.vy
     n.x = Math.max(n.r + 40, Math.min(width - n.r - 40, n.x))
-    n.y = Math.max(n.r + 40, Math.min(height - n.r - 40, n.y))
+    n.y = Math.max(n.r + 36, Math.min(height - n.r - 36, n.y))
   })
+}
+
+// ── 視覺輔助：把整體外框平移到畫布中央，避免偏向一角 ──
+function recenterNodes(nodes: Node[], width: number, height: number) {
+  if (nodes.length === 0) return
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  nodes.forEach(n => {
+    minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r)
+    minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r)
+  })
+  const sx = (width - (minX + maxX)) / 2
+  const sy = (height - (minY + maxY)) / 2
+  nodes.forEach(n => { n.x += sx; n.y += sy })
+}
+
+// ── 視覺輔助：彎曲連線（二次貝茲），回傳路徑與標籤錨點 ──
+function edgePath(a: Node, b: Node): { d: string; mx: number; my: number } {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const dist = Math.hypot(dx, dy) || 1
+  const off = Math.min(46, dist * 0.14)
+  const cx = (a.x + b.x) / 2 + (-dy / dist) * off
+  const cy = (a.y + b.y) / 2 + (dx / dist) * off
+  // 二次貝茲在 t=0.5 的點：0.25A + 0.5C + 0.25B
+  const mx = 0.25 * a.x + 0.5 * cx + 0.25 * b.x
+  const my = 0.25 * a.y + 0.5 * cy + 0.25 * b.y
+  return { d: `M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`, mx, my }
+}
+
+function hexA(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
 export default function CharacterGraph({ sentences, bookTitle, onClose, deepseekKey, bookId }: Props) {
@@ -214,8 +246,9 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
       setFromCache(cached)
       setGraphData(result)
       const { nodes: ns, edges: es } = buildGraph(result, canvasW, canvasH)
-      // 一次過跑完模擬，定格佈局（唔再飄來飄去）
-      for (let k = 0; k < 480; k++) runTick(ns, es, canvasW, canvasH)
+      // 一次過跑完模擬，定格佈局（唔再飄來飄去），再置中
+      for (let k = 0; k < 520; k++) runTick(ns, es, canvasW, canvasH)
+      recenterNodes(ns, canvasW, canvasH)
       nodesRef.current = ns
       edgesRef.current = es
       setNodes([...ns])
@@ -332,15 +365,23 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h2 className="text-base font-semibold text-gray-800">
-              《{bookTitle}》人物關係圖
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {graphData?.source === 'llm'
-                ? '節點大小 = 重要度 · 滑過人物即顯示其關係 · 下方有完整清單'
-                : '基於共現分析 · 節點大小 = 出現頻率 · 連線粗細 = 互動頻率'}
-            </p>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(155deg,#6366f1,#8b5cf6)', boxShadow: '0 6px 16px rgba(99,102,241,.34)' }}
+            >
+              <BookOpen className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">
+                《{bookTitle}》人物關係圖
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {graphData?.source === 'llm'
+                  ? '節點大小 = 重要度 · 滑過人物即顯示其關係 · 下方有完整清單'
+                  : '基於共現分析 · 節點大小 = 出現頻率 · 連線粗細 = 互動頻率'}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             {deepseekKey && !analyzing && (
@@ -362,7 +403,10 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
         </div>
 
         {/* Body */}
-        <div className="relative" style={{ background: '#f9fafb' }}>
+        <div
+          className="relative"
+          style={{ background: 'radial-gradient(115% 95% at 50% -8%, #f4f2ff 0%, #fafafb 52%, #ffffff 100%)' }}
+        >
           {analyzing && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10" style={{ minHeight: 320 }}>
               <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -387,6 +431,17 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
             >
+              <defs>
+                <radialGradient id="cg-sheen" cx="36%" cy="28%" r="78%">
+                  <stop offset="0%" stopColor="#ffffff" stopOpacity={0.42} />
+                  <stop offset="55%" stopColor="#ffffff" stopOpacity={0.05} />
+                  <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
+                </radialGradient>
+                <filter id="cg-shadow" x="-60%" y="-60%" width="220%" height="220%">
+                  <feDropShadow dx="0" dy="3" stdDeviation="5" floodColor="#312e81" floodOpacity={0.2} />
+                </filter>
+              </defs>
+
               {/* Edges：hover 某人物時，只突出佢嘅連線，其餘淡化 */}
               {edges.map((edge, i) => {
                 const a = nodeMap.get(edge.source)
@@ -394,14 +449,15 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                 if (!a || !b) return null
                 const connected = !hoveredId || edge.source === hoveredId || edge.target === hoveredId
                 const strokeW = 1.5 + edge.strength * 5
+                const { d } = edgePath(a, b)
                 return (
-                  <line
+                  <path
                     key={i}
-                    x1={a.x} y1={a.y}
-                    x2={b.x} y2={b.y}
+                    d={d}
+                    fill="none"
                     stroke={a.color}
                     strokeWidth={strokeW}
-                    strokeOpacity={connected ? 0.3 + edge.strength * 0.45 : 0.06}
+                    strokeOpacity={connected ? 0.26 + edge.strength * 0.42 : 0.05}
                     strokeLinecap="round"
                   />
                 )
@@ -414,15 +470,15 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                   const a = nodeMap.get(edge.source)
                   const b = nodeMap.get(edge.target)
                   if (!a || !b || !edge.label) return null
-                  const mx = (a.x + b.x) / 2
-                  const my = (a.y + b.y) / 2
-                  const w = edge.label.length * 12 + 8
+                  const { mx, my } = edgePath(a, b)
+                  const w = edge.label.length * 13 + 14
+                  const c = a.color
                   return (
                     <g key={`elabel-${i}`} style={{ pointerEvents: 'none' }}>
-                      <rect x={mx - w / 2} y={my - 11} width={w} height={17} rx={5}
-                        fill="white" stroke="#e5e7eb" strokeWidth={0.5} />
-                      <text x={mx} y={my} textAnchor="middle" dy="1"
-                        fontSize="11" fontWeight="600" fill="#4b5563">
+                      <rect x={mx - w / 2} y={my - 11} width={w} height={22} rx={7}
+                        fill="white" stroke={c} strokeWidth={1} opacity={0.97} />
+                      <text x={mx} y={my + 4} textAnchor="middle"
+                        fontSize="11.5" fontWeight="700" fill={c}>
                         {edge.label}
                       </text>
                     </g>
@@ -432,61 +488,64 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
               {/* Nodes */}
               {nodes.map((node) => {
                 const dimmed = hoveredId ? !neighborIds.has(node.id) : false
+                const isHover = hoveredNode?.id === node.id
                 const maxChars = Math.max(3, Math.floor(node.r / 6))
                 const display = node.id.length > maxChars ? node.id.slice(0, maxChars - 1) + '…' : node.id
                 return (
                 <g
                   key={node.id}
                   transform={`translate(${node.x},${node.y})`}
-                  style={{ cursor: 'grab', opacity: dimmed ? 0.25 : 1, transition: 'opacity .15s' }}
+                  style={{ cursor: 'grab', opacity: dimmed ? 0.2 : 1, transition: 'opacity .18s' }}
                   onMouseDown={e => handleMouseDown(e, node)}
                   onMouseEnter={() => setHoveredNode(node)}
                   onMouseLeave={() => setHoveredNode(null)}
                 >
-                  {/* Shadow */}
+                  {/* Outer glow */}
                   <circle
-                    r={node.r + 2}
+                    r={node.r + 7}
                     fill={node.color}
-                    fillOpacity={0.15}
+                    opacity={isHover ? 0.3 : 0.14}
                   />
                   {/* Main circle */}
                   <circle
                     r={node.r}
                     fill={node.color}
-                    fillOpacity={hoveredNode?.id === node.id ? 1 : 0.85}
                     stroke="white"
-                    strokeWidth={2}
+                    strokeWidth={3}
+                    filter="url(#cg-shadow)"
                   />
+                  {/* Glossy sheen */}
+                  <circle r={node.r} fill="url(#cg-sheen)" style={{ pointerEvents: 'none' }} />
                   {/* Name label（過長自動截斷，完整名見 tooltip 與下方清單）*/}
                   <text
                     textAnchor="middle"
-                    dy="0.35em"
-                    fontSize={node.r > 30 ? '13' : '11'}
-                    fontWeight="600"
+                    dy="0.34em"
+                    fontSize={node.r > 32 ? '15' : '12'}
+                    fontWeight="700"
                     fill="white"
-                    style={{ pointerEvents: 'none' }}
+                    style={{ pointerEvents: 'none', letterSpacing: '0.5px' }}
                   >
                     {display}
                   </text>
                   {/* Tooltip on hover */}
-                  {hoveredNode?.id === node.id && (
+                  {isHover && (
                     <g transform={`translate(${node.r + 8}, ${-node.r})`}>
                       <rect
                         x={0} y={0}
                         width={120} height={48}
-                        rx={6} ry={6}
+                        rx={8} ry={8}
                         fill="white"
                         stroke="#e5e7eb"
                         strokeWidth={1}
-                        filter="drop-shadow(0 2px 4px rgba(0,0,0,.12))"
+                        filter="drop-shadow(0 2px 6px rgba(0,0,0,.14))"
                       />
-                      <text x={8} y={16} fontSize="11" fill="#374151" fontWeight="600">{node.id}</text>
+                      <text x={10} y={18} fontSize="11" fill="#374151" fontWeight="700">{node.id}</text>
                       {graphData?.source === 'llm' ? (
-                        <text x={8} y={30} fontSize="10" fill="#6b7280">重要度 {node.count}/100</text>
+                        <text x={10} y={32} fontSize="10" fill="#6b7280">重要度 {node.count}/100</text>
                       ) : (
                         <>
-                          <text x={8} y={30} fontSize="10" fill="#6b7280">出現 {node.count} 次</text>
-                          <text x={8} y={43} fontSize="10" fill="#6b7280">對話 {node.dialogues} 句</text>
+                          <text x={10} y={31} fontSize="10" fill="#6b7280">出現 {node.count} 次</text>
+                          <text x={10} y={43} fontSize="10" fill="#6b7280">對話 {node.dialogues} 句</text>
                         </>
                       )}
                     </g>
@@ -510,7 +569,12 @@ export default function CharacterGraph({ sentences, bookTitle, onClose, deepseek
                       <div key={i} className="flex items-center gap-1.5 text-sm" style={{ opacity: active ? 1 : 0.35, transition: 'opacity .15s' }}>
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorOf(rel.source) }} />
                         <span className="font-medium text-gray-700 truncate">{rel.source}</span>
-                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{rel.label || '相關'}</span>
+                        <span
+                          className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0 font-semibold"
+                          style={{ background: hexA(colorOf(rel.source), 0.12), color: colorOf(rel.source) }}
+                        >
+                          {rel.label || '相關'}
+                        </span>
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorOf(rel.target) }} />
                         <span className="font-medium text-gray-700 truncate">{rel.target}</span>
                       </div>
