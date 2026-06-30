@@ -587,6 +587,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const dictContext = useRef('')
   const dictOriginalWord = useRef('')   // 使用者實際選中的完整詞（字典可能縮短，AI 用呢個）
   const [aiDef, setAiDef] = useState<{ status: 'idle' | 'loading' | 'ok' | 'error'; text?: string }>({ status: 'idle' })
+  // 👥 人物關係（DeepSeek + 人物關係圖快取）
+  const [charRel, setCharRel] = useState<{ status: 'idle' | 'loading' | 'ok' | 'error'; text?: string }>({ status: 'idle' })
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)        // 長按已觸發：抑制隨後嘅 click 翻頁
   const longPressStart = useRef<{ x: number; y: number } | null>(null)
@@ -675,6 +677,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     dictOriginalWord.current = cands[0]
     setEinkDict({ word: cands[0], status: 'loading' })
     aiDefine(cands[0])
+    if (findCachedCharacter(cands[0]).matched) explainCharacter(cands[0])
+    else setCharRel({ status: 'idle' })
 
     for (const w of cands) {
       try {
@@ -705,6 +709,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     setEinkDict({ word: text, status: 'loading' })
     // 自動先跑 AI 釋義（有 key 才跑），AI 結果會置頂顯示
     aiDefine(text)
+    // 若關係圖快取認得呢個名 → 自動顯示人物關係；否則留一個按鈕俾用戶手動查
+    if (findCachedCharacter(text).matched) explainCharacter(text)
+    else setCharRel({ status: 'idle' })
     // 對中文也試逐步縮短（先試整段，再試前4/3/2/1字）
     const cands: string[] = [text]
     if (/[一-鿿]/.test(text) && text.length > 1) {
@@ -759,6 +766,67 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       setAiDef(txt ? { status: 'ok', text: txt } : { status: 'error', text: 'AI 沒有回傳內容' })
     } catch {
       setAiDef({ status: 'error', text: '網絡錯誤，請稍後再試' })
+    }
+  }
+
+  // 由人物關係圖快取中尋找該人物，回傳是否命中與已知關係字串（作為 AI 的依據）
+  const findCachedCharacter = (name: string): { matched: boolean; canonical: string; grounding: string } => {
+    if (typeof window === 'undefined' || !bookId) return { matched: false, canonical: name, grounding: '' }
+    try {
+      const raw = localStorage.getItem('char-graph:v1:' + bookId)
+      if (!raw) return { matched: false, canonical: name, grounding: '' }
+      const data = JSON.parse(raw)
+      const chars: { name: string }[] = data?.characters ?? []
+      const hit = chars.find(c => c.name === name || name.includes(c.name) || c.name.includes(name))
+      if (!hit) return { matched: false, canonical: name, grounding: '' }
+      const rels: { source: string; target: string; label?: string }[] = data?.relations ?? []
+      const grounding = rels
+        .filter(r => r.source === hit.name || r.target === hit.name)
+        .map(r => `${r.source}—${r.label || '相關'}—${r.target}`)
+        .join('；')
+      return { matched: true, canonical: hit.name, grounding }
+    } catch {
+      return { matched: false, canonical: name, grounding: '' }
+    }
+  }
+
+  // 👥 用 DeepSeek 介紹人物 + 列出關係（以快取關係圖與上下文作依據）
+  const explainCharacter = async (name: string) => {
+    const key = typeof window !== 'undefined' ? (localStorage.getItem('deepseek-api-key') || '') : ''
+    if (!key) {
+      setCharRel({ status: 'error', text: '未設定 DeepSeek key，請到書架頁設定。' })
+      return
+    }
+    setCharRel({ status: 'loading' })
+    const { canonical, grounding } = findCachedCharacter(name)
+    const ctx = dictContext.current
+    const prompt =
+      `在小說《${bookTitle}》中，「${canonical || name}」是誰？\n` +
+      `請：1) 用一句話介紹呢個角色；2) 列出佢同其他主要人物嘅關係，每行一條，格式「對象 — 關係（例如 夫妻／兄妹／朋友）」。\n` +
+      (grounding ? `已知人物關係資料（請參考，可補充）：${grounding}\n` : '') +
+      (ctx ? `出現語境：「${ctx}」\n` : '') +
+      `只輸出介紹同關係，唔好客套，控制在 120 字內。`
+    try {
+      const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: 400,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        const msg = data?.error?.message ?? data?.message ?? res.status
+        setCharRel({ status: 'error', text: `DeepSeek 錯誤：${msg}` })
+        return
+      }
+      const txt: string = data.choices?.[0]?.message?.content?.trim() ?? ''
+      setCharRel(txt ? { status: 'ok', text: txt } : { status: 'error', text: 'AI 沒有回傳內容' })
+    } catch {
+      setCharRel({ status: 'error', text: '網絡錯誤，請稍後再試' })
     }
   }
 
@@ -2834,8 +2902,37 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               >關閉</button>
             </div>
 
-            {/* ── ✨ AI 上下文釋義（置頂，自動先出）── */}
-            <div style={{ marginBottom: 4 }}>
+            {/* ── 👥 人物關係（DeepSeek + 關係圖快取，認得人物時自動顯示）── */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#0d9488', margin: '0 0 6px' }}>👥 人物關係</p>
+              {charRel.status === 'loading' && (
+                <p style={{ fontSize: 14, color: isEink ? '#000' : '#6b7280', margin: 0 }}>AI 分析人物關係中⋯ 🔗</p>
+              )}
+              {charRel.status === 'ok' && (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: isEink ? 15 : 14, lineHeight: 1.8, color: isEink ? '#000' : '#374151', fontFamily: textFontFamily }}>
+                  {charRel.text}
+                </div>
+              )}
+              {(charRel.status === 'idle' || charRel.status === 'error') && (
+                <div>
+                  {charRel.status === 'error' && (
+                    <p style={{ fontSize: 13, color: isEink ? '#000' : '#dc2626', margin: '0 0 8px' }}>⚠️ {charRel.text}</p>
+                  )}
+                  <button
+                    onClick={() => explainCharacter(dictOriginalWord.current || einkDict.word)}
+                    style={isEink ? {
+                      border: '1.5px solid #000', borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 700, background: '#fff', cursor: 'pointer',
+                    } : {
+                      border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      color: '#fff', background: 'linear-gradient(135deg,#14b8a6,#0d9488)',
+                    }}
+                  >{charRel.status === 'error' ? '重試' : '👥 查呢個係邊個人物 / 關係'}</button>
+                </div>
+              )}
+            </div>
+
+            {/* ── ✨ AI 上下文釋義 ── */}
+            <div style={{ marginBottom: 4, paddingTop: 12, borderTop: isEink ? '1.5px dashed #000' : '1px solid #eee' }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#6366f1', margin: '0 0 6px' }}>✨ AI 釋義（結合上下文）</p>
               {aiDef.status === 'loading' && (
                 <p style={{ fontSize: 14, color: isEink ? '#000' : '#6b7280', margin: 0 }}>AI 思考中⋯ 🤔</p>
