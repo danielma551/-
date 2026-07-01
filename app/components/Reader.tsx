@@ -28,7 +28,7 @@ import ImagePopup from './ImagePopup'
 import CharacterGraph from './CharacterGraph'
 import BreathingOverlay from './BreathingOverlay'
 import GlossaryCard from './GlossaryCard'
-import { EXTERNAL_BOOK_ID, lookupGlossary } from '../utils/externalReading'
+import { EXTERNAL_BOOK_ID, lookupGlossary, getGlossary } from '../utils/externalReading'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 // 「空白句」判定：空字串、純空白（含全形/不換行/零寬空格）都當作要跳過的空句；
@@ -1092,6 +1092,40 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
     return cur + tail
   }, [currentIndex, sentences])
+
+  // 外刊詞彙表（有解釋的字，會在正文加虛線底提示）
+  const glossaryMap = useMemo(
+    () => (bookId === EXTERNAL_BOOK_ID ? getGlossary() : {}),
+    [bookId]
+  )
+
+  // 渲染正文：外刊書中，命中詞彙表的英文詞加虛線底 + 可點開解釋卡；其他書本原樣輸出
+  const renderSentenceContent = (): React.ReactNode => {
+    const text = effectiveSentence
+    if (bookId !== EXTERNAL_BOOK_ID || Object.keys(glossaryMap).length === 0) return text
+    const parts = text.split(/([A-Za-z][A-Za-z'’-]*)/)
+    return parts.map((seg, i) => {
+      if (i % 2 === 1) {
+        const note = glossaryMap[seg.toLowerCase()]
+        if (note) {
+          return (
+            <span
+              key={i}
+              onClick={(e) => { e.stopPropagation(); setGlossaryCard({ word: seg, note }) }}
+              style={{
+                textDecoration: 'underline dashed',
+                textUnderlineOffset: '5px',
+                textDecorationColor: '#14b8a6',
+                textDecorationThickness: '1.5px',
+                cursor: 'pointer',
+              }}
+            >{seg}</span>
+          )
+        }
+      }
+      return seg
+    })
+  }
 
   // ＋ 加入暫存：把當前句子加入 buffer，閃爍提示
   const addToFlomoBuffer = () => {
@@ -2425,7 +2459,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     opacity: fadeVisible ? 1 : 0,
                     transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
                   }}>
-                    {effectiveSentence}
+                    {renderSentenceContent()}
                   </p>
                   {/* 注釋按鈕（紙本模式） */}
                   {annotationBlock && (
@@ -2555,7 +2589,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       WebkitTouchCallout: isEink ? 'none' : undefined,
                     } as React.CSSProperties}
                   >
-                    {effectiveSentence}
+                    {renderSentenceContent()}
                   </p>
                   {/* 注釋按鈕：當下一句是注圖時顯示 */}
                   {annotationBlock && (
