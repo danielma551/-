@@ -296,6 +296,7 @@ export interface ReviewNote {
   due: number           // 下次該温習的時間戳
   reviewCount: number   // 已温習次數
   device?: string       // 建立這張卡的設備（例如 iPhone / Mac / Windows）
+  meta?: string         // 附加資訊（來源／章節／時間／標籤，匯入時保留）
 }
 
 // 由 UA 粗略判斷設備類型（建立卡片時記錄，跨裝置同步後可看到來源）
@@ -368,7 +369,7 @@ export const reviewStorage = {
       const text = (it?.text || '').trim()
       if (!text || seen.has(text)) continue
       seen.add(text)
-      list.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, source: it.source || 'Flomo 匯入', createdAt: now, box: 0, due: now, reviewCount: 0, device: detectDevice() })
+      list.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, source: it.source || 'Flomo 匯入', createdAt: now, box: 0, due: now, reviewCount: 0, device: detectDevice(), meta: it.meta })
       added++
     }
     if (added > 0) this.saveAll(list)
@@ -444,7 +445,7 @@ export const reviewStorage = {
   },
 }
 
-export interface ImportedNote { text: string; source?: string }
+export interface ImportedNote { text: string; source?: string; meta?: string }
 
 // 解析 Flomo 匯出檔（.txt / .md / .csv / .html）→ 一條條「筆記正文 + 來源」。
 // Flomo 每則 memo 結構：時間戳行 → 📖標籤/📅日期等 metadata → 正文 →（📚來源/📂章節/📅時間/#標籤）。
@@ -489,12 +490,13 @@ export function parseFlomoExport(raw: string, isHtml: boolean): ImportedNote[] {
   const notes: ImportedNote[] = []
   for (const g of rawGroups) {
     const contentLines: string[] = []
+    const metaLines: string[] = []
     let source: string | undefined
     for (const l of g) {
       const t = l.trim()
       if (!t) continue
       if (isMeta(l)) {
-        // 從 metadata 抽出「來源」書本資訊（可能帶前置 emoji）
+        metaLines.push(t)   // 完整保留來源／章節／時間／標籤等資訊
         const m = t.match(/(?:來源|来源|出處|出处)\s*[:：]\s*(.+)$/)
         if (m && !source) source = m[1].trim()
         continue
@@ -502,7 +504,8 @@ export function parseFlomoExport(raw: string, isHtml: boolean): ImportedNote[] {
       contentLines.push(t)
     }
     const content = contentLines.join('\n').trim()
-    if (content.replace(/\s/g, '').length >= 2) notes.push({ text: content, source })
+    const meta = metaLines.join('\n').trim()
+    if (content.replace(/\s/g, '').length >= 2) notes.push({ text: content, source, meta: meta || undefined })
   }
   return notes
 }

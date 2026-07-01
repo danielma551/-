@@ -317,6 +317,13 @@ export default function ReviewCards({ onClose }: Props) {
                   </div>
                 </div>
 
+                {/* 附加資訊：來源／章節／時間／標籤（匯入時保留）*/}
+                {card.meta && (
+                  <div className="mt-3.5 pt-3 border-t border-dashed border-gray-100">
+                    <p className="text-[12px] text-gray-400 leading-relaxed whitespace-pre-wrap">{card.meta}</p>
+                  </div>
+                )}
+
                 {/* 底列：meta（生成時間＋設備）+ 刪除 */}
                 <div className="flex items-end justify-between mt-4 pt-3.5 border-t border-gray-100">
                   <div className="flex flex-col gap-0.5">
