@@ -15,15 +15,27 @@ interface Props {
 const INHALE_MS = 4000
 const EXHALE_MS = 4000
 
+const FADE_MS = 400
+
 export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: Props) {
   const [phase, setPhase] = useState<'inhale' | 'exhale'>('inhale')
   const [big, setBig] = useState(false)   // 圓圈大細：吸氣時放大
+  const [visible, setVisible] = useState(false)   // 淡入淡出（墨水屏除外）
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose            // 每次 render 更新，計時器讀最新的
 
+  // 提前淡出後才真正關閉（墨水屏即時關閉，避免刷新殘影）
+  const beginClose = useRef(() => {
+    if (eink) { onCloseRef.current(); return }
+    setVisible(false)
+    setTimeout(() => onCloseRef.current(), FADE_MS)
+  })
+
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = []
-    let t = 60   // 掛載後先由「細」狀態起步，等一格再吸氣 → 睇到放大動畫
+    // 掛載即淡入
+    const fadeIn = setTimeout(() => setVisible(true), 20)
+    const timers: ReturnType<typeof setTimeout>[] = [fadeIn]
+    let t = 80   // 掛載後先由「細」狀態起步，等一格再吸氣 → 睇到放大動畫
     for (let r = 0; r < rounds; r++) {
       const inAt = t
       const outAt = t + INHALE_MS
@@ -31,16 +43,17 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
       timers.push(setTimeout(() => { setPhase('exhale'); setBig(false) }, outAt))
       t = outAt + EXHALE_MS
     }
-    timers.push(setTimeout(() => onCloseRef.current(), t))
+    timers.push(setTimeout(() => beginClose.current(), t))
     return () => timers.forEach(clearTimeout)
   }, [rounds])
 
   const inhaling = phase === 'inhale'
+  const close = () => beginClose.current()
 
   // ── 墨水屏版：黑白、無漸變／陰影、圓圈一步切換 ──
   if (eink) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }} onClick={onClose}>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }} onClick={close}>
         <div
           className="flex flex-col items-center"
           style={{ background: '#fff', border: '2px solid #000', borderRadius: 12, padding: '28px 40px' }}
@@ -63,12 +76,20 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
     )
   }
 
-  // ── 彩色版：置中細卡片（非鋪滿全屏）──
+  // ── 彩色版：置中細卡片（非鋪滿全屏）+ 淡入淡出 ──
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      style={{ opacity: visible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease` }}
+      onClick={close}
+    >
       <div
         className="flex flex-col items-center rounded-3xl px-10 py-8 shadow-2xl"
-        style={{ background: 'linear-gradient(160deg,#1e3a5f,#0f2038)' }}
+        style={{
+          background: 'linear-gradient(160deg,#1e3a5f,#0f2038)',
+          transform: visible ? 'scale(1)' : 'scale(0.94)',
+          transition: `transform ${FADE_MS}ms ease`,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-white/80 text-sm font-medium mb-1">休息一下 🌙</p>

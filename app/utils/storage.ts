@@ -361,6 +361,21 @@ export const reviewStorage = {
   stats(): { total: number; due: number } {
     return { total: this.getAll().length, due: this.dueToday().length }
   },
+  // 跨裝置合併：以「文字」為鍵去重；同一句保留複習進度較深（box/次數較高）者
+  merge(remote: ReviewNote[]): void {
+    if (!Array.isArray(remote)) return
+    const byText = new Map<string, ReviewNote>()
+    for (const n of this.getAll()) byText.set(n.text.trim(), n)
+    for (const r of remote) {
+      const key = (r?.text || '').trim()
+      if (!key) continue
+      const l = byText.get(key)
+      if (!l) { byText.set(key, r); continue }
+      const rDeeper = (r.box ?? 0) > (l.box ?? 0) || ((r.box ?? 0) === (l.box ?? 0) && (r.reviewCount ?? 0) > (l.reviewCount ?? 0))
+      byText.set(key, rDeeper ? r : l)
+    }
+    this.saveAll([...byText.values()])
+  },
 }
 
 // RSS 訂閱來源的格式：名稱 + RSS 網址

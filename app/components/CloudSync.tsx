@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
-import { BookData, fontStorage, historyStorage, ReadingHistory } from '../utils/storage'
+import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 
@@ -48,7 +48,8 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         books: allBooks,
         font: fontStorage.getFont(),
         // 快捷鍵、顯示設定（字體大小、背景色等）不上傳，屬於裝置本地偏好
-        readingHistory: historyStorage.getHistory()
+        readingHistory: historyStorage.getHistory(),
+        reviewNotes: reviewStorage.getAll()   // 每日温習卡片（跨裝置同步）
       }
 
       const fp = makeFingerprint(data)
@@ -135,6 +136,10 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
           merged[date] = Math.max(merged[date] ?? 0, count)
         }
         localStorage.setItem('reading-history', JSON.stringify(merged))
+      }
+      // 合併每日温習卡片（以文字去重，保留複習進度較深者）
+      if (data.reviewNotes) {
+        reviewStorage.merge(data.reviewNotes)
       }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')

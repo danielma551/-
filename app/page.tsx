@@ -414,6 +414,7 @@ export default function Home() {
 
   const handleSyncComplete = () => {
     getAllBooksFromIDB().then(setSavedBooks)
+    setReviewDue(reviewStorage.stats().due)   // 同步後更新温習到期數
   }
 
   const handleMusicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
