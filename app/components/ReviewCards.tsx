@@ -123,13 +123,18 @@ export default function ReviewCards({ onClose }: Props) {
     // pos 不變：下一張會頂上來
   }
 
-  // 鍵盤快捷鍵：1 = 要再温，Space / Enter = 記得了，Esc = 關閉
+  // 墨水屏模式（與閱讀器共用設定）
+  const eink = typeof window !== 'undefined' && localStorage.getItem('eink-mode') === 'true'
+
+  // 鍵盤／實體鍵快捷：
+  //  上鍵 / PageUp → 要再温；下鍵 / PageDown → 記得了（配合墨水屏實體上下鍵）
+  //  1 = 要再温；Space / Enter / 2 = 記得了；Esc = 關閉
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { onClose(); return }
       if (!card) return
-      if (e.key === '1') { e.preventDefault(); again() }
-      else if (e.key === ' ' || e.key === 'Enter' || e.key === '2') { e.preventDefault(); known() }
+      if (e.key === '1' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); again() }
+      else if (e.key === ' ' || e.key === 'Enter' || e.key === '2' || e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); known() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -143,11 +148,24 @@ export default function ReviewCards({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${eink ? 'eink-review bg-black/40' : 'bg-black/60 backdrop-blur-sm'}`}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
+      {eink && (
+        <style>{`
+          .eink-review *{box-shadow:none!important;text-shadow:none!important;transition:none!important;animation:none!important;background-image:none!important;backdrop-filter:none!important;}
+          .eink-review .eink-modal{background:#fff!important;border:2px solid #000!important;}
+          .eink-review .eink-card{background:#fff!important;border:1.5px solid #000!important;}
+          .eink-review h2,.eink-review p,.eink-review label,.eink-review span{color:#000!important;}
+          .eink-review .eink-logo{background:#000!important;}
+          .eink-review .eink-btn-secondary{background:#fff!important;border:2px solid #000!important;}
+          .eink-review .eink-btn-secondary,.eink-review .eink-btn-secondary span{color:#000!important;}
+          .eink-review .eink-btn-primary{background:#000!important;border:2px solid #000!important;}
+          .eink-review .eink-btn-primary,.eink-review .eink-btn-primary span{color:#fff!important;}
+        `}</style>
+      )}
       <div
-        className="relative bg-white rounded-[26px] shadow-2xl w-full max-w-2xl overflow-hidden"
+        className="eink-modal relative bg-white rounded-[26px] shadow-2xl w-full max-w-2xl overflow-hidden"
         style={{ animation: 'none' }}
         onClick={e => e.stopPropagation()}
       >
@@ -158,7 +176,7 @@ export default function ReviewCards({ onClose }: Props) {
         >
           <div className="flex items-center gap-3">
             <div
-              className="w-[42px] h-[42px] rounded-[13px] flex items-center justify-center flex-shrink-0"
+              className="eink-logo w-[42px] h-[42px] rounded-[13px] flex items-center justify-center flex-shrink-0"
               style={{ background: 'linear-gradient(150deg,#34d399,#059669)', boxShadow: '0 6px 16px rgba(5,150,105,.32)' }}
             >
               <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -293,7 +311,7 @@ export default function ReviewCards({ onClose }: Props) {
               <div className="absolute left-[10px] right-[10px] -top-1.5 h-14 rounded-[18px] bg-gray-50" />
 
               {/* 前方卡片 */}
-              <div className="relative bg-white border border-gray-100 rounded-[20px] px-7 pt-6 pb-5" style={{ boxShadow: '0 14px 34px rgba(17,24,39,.09)' }}>
+              <div className="eink-card relative bg-white border border-gray-100 rounded-[20px] px-7 pt-6 pb-5" style={{ boxShadow: '0 14px 34px rgba(17,24,39,.09)' }}>
                 {/* 頂列：來源 + 間隔盒 */}
                 <div className="flex items-center justify-between mb-3.5">
                   {card.source ? (
@@ -354,25 +372,25 @@ export default function ReviewCards({ onClose }: Props) {
           <div className="flex gap-3 px-6 pt-2 pb-6">
             <button
               onClick={again}
-              className="flex-1 flex items-center justify-center gap-2 py-[15px] rounded-[15px] font-bold text-[15.5px] transition-colors"
+              className="eink-btn-secondary flex-1 flex items-center justify-center gap-2 py-[15px] rounded-[15px] font-bold text-[15.5px] transition-colors"
               style={{ border: '1.5px solid #fde2b8', background: '#fffbf3', color: '#c2620a' }}
             >
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
               </svg>
               要再温
-              <span className="text-[10px] font-semibold px-1.5 py-px rounded ml-0.5" style={{ color: '#d6a96a', border: '1px solid #f0dcc0' }}>1</span>
+              <span className="text-[10px] font-semibold px-1.5 py-px rounded ml-0.5" style={{ color: '#d6a96a', border: '1px solid #f0dcc0' }}>{eink ? '↑' : '1'}</span>
             </button>
             <button
               onClick={known}
-              className="flex items-center justify-center gap-2 py-[15px] rounded-[15px] font-bold text-[15.5px] text-white transition-all"
+              className="eink-btn-primary flex items-center justify-center gap-2 py-[15px] rounded-[15px] font-bold text-[15.5px] text-white transition-all"
               style={{ flex: 1.5, background: 'linear-gradient(150deg,#10b981,#059669)', boxShadow: '0 8px 20px rgba(5,150,105,.32)' }}
             >
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 6 9 17l-5-5" />
               </svg>
               記得了
-              <span className="text-[10px] font-semibold px-1.5 py-px rounded ml-0.5 text-white" style={{ background: 'rgba(255,255,255,.22)' }}>Space</span>
+              <span className="text-[10px] font-semibold px-1.5 py-px rounded ml-0.5 text-white" style={{ background: 'rgba(255,255,255,.22)' }}>{eink ? '↓' : 'Space'}</span>
             </button>
           </div>
         )}
