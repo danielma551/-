@@ -1,14 +1,15 @@
 'use client'
 
-// 【呼吸休息卡片】每看完 4 個循環出現，引導一次吸氣／呼氣後自動消失。
+// 【呼吸休息卡片】每看完 4 個循環出現，引導一次吸氣→呼氣後自動消失。
 // 非鋪滿全屏：置中細卡片 + 淡背景。純 CSS + 計時器。
+// 重點：用 onCloseRef + 時間線（只在掛載時排程一次），避免父層重渲染重置計時器。
 
 import { useEffect, useRef, useState } from 'react'
 
 interface Props {
   onClose: () => void
-  rounds?: number   // 呼吸次數，預設 1 次（約 8 秒）
-  eink?: boolean    // 墨水屏：黑白高對比、圓圈一步切換（避免殘影）
+  rounds?: number   // 呼吸次數，預設 1 次（吸 4 秒 + 呼 4 秒 ≈ 8 秒）
+  eink?: boolean    // 墨水屏：黑白、圓圈一步切換（避免殘影）
 }
 
 const INHALE_MS = 4000
@@ -16,28 +17,23 @@ const EXHALE_MS = 4000
 
 export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: Props) {
   const [phase, setPhase] = useState<'inhale' | 'exhale'>('inhale')
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [big, setBig] = useState(false)   // 圓圈大細：吸氣時放大
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose            // 每次 render 更新，計時器讀最新的
 
   useEffect(() => {
-    let left = rounds
-    let ph: 'inhale' | 'exhale' = 'inhale'
-    setPhase('inhale')
-    const step = () => {
-      if (ph === 'inhale') {
-        ph = 'exhale'
-        setPhase('exhale')
-        timerRef.current = setTimeout(step, EXHALE_MS)
-      } else {
-        left -= 1
-        if (left <= 0) { onClose(); return }
-        ph = 'inhale'
-        setPhase('inhale')
-        timerRef.current = setTimeout(step, INHALE_MS)
-      }
+    const timers: ReturnType<typeof setTimeout>[] = []
+    let t = 60   // 掛載後先由「細」狀態起步，等一格再吸氣 → 睇到放大動畫
+    for (let r = 0; r < rounds; r++) {
+      const inAt = t
+      const outAt = t + INHALE_MS
+      timers.push(setTimeout(() => { setPhase('inhale'); setBig(true) }, inAt))
+      timers.push(setTimeout(() => { setPhase('exhale'); setBig(false) }, outAt))
+      t = outAt + EXHALE_MS
     }
-    timerRef.current = setTimeout(step, INHALE_MS)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [rounds, onClose])
+    timers.push(setTimeout(() => onCloseRef.current(), t))
+    return () => timers.forEach(clearTimeout)
+  }, [rounds])
 
   const inhaling = phase === 'inhale'
 
@@ -55,7 +51,7 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
             <div
               className="flex items-center justify-center"
               style={{
-                width: inhaling ? 160 : 90, height: inhaling ? 160 : 90,
+                width: big ? 160 : 90, height: big ? 160 : 90,
                 borderRadius: '50%', border: '4px solid #000', background: '#fff', transition: 'none',
               }}
             >
@@ -78,15 +74,15 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
         <p className="text-white/80 text-sm font-medium mb-1">休息一下 🌙</p>
         <p className="text-white/40 text-xs mb-6">跟住圓圈呼吸 · 放鬆眼睛</p>
 
-        <div className="relative flex items-center justify-center" style={{ width: 180, height: 180 }}>
+        <div className="relative flex items-center justify-center" style={{ width: 190, height: 190 }}>
           {/* 光暈 */}
           <div
             className="absolute rounded-full"
             style={{
-              width: 180, height: 180,
+              width: 190, height: 190,
               background: 'radial-gradient(circle, rgba(96,165,250,0.30) 0%, rgba(96,165,250,0) 70%)',
-              transform: `scale(${inhaling ? 1 : 0.6})`,
-              transition: `transform ${inhaling ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
+              transform: `scale(${big ? 1 : 0.55})`,
+              transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
             }}
           />
           {/* 主圓 */}
@@ -96,8 +92,8 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
               width: 110, height: 110,
               background: 'linear-gradient(150deg,#60a5fa,#3b82f6)',
               boxShadow: '0 0 40px rgba(96,165,250,0.45)',
-              transform: `scale(${inhaling ? 1.2 : 0.72})`,
-              transition: `transform ${inhaling ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
+              transform: `scale(${big ? 1.25 : 0.62})`,
+              transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
             }}
           >
             <span className="text-white text-lg font-medium tracking-widest">{inhaling ? '吸氣' : '呼氣'}</span>
