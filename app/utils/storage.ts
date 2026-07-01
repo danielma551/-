@@ -406,7 +406,9 @@ export const reviewStorage = {
   },
 }
 
-// 解析 Flomo 匯出檔（.txt / .md / .csv / .html）→ 一條條筆記文字（以空行或換行分塊）
+// 解析 Flomo 匯出檔（.txt / .md / .csv / .html）→ 一條條「筆記正文」。
+// Flomo 每則 memo 結構：時間戳行 → 📖標籤/📅日期等 metadata → 正文 →（📚來源/📂章節/📅時間/#標籤）。
+// 做法：以「帶時間的時間戳行」分割每則 memo，剔走 metadata 行，只保留正文，一則一張卡。
 export function parseFlomoExport(raw: string, isHtml: boolean): string[] {
   let text = raw
   if (isHtml) {
@@ -416,13 +418,44 @@ export function parseFlomoExport(raw: string, isHtml: boolean): string[] {
       .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
   }
-  // 先以空行分塊（一則 memo 一塊）；若幾乎分唔開，再退回逐行
-  let blocks = text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
-  if (blocks.length <= 1) blocks = text.split(/\n/).map(s => s.trim()).filter(Boolean)
-  // 過濾過短或只有標籤／日期的雜項
-  return blocks
-    .map(b => b.replace(/\s+\n/g, '\n').trim())
-    .filter(b => b.replace(/\s/g, '').length >= 2)
+  const lines = text.split(/\r?\n/)
+
+  // 時間戳分界行：YYYY-MM-DD HH:MM(:SS)（可帶「| API」等來源），必須含時間，避免誤切內容中的純日期
+  const isTimestamp = (l: string) =>
+    /^\s*\d{4}[-/]\d{2}[-/]\d{2}\s+\d{1,2}:\d{2}(:\d{2})?\s*([|｜].*)?$/.test(l)
+  // metadata / 雜項行：emoji 開頭、來源／章節／時間欄、純標籤行
+  const isMeta = (l: string) => {
+    const t = l.trim()
+    if (!t) return false
+    if (/^[📖📕📗📘📙📚📂📁📍📅🗓🔖🏷📎🔗⏰🕐]/u.test(t)) return true
+    if (/^(來源|来源|章節|章节|時間|时间|標籤|标签|出處|出处|標題|标题|作者)\s*[:：]/.test(t)) return true
+    if (/^#\S/.test(t) && t.split(/\s+/).every(w => w.startsWith('#'))) return true
+    return false
+  }
+
+  // 依時間戳切成一組組
+  const groups: string[][] = []
+  let cur: string[] = []
+  let sawTs = false
+  for (const l of lines) {
+    if (isTimestamp(l)) { if (cur.length) groups.push(cur); cur = []; sawTs = true; continue }
+    cur.push(l)
+  }
+  if (cur.length) groups.push(cur)
+
+  // 冇時間戳格式 → 退回以空行分塊
+  const rawGroups = sawTs ? groups : text.split(/\n\s*\n/).map(b => b.split(/\r?\n/))
+
+  const notes: string[] = []
+  for (const g of rawGroups) {
+    const content = g
+      .filter(l => l.trim() && !isMeta(l))   // 去空行、去 metadata
+      .map(l => l.trim())
+      .join('\n')
+      .trim()
+    if (content.replace(/\s/g, '').length >= 2) notes.push(content)
+  }
+  return notes
 }
 
 // RSS 訂閱來源的格式：名稱 + RSS 網址
