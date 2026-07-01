@@ -1233,12 +1233,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       setCycleToast(`第 ${currentCycleIdx + 1} 循環 · ${sz} 句`)
       if (cycleToastTimer.current) clearTimeout(cycleToastTimer.current)
       cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
-      // 每看完 4 個循環（進入第 4、8、12… 個循環）→ 呼吸休息動畫（墨水屏除外）
-      if (!einkMode && currentCycleIdx > prevIdx && currentCycleIdx % 4 === 0) {
+      // 每看完 4 個循環（進入第 4、8、12… 個循環）→ 呼吸休息動畫
+      if (currentCycleIdx > prevIdx && currentCycleIdx % 4 === 0) {
         setShowBreathing(true)
       }
     }
-  }, [currentCycleIdx, cycleData.sizes, einkMode])
+  }, [currentCycleIdx, cycleData.sizes])
 
   const cycleStart  = cycleData.boundaries[currentCycleIdx]
   const cycleSize   = cycleData.sizes[currentCycleIdx]
@@ -3019,7 +3019,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       <ImagePopup />
 
       {/* 呼吸休息動畫（每看完 4 個循環）*/}
-      {showBreathing && <BreathingOverlay onClose={() => setShowBreathing(false)} />}
+      {showBreathing && <BreathingOverlay eink={einkMode} onClose={() => setShowBreathing(false)} />}
 
       {/* 人物關係圖（閱讀時可開啟）*/}
       {showGraph && (
