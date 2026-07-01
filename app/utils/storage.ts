@@ -295,6 +295,20 @@ export interface ReviewNote {
   box: number           // SRS 盒子 0..5，越高間隔越長
   due: number           // 下次該温習的時間戳
   reviewCount: number   // 已温習次數
+  device?: string       // 建立這張卡的設備（例如 iPhone / Mac / Windows）
+}
+
+// 由 UA 粗略判斷設備類型（建立卡片時記錄，跨裝置同步後可看到來源）
+export function detectDevice(): string {
+  if (typeof navigator === 'undefined') return '裝置'
+  const ua = navigator.userAgent
+  if (/iPhone/.test(ua)) return 'iPhone'
+  if (/iPad/.test(ua)) return 'iPad'
+  if (/Android/.test(ua)) return 'Android'
+  if (/Macintosh|Mac OS X/.test(ua)) return 'Mac'
+  if (/Windows/.test(ua)) return 'Windows'
+  if (/Linux/.test(ua)) return 'Linux'
+  return '裝置'
 }
 
 const REVIEW_KEY = 'review-notes'
@@ -324,7 +338,7 @@ export const reviewStorage = {
       const text = (raw || '').trim()
       if (!text || text.startsWith('data:image/') || seen.has(text)) continue
       seen.add(text)
-      list.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, source, createdAt: now, box: 0, due: now, reviewCount: 0 })
+      list.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, source, createdAt: now, box: 0, due: now, reviewCount: 0, device: detectDevice() })
       added++
     }
     if (added > 0) this.saveAll(list)

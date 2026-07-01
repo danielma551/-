@@ -26,6 +26,14 @@ const BOX_META = [
 ]
 const SERIF = "'Songti SC','Noto Serif CJK SC','Source Han Serif SC',Georgia,serif"
 
+// 格式化建立時間，例如 26/07/01 14:30
+function fmtCreated(ts?: number): string {
+  if (!ts) return '未知時間'
+  try {
+    return new Date(ts).toLocaleString('zh-TW', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch { return '未知時間' }
+}
+
 export default function ReviewCards({ onClose }: Props) {
   const allDue = reviewStorage.dueToday()
   const [queue, setQueue] = useState<ReviewNote[]>(() => allDue.slice(0, DAILY_CAP))
@@ -83,7 +91,7 @@ export default function ReviewCards({ onClose }: Props) {
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="relative bg-white rounded-[26px] shadow-2xl w-full max-w-xl overflow-hidden"
+        className="relative bg-white rounded-[26px] shadow-2xl w-full max-w-2xl overflow-hidden"
         style={{ animation: 'none' }}
         onClick={e => e.stopPropagation()}
       >
@@ -127,7 +135,7 @@ export default function ReviewCards({ onClose }: Props) {
         )}
 
         {/* 內容 */}
-        <div className="px-[30px] pt-7 pb-3 min-h-[330px] flex flex-col justify-center">
+        <div className="px-[30px] pt-7 pb-3 min-h-[380px] flex flex-col justify-center">
           {empty && (
             <div className="text-center py-6">
               <div className="text-5xl mb-4">🌱</div>
@@ -179,15 +187,24 @@ export default function ReviewCards({ onClose }: Props) {
                 {/* 引文 */}
                 <div className="relative">
                   <span className="absolute -left-1.5 -top-5 text-[60px] leading-none text-emerald-100 pointer-events-none select-none" style={{ fontFamily: 'Georgia, serif' }}>&ldquo;</span>
-                  <div className="relative max-h-[200px] overflow-y-auto overflow-x-hidden pr-1.5 pl-1 py-1">
-                    <p className="text-gray-800" style={{ fontFamily: SERIF, fontSize: 18, lineHeight: 1.95, overflowWrap: 'break-word', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{card.text}</p>
+                  <div className="relative max-h-[300px] overflow-y-auto overflow-x-hidden pr-1.5 pl-1 py-1">
+                    <p className="text-gray-800" style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 2, overflowWrap: 'break-word', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{card.text}</p>
                   </div>
                 </div>
 
-                {/* 底列：meta + 刪除 */}
-                <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-gray-100">
-                  <span className="text-[11.5px] text-gray-300">已温習 {card.reviewCount} 次 · 答對自動拉長間隔</span>
-                  <button onClick={del} className="inline-flex items-center gap-1 text-[11.5px] text-gray-300 hover:text-red-500 transition-colors">
+                {/* 底列：meta（生成時間＋設備）+ 刪除 */}
+                <div className="flex items-end justify-between mt-4 pt-3.5 border-t border-gray-100">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="inline-flex items-center gap-1.5 text-[11.5px] text-gray-400">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                      {fmtCreated(card.createdAt)}
+                      <span className="text-gray-300">·</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+                      {card.device || '未知裝置'}
+                    </span>
+                    <span className="text-[11px] text-gray-300">已温習 {card.reviewCount} 次 · 答對自動拉長間隔</span>
+                  </div>
+                  <button onClick={del} className="inline-flex items-center gap-1 text-[11.5px] text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 6h18" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
                     </svg>
