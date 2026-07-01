@@ -6,7 +6,7 @@
 // 升級：牌組層次、引號裝飾的文學排版、分段進度、間隔盒徽章、鍵盤快捷鍵。
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, Upload } from 'lucide-react'
+import { X, Upload, Wand2 } from 'lucide-react'
 import { reviewStorage, ReviewNote, parseFlomoExport } from '../utils/storage'
 
 interface Props {
@@ -67,6 +67,17 @@ export default function ReviewCards({ onClose }: Props) {
     } finally {
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  // 一鍵清理：移除純時間戳／純 metadata 等雜項卡
+  const handleCleanup = () => {
+    const removed = reviewStorage.cleanupJunk()
+    const fresh = reviewStorage.pickDaily(DAILY_CAP)
+    setQueue(fresh); setPos(0); setDoneCount(0)
+    setSessionTotal(fresh.length)
+    setTotalNotes(reviewStorage.stats().total)
+    setImportMsg(removed > 0 ? `已清理 ${removed} 張雜項卡 🧹` : '冇雜項卡需要清理 ✨')
+    setTimeout(() => setImportMsg(null), 3000)
   }
 
   const card = queue[pos]
@@ -151,6 +162,14 @@ export default function ReviewCards({ onClose }: Props) {
               <span className="hidden sm:inline">上傳 Flomo</span>
             </button>
             <input ref={fileRef} type="file" accept=".txt,.md,.csv,.html,.htm,text/plain,text/html" className="hidden" onChange={handleImportFile} />
+            <button
+              onClick={handleCleanup}
+              title="一鍵清理：移除純時間戳／metadata 等雜項卡"
+              className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-[10px] transition-colors"
+            >
+              <Wand2 className="w-4 h-4" />
+              <span className="hidden sm:inline">清理</span>
+            </button>
             <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-[10px] transition-colors">
               <X className="w-[18px] h-[18px]" />
             </button>

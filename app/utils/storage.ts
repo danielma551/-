@@ -312,6 +312,20 @@ export function detectDevice(): string {
 }
 
 const REVIEW_KEY = 'review-notes'
+
+// 判斷一張卡是否「雜項」（無正文）：純時間戳／純日期，或每行都係 metadata（emoji／來源章節時間欄／純標籤）
+function isJunkNoteText(text: string): boolean {
+  const t = (text || '').trim()
+  if (t.replace(/\s/g, '').length < 2) return true
+  if (/^\d{4}[-/]\d{2}[-/]\d{2}(\s+\d{1,2}:\d{2}(:\d{2})?)?(\s*[|｜].*)?$/.test(t)) return true
+  const metaLine = (l: string) =>
+    /^[📖📕📗📘📙📚📂📁📍📅🗓🔖🏷📎🔗⏰🕐]/u.test(l) ||
+    /^(來源|来源|章節|章节|時間|时间|標籤|标签|出處|出处|標題|标题|作者)\s*[:：]/.test(l) ||
+    (/^#\S/.test(l) && l.split(/\s+/).every(w => w.startsWith('#'))) ||
+    /^\d{4}[-/]\d{2}[-/]\d{2}(\s+\d{1,2}:\d{2}(:\d{2})?)?$/.test(l)
+  const lines = t.split(/\n/).map(s => s.trim()).filter(Boolean)
+  return lines.length > 0 && lines.every(metaLine)
+}
 const DAY_MS = 86400000
 // 各盒子的間隔天數（index = box）：今天、1、2、4、7、15 天
 const BOX_DAYS = [0, 1, 2, 4, 7, 15]
@@ -388,6 +402,14 @@ export const reviewStorage = {
   },
   stats(): { total: number; due: number } {
     return { total: this.getAll().length, due: this.dueToday().length }
+  },
+  // 一鍵清理：移除雜項卡（純時間戳／純 metadata），回傳移除數量
+  cleanupJunk(): number {
+    const all = this.getAll()
+    const kept = all.filter(n => !isJunkNoteText(n.text))
+    const removed = all.length - kept.length
+    if (removed > 0) this.saveAll(kept)
+    return removed
   },
   // 跨裝置合併：以「文字」為鍵去重；同一句保留複習進度較深（box/次數較高）者
   merge(remote: ReviewNote[]): void {
