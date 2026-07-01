@@ -26,6 +26,7 @@ import SearchPanel from './SearchPanel'
 import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
 import CharacterGraph from './CharacterGraph'
+import BreathingOverlay from './BreathingOverlay'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 // 「空白句」判定：空字串、純空白（含全形/不換行/零寬空格）都當作要跳過的空句；
@@ -88,6 +89,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS)
   const [showSearch, setShowSearch] = useState(false)
   const [showGraph, setShowGraph] = useState(false)   // 閱讀時開啟人物關係圖
+  const [showBreathing, setShowBreathing] = useState(false)   // 每 4 個循環出呼吸休息動畫
   const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
@@ -1225,13 +1227,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       return
     }
     if (currentCycleIdx !== prevCycleIdxRef.current) {
+      const prevIdx = prevCycleIdxRef.current
       prevCycleIdxRef.current = currentCycleIdx
       const sz = cycleData.sizes[currentCycleIdx]
       setCycleToast(`第 ${currentCycleIdx + 1} 循環 · ${sz} 句`)
       if (cycleToastTimer.current) clearTimeout(cycleToastTimer.current)
       cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
+      // 每看完 4 個循環（進入第 4、8、12… 個循環）→ 呼吸休息動畫（墨水屏除外）
+      if (!einkMode && currentCycleIdx > prevIdx && currentCycleIdx % 4 === 0) {
+        setShowBreathing(true)
+      }
     }
-  }, [currentCycleIdx, cycleData.sizes])
+  }, [currentCycleIdx, cycleData.sizes, einkMode])
 
   const cycleStart  = cycleData.boundaries[currentCycleIdx]
   const cycleSize   = cycleData.sizes[currentCycleIdx]
@@ -3010,6 +3017,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 選字圖片彈窗 */}
       <ImagePopup />
+
+      {/* 呼吸休息動畫（每看完 4 個循環）*/}
+      {showBreathing && <BreathingOverlay onClose={() => setShowBreathing(false)} />}
 
       {/* 人物關係圖（閱讀時可開啟）*/}
       {showGraph && (
