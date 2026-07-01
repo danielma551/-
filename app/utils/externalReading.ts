@@ -14,19 +14,45 @@ const DEEPSEEK_MODEL = 'deepseek-chat'
 
 interface RawSentence { en?: string; zh?: string }
 interface RawParagraph { sentences?: RawSentence[]; notes?: string }
-interface RawArticle { title?: string; title_zh?: string; paragraphs?: RawParagraph[] }
+interface RawGloss { word?: string; note?: string }
+interface RawArticle { title?: string; title_zh?: string; paragraphs?: RawParagraph[]; glossary?: RawGloss[] }
 
 const PROMPT = `你是一位英語外刊精讀老師，風格類似「友鄰優課」。請生成一篇高質量、地道的英文短文（模仿 The Economist / The Atlantic / The New Yorker 等外刊的語言風格與思辨視角），主題有趣、有思想性，適合中高級英語學習者。
 
 要求：
 1. 全文約 5 段，每段 2-4 句，總長適中（不要太長）。
-2. 「以句子為單位」逐句提供英中對照：把每段拆成一句一句（以 . ? ! 等句末標點斷句），每句給出：
-   - en：該句英文原文（地道、有文采）
-   - zh：該句對應的中文翻譯（準確、自然，逐句對照）
-3. 每段另給 notes：語言講解（用中文，挑出該段的重點詞彙／地道搭配／句型／修辭或文化背景，像老師帶讀那樣親切、有洞見）。
-4. 主題自選，但要新穎耐讀（科技、社會、文化、心理、經濟、自然皆可）。
-5. 嚴格只輸出 JSON，不要任何多餘文字或 markdown：
-{"title":"English Title","title_zh":"中文標題","paragraphs":[{"sentences":[{"en":"...","zh":"..."}],"notes":"..."}]}`
+2. 內容必須真實、準確，基於真實世界的常識與事實；不可捏造具體數據、研究、人名或引言。可寫觀點、觀察與常識性論述，但凡涉及事實必須真確，寧可含糊也不要虛構。
+3. 「以標點斷句」提供英中對照：把每段拆到「短句／從句」層級——每遇到逗號 , 、句號 . 、分號 ; 、問號 ? 、感嘆號 ! 就斷成一節（標點保留在該節末），每一節一個 en/zh 對照：
+   - en：該節英文原文
+   - zh：該節對應的中文翻譯（逐節對照）
+4. 每段另給 notes：語言講解（用中文，挑重點詞彙／地道搭配／句型／修辭或文化背景，親切有洞見）。
+5. 另給 glossary：從全文挑 6-10 個值得學習的英文詞或詞組，每個給 note（可以是詞義、用法、詞源／歷史、文化背景，由你決定，用中文，精簡有洞見）。word 用文章中的原形或常見詞形。
+6. 嚴格只輸出 JSON，不要任何多餘文字或 markdown：
+{"title":"English Title","title_zh":"中文標題","paragraphs":[{"sentences":[{"en":"...","zh":"..."}],"notes":"..."}],"glossary":[{"word":"...","note":"..."}]}`
+
+const GLOSSARY_KEY = 'external-glossary'
+
+// 詞彙表（跨天累積）：word(小寫) → note
+export function getGlossary(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(GLOSSARY_KEY) || '{}') } catch { return {} }
+}
+function saveGlossary(gloss: RawGloss[]) {
+  if (typeof window === 'undefined' || !Array.isArray(gloss)) return
+  const map = getGlossary()
+  for (const g of gloss) {
+    if (g?.word && g?.note) map[g.word.trim().toLowerCase()] = g.note.trim()
+  }
+  try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(map)) } catch { /* 配額滿略過 */ }
+}
+// 查詞：去掉前後標點後對照詞彙表
+export function lookupGlossary(word: string): string | null {
+  if (!word) return null
+  const map = getGlossary()
+  const raw = word.trim().toLowerCase()
+  const stripped = raw.replace(/^[^a-z]+|[^a-z]+$/g, '')
+  return map[stripped] || map[raw] || null
+}
 
 export function todayStr(): string {
   return new Date().toLocaleDateString('en-CA')   // YYYY-MM-DD（本地時區）
@@ -113,6 +139,7 @@ export async function generateTodayArticle(apiKey: string): Promise<{ book: Book
   book.lastReadDate = now
 
   await saveBookToIDB(book)
+  saveGlossary(article.glossary || [])   // 存詞彙表，供閱讀時「向外延伸」解釋卡
   if (typeof window !== 'undefined') localStorage.setItem(LAST_DATE_KEY, todayStr())
   return { book, startIndex }
 }

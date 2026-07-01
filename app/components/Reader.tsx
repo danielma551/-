@@ -27,6 +27,8 @@ import SearchSidebar, { SIDEBAR_WIDTH } from './SearchSidebar'
 import ImagePopup from './ImagePopup'
 import CharacterGraph from './CharacterGraph'
 import BreathingOverlay from './BreathingOverlay'
+import GlossaryCard from './GlossaryCard'
+import { EXTERNAL_BOOK_ID, lookupGlossary } from '../utils/externalReading'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 // 「空白句」判定：空字串、純空白（含全形/不換行/零寬空格）都當作要跳過的空句；
@@ -90,6 +92,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSearch, setShowSearch] = useState(false)
   const [showGraph, setShowGraph] = useState(false)   // 閱讀時開啟人物關係圖
   const [showBreathing, setShowBreathing] = useState(false)   // 每 4 個循環出呼吸休息動畫
+  const [glossaryCard, setGlossaryCard] = useState<{ word: string; note: string } | null>(null)   // 外刊：向外延伸的詞解卡
   const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
@@ -704,6 +707,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const sel = window.getSelection()
     const text = sel?.toString().trim() ?? ''
     if (!text || text.length > 8) return   // 超過 8 字通常是意外選中，忽略
+    // 外刊：若選中的字有預生成的詞解，向外延伸一張解釋卡（不開字典彈窗）
+    if (bookId === EXTERNAL_BOOK_ID) {
+      const note = lookupGlossary(text)
+      if (note) { setGlossaryCard({ word: text.trim(), note }); return }
+    }
     dictOpenedAt.current = Date.now()
     const cur = sentences[currentIndex]
     dictContext.current = cur && !cur.startsWith('data:') ? cur : ''
@@ -3020,6 +3028,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 呼吸休息動畫（每看完 4 個循環）*/}
       {showBreathing && <BreathingOverlay eink={einkMode} onClose={() => setShowBreathing(false)} />}
+
+      {/* 外刊詞解卡（選中有解釋的字時，向外延伸）*/}
+      {glossaryCard && (
+        <GlossaryCard word={glossaryCard.word} note={glossaryCard.note} onClose={() => setGlossaryCard(null)} />
+      )}
 
       {/* 人物關係圖（閱讀時可開啟）*/}
       {showGraph && (
