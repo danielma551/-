@@ -372,6 +372,20 @@ export const reviewStorage = {
     const end = new Date(); end.setHours(23, 59, 59, 999)
     return this.getAll().filter(n => n.due <= end.getTime()).sort((a, b) => a.due - b.due)
   },
+  // 每日温習抽卡：先取今天到期，不足則按最近到期補足，最後「隨機打亂」，固定取 limit 張
+  pickDaily(limit = 24): ReviewNote[] {
+    const all = this.getAll()
+    const end = new Date(); end.setHours(23, 59, 59, 999)
+    const due = all.filter(n => n.due <= end.getTime())
+    const rest = all.filter(n => n.due > end.getTime()).sort((a, b) => a.due - b.due)
+    const sel = due.concat(rest.slice(0, Math.max(0, limit - due.length)))
+    // Fisher–Yates 隨機打亂
+    for (let i = sel.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[sel[i], sel[j]] = [sel[j], sel[i]]
+    }
+    return sel.slice(0, limit)
+  },
   stats(): { total: number; due: number } {
     return { total: this.getAll().length, due: this.dueToday().length }
   },
@@ -390,6 +404,25 @@ export const reviewStorage = {
     }
     this.saveAll([...byText.values()])
   },
+}
+
+// 解析 Flomo 匯出檔（.txt / .md / .csv / .html）→ 一條條筆記文字（以空行或換行分塊）
+export function parseFlomoExport(raw: string, isHtml: boolean): string[] {
+  let text = raw
+  if (isHtml) {
+    text = raw
+      .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr)>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  }
+  // 先以空行分塊（一則 memo 一塊）；若幾乎分唔開，再退回逐行
+  let blocks = text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
+  if (blocks.length <= 1) blocks = text.split(/\n/).map(s => s.trim()).filter(Boolean)
+  // 過濾過短或只有標籤／日期的雜項
+  return blocks
+    .map(b => b.replace(/\s+\n/g, '\n').trim())
+    .filter(b => b.replace(/\s/g, '').length >= 2)
 }
 
 // RSS 訂閱來源的格式：名稱 + RSS 網址

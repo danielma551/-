@@ -5,15 +5,15 @@
 // 操作：記得了（升格、拉長間隔）／要再温（歸零、本節稍後再出現）。
 // 升級：牌組層次、引號裝飾的文學排版、分段進度、間隔盒徽章、鍵盤快捷鍵。
 
-import { useState, useEffect, useCallback } from 'react'
-import { X } from 'lucide-react'
-import { reviewStorage, ReviewNote } from '../utils/storage'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { X, Upload } from 'lucide-react'
+import { reviewStorage, ReviewNote, parseFlomoExport } from '../utils/storage'
 
 interface Props {
   onClose: () => void
 }
 
-const DAILY_CAP = 50   // 每節最多温習張數，避免一次過太多
+const DAILY_CAP = 24   // 固定每天温習張數
 
 // 間隔盒徽章（對應 storage 的 BOX_DAYS = [0,1,2,4,7,15]）
 const BOX_META = [
@@ -35,12 +35,39 @@ function fmtCreated(ts?: number): string {
 }
 
 export default function ReviewCards({ onClose }: Props) {
-  const allDue = reviewStorage.dueToday()
-  const [queue, setQueue] = useState<ReviewNote[]>(() => allDue.slice(0, DAILY_CAP))
+  // 隨機抽卡、固定每天 24 張
+  const [queue, setQueue] = useState<ReviewNote[]>(() => reviewStorage.pickDaily(DAILY_CAP))
   const [pos, setPos] = useState(0)
   const [doneCount, setDoneCount] = useState(0)
-  const sessionTotal = Math.min(allDue.length, DAILY_CAP)
-  const totalNotes = reviewStorage.stats().total
+  const [sessionTotal, setSessionTotal] = useState(() => queueInitLen())
+  const [totalNotes, setTotalNotes] = useState(() => reviewStorage.stats().total)
+  const [importMsg, setImportMsg] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function queueInitLen() { return Math.min(reviewStorage.pickDaily(DAILY_CAP).length, DAILY_CAP) }
+
+  // 匯入 Flomo 筆記檔 → 加入温習卡 → 重新抽卡
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const raw = await file.text()
+      const isHtml = /\.html?$/i.test(file.name) || /^\s*<!doctype|<html|<div|<p[ >]/i.test(raw)
+      const notes = parseFlomoExport(raw, isHtml)
+      const added = reviewStorage.addMany(notes, 'Flomo 匯入')
+      const fresh = reviewStorage.pickDaily(DAILY_CAP)
+      setQueue(fresh); setPos(0); setDoneCount(0)
+      setSessionTotal(fresh.length)
+      setTotalNotes(reviewStorage.stats().total)
+      setImportMsg(added > 0 ? `已匯入 ${added} 條筆記 🎉` : '冇新筆記可匯入（可能已存在）')
+      setTimeout(() => setImportMsg(null), 3000)
+    } catch {
+      setImportMsg('讀取檔案失敗，請用 .txt / .md / .csv / .html')
+      setTimeout(() => setImportMsg(null), 3000)
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   const card = queue[pos]
   const finished = !card && queue.length > 0
@@ -114,10 +141,28 @@ export default function ReviewCards({ onClose }: Props) {
               <p className="text-xs text-gray-400 mt-1.5">間隔重溫 · 共 {totalNotes} 張筆記</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-[10px] transition-colors">
-            <X className="w-[18px] h-[18px]" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => fileRef.current?.click()}
+              title="上傳 Flomo 筆記（.txt / .md / .csv / .html）"
+              className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-[10px] transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">上傳 Flomo</span>
+            </button>
+            <input ref={fileRef} type="file" accept=".txt,.md,.csv,.html,.htm,text/plain,text/html" className="hidden" onChange={handleImportFile} />
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-[10px] transition-colors">
+              <X className="w-[18px] h-[18px]" />
+            </button>
+          </div>
         </div>
+
+        {/* 匯入提示 */}
+        {importMsg && (
+          <div className="px-6 pt-3 -mb-1">
+            <div className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{importMsg}</div>
+          </div>
+        )}
 
         {/* 分段進度 */}
         {!empty && (
