@@ -313,6 +313,19 @@ export function detectDevice(): string {
 }
 
 const REVIEW_KEY = 'review-notes'
+const REVIEW_SESSION_KEY = 'review-session'
+
+// 每日温習 session（記錄當天進度，退出可續做）
+export interface DailySession {
+  date: string      // YYYY-MM-DD（本地）
+  ids: string[]     // 尚未完成（記得了）的卡片 id，順序即温習順序
+  done: number      // 今天已完成（記得了）張數
+  total: number     // 今天總張數（固定，如 24）
+}
+
+function todayLocal(): string {
+  return new Date().toLocaleDateString('en-CA')
+}
 
 // 判斷一張卡是否「雜項」（無正文）：純時間戳／純日期，或每行都係 metadata（emoji／來源章節時間欄／純標籤）
 function isJunkNoteText(text: string): boolean {
@@ -402,6 +415,46 @@ export const reviewStorage = {
   dueToday(): ReviewNote[] {
     const end = new Date(); end.setHours(23, 59, 59, 999)
     return this.getAll().filter(n => n.due <= end.getTime()).sort((a, b) => a.due - b.due)
+  },
+  // ── 每日 session：固定 24 張、退出可續做 ──
+  getSession(): DailySession | null {
+    if (typeof window === 'undefined') return null
+    try { return JSON.parse(localStorage.getItem(REVIEW_SESSION_KEY) || 'null') } catch { return null }
+  },
+  saveSession(s: DailySession) {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(REVIEW_SESSION_KEY, JSON.stringify(s)) } catch { /* ignore */ }
+  },
+  // 開始或續做今天嘅 session：回傳剩餘卡片、已完成數、當天總數
+  resumeOrStartDaily(limit = 24): { queue: ReviewNote[]; done: number; total: number } {
+    const today = todayLocal()
+    const all = this.getAll()
+    const map = new Map(all.map(n => [n.id, n]))
+    let s = this.getSession()
+    if (!s || s.date !== today) {
+      const picked = this.pickDaily(limit)
+      s = { date: today, ids: picked.map(n => n.id), done: 0, total: picked.length }
+    } else {
+      s.ids = s.ids.filter(id => map.has(id))   // 剔走已刪除嘅卡
+    }
+    this.saveSession(s)
+    const queue = s.ids.map(id => map.get(id)).filter((n): n is ReviewNote => !!n)
+    return { queue, done: s.done, total: s.total }
+  },
+  sessionMarkKnown(id: string) {   // 記得了：移出剩餘、完成 +1
+    const s = this.getSession(); if (!s) return
+    s.ids = s.ids.filter(x => x !== id); s.done += 1; this.saveSession(s)
+  },
+  sessionMoveBack(id: string) {    // 要再温：移到隊尾，本節稍後再出現
+    const s = this.getSession(); if (!s) return
+    s.ids = s.ids.filter(x => x !== id).concat(id); this.saveSession(s)
+  },
+  sessionRemove(id: string) {      // 刪卡：從剩餘移走
+    const s = this.getSession(); if (!s) return
+    s.ids = s.ids.filter(x => x !== id); this.saveSession(s)
+  },
+  resetSession() {
+    if (typeof window !== 'undefined') localStorage.removeItem(REVIEW_SESSION_KEY)
   },
   // 每日温習抽卡：先取今天到期，不足則按最近到期補足，最後「隨機打亂」，固定取 limit 張
   pickDaily(limit = 24): ReviewNote[] {

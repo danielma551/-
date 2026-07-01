@@ -5,7 +5,7 @@
 // 操作：記得了（升格、拉長間隔）／要再温（歸零、本節稍後再出現）。
 // 升級：牌組層次、引號裝飾的文學排版、分段進度、間隔盒徽章、鍵盤快捷鍵。
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { X, Upload, Wand2, ListChecks, Trash2 } from 'lucide-react'
 import { reviewStorage, ReviewNote, parseFlomoExport } from '../utils/storage'
 
@@ -35,14 +35,22 @@ function fmtCreated(ts?: number): string {
 }
 
 export default function ReviewCards({ onClose }: Props) {
-  // 隨機抽卡、固定每天 24 張
-  const [queue, setQueue] = useState<ReviewNote[]>(() => reviewStorage.pickDaily(DAILY_CAP))
-  const [pos, setPos] = useState(0)
-  const [doneCount, setDoneCount] = useState(0)
-  const [sessionTotal, setSessionTotal] = useState(() => queueInitLen())
+  // 開始／續做今天嘅 session（固定 24 張、退出可續做、隨機順序）
+  const initRef = useRef<{ queue: ReviewNote[]; done: number; total: number }>()
+  if (!initRef.current) initRef.current = reviewStorage.resumeOrStartDaily(DAILY_CAP)
+  const [queue, setQueue] = useState<ReviewNote[]>(initRef.current.queue)
+  const [doneCount, setDoneCount] = useState(initRef.current.done)
+  const [sessionTotal, setSessionTotal] = useState(initRef.current.total)
   const [totalNotes, setTotalNotes] = useState(() => reviewStorage.stats().total)
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // 由 session 重建佇列（匯入／清理／刪除後用，保留今日進度）
+  const refreshFromSession = () => {
+    const r = reviewStorage.resumeOrStartDaily(DAILY_CAP)
+    setQueue(r.queue); setDoneCount(r.done); setSessionTotal(r.total)
+    setTotalNotes(reviewStorage.stats().total)
+  }
   // 批量管理／刪除
   const [manageMode, setManageMode] = useState(false)
   const [notesList, setNotesList] = useState<ReviewNote[]>([])
@@ -53,16 +61,11 @@ export default function ReviewCards({ onClose }: Props) {
   const toggleAll = () => setSelected(prev => prev.size === notesList.length ? new Set() : new Set(notesList.map(n => n.id)))
   const deleteSelected = () => {
     if (selected.size === 0) return
-    selected.forEach(id => reviewStorage.remove(id))
-    const remaining = reviewStorage.getAll()
-    setNotesList(remaining)
+    selected.forEach(id => { reviewStorage.remove(id); reviewStorage.sessionRemove(id) })
+    setNotesList(reviewStorage.getAll())
     setSelected(new Set())
-    setTotalNotes(reviewStorage.stats().total)
-    const fresh = reviewStorage.pickDaily(DAILY_CAP)
-    setQueue(fresh); setPos(0); setDoneCount(0); setSessionTotal(fresh.length)
+    refreshFromSession()
   }
-
-  function queueInitLen() { return Math.min(reviewStorage.pickDaily(DAILY_CAP).length, DAILY_CAP) }
 
   // 匯入 Flomo 筆記檔 → 加入温習卡 → 重新抽卡
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,11 +76,8 @@ export default function ReviewCards({ onClose }: Props) {
       const isHtml = /\.html?$/i.test(file.name) || /^\s*<!doctype|<html|<div|<p[ >]/i.test(raw)
       const notes = parseFlomoExport(raw, isHtml)
       const added = reviewStorage.addImported(notes)
-      const fresh = reviewStorage.pickDaily(DAILY_CAP)
-      setQueue(fresh); setPos(0); setDoneCount(0)
-      setSessionTotal(fresh.length)
-      setTotalNotes(reviewStorage.stats().total)
-      setImportMsg(added > 0 ? `已匯入 ${added} 條筆記 🎉` : '冇新筆記可匯入（可能已存在）')
+      refreshFromSession()
+      setImportMsg(added > 0 ? `已匯入 ${added} 條筆記 🎉（明天起加入温習）` : '冇新筆記可匯入（可能已存在）')
       setTimeout(() => setImportMsg(null), 3000)
     } catch {
       setImportMsg('讀取檔案失敗，請用 .txt / .md / .csv / .html')
@@ -90,38 +90,54 @@ export default function ReviewCards({ onClose }: Props) {
   // 一鍵清理：移除純時間戳／純 metadata 等雜項卡
   const handleCleanup = () => {
     const removed = reviewStorage.cleanupJunk()
-    const fresh = reviewStorage.pickDaily(DAILY_CAP)
-    setQueue(fresh); setPos(0); setDoneCount(0)
-    setSessionTotal(fresh.length)
-    setTotalNotes(reviewStorage.stats().total)
+    refreshFromSession()
     setImportMsg(removed > 0 ? `已清理 ${removed} 張雜項卡 🧹` : '冇雜項卡需要清理 ✨')
     setTimeout(() => setImportMsg(null), 3000)
   }
 
-  const card = queue[pos]
-  const finished = !card && queue.length > 0
-  const empty = queue.length === 0
+  const card = queue[0]
+  const finished = !card && sessionTotal > 0
+  const empty = sessionTotal === 0
 
   const known = useCallback(() => {
-    if (!card) return
-    reviewStorage.markKnown(card.id)
-    setDoneCount(c => c + 1)
-    setPos(p => p + 1)
-  }, [card])
+    const c = queue[0]; if (!c) return
+    reviewStorage.markKnown(c.id)
+    reviewStorage.sessionMarkKnown(c.id)   // 記錄進度：移出剩餘、完成 +1
+    setQueue(q => q.slice(1))
+    setDoneCount(d => d + 1)
+  }, [queue])
 
   const again = useCallback(() => {
-    if (!card) return
-    reviewStorage.markAgain(card.id)
-    setQueue(q => [...q, card])   // 本節稍後再出現
-    setPos(p => p + 1)
-  }, [card])
+    const c = queue[0]; if (!c) return
+    reviewStorage.markAgain(c.id)
+    reviewStorage.sessionMoveBack(c.id)    // 本節稍後再出現（移到隊尾）
+    setQueue(q => q.length > 1 ? [...q.slice(1), c] : q)
+  }, [queue])
 
   const del = () => {
-    if (!card) return
-    reviewStorage.remove(card.id)
-    setQueue(q => { const nq = [...q]; nq.splice(pos, 1); return nq })
-    // pos 不變：下一張會頂上來
+    const c = queue[0]; if (!c) return
+    reviewStorage.remove(c.id)
+    reviewStorage.sessionRemove(c.id)
+    setQueue(q => q.slice(1))
+    setTotalNotes(reviewStorage.stats().total)
   }
+
+  // 自動縮放字體：令整張卡（正文＋附加資訊）一頁顯示，唔使滾動；太多字就縮細
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [fitSize, setFitSize] = useState(20)
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    if (!box || !card) return
+    const p = box.querySelector('[data-fit]') as HTMLElement | null
+    if (!p) return
+    let size = 20
+    p.style.fontSize = size + 'px'
+    let guard = 0
+    while (box.scrollHeight > box.clientHeight + 1 && size > 11 && guard < 40) {
+      size -= 1; p.style.fontSize = size + 'px'; guard++
+    }
+    setFitSize(size)
+  }, [card])
 
   // 墨水屏模式（與閱讀器共用設定）
   const eink = typeof window !== 'undefined' && localStorage.getItem('eink-mode') === 'true'
@@ -131,14 +147,20 @@ export default function ReviewCards({ onClose }: Props) {
   //  1 = 要再温；Space / Enter / 2 = 記得了；Esc = 關閉
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
-      if (!card) return
-      if (e.key === '1' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); again() }
-      else if (e.key === ' ' || e.key === 'Enter' || e.key === '2' || e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); known() }
+      const k = e.key
+      const c = e.keyCode   // 部分墨水屏只送 keyCode
+      const isEsc = k === 'Escape' || c === 27
+      const isAgain = k === '1' || k === 'ArrowUp' || k === 'PageUp' || c === 38 || c === 33 || c === 49 || c === 97
+      const isKnown = k === ' ' || k === 'Enter' || k === '2' || k === 'ArrowDown' || k === 'PageDown' || c === 32 || c === 13 || c === 40 || c === 34 || c === 50 || c === 98
+      if (isEsc) { e.preventDefault(); onClose(); return }
+      if (manageMode || !queue[0]) return
+      if (isAgain) { e.preventDefault(); again() }
+      else if (isKnown) { e.preventDefault(); known() }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [card, again, known, onClose])
+    // capture 階段：搶先處理，避免墨水屏實體鍵被瀏覽器當成翻頁／捲動
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true } as EventListenerOptions)
+  }, [queue, again, known, onClose, manageMode])
 
   const progress = sessionTotal > 0 ? Math.min(100, Math.round((doneCount / sessionTotal) * 100)) : 0
   const segs = Array.from({ length: Math.max(sessionTotal, 1) }, (_, i) =>
@@ -232,7 +254,7 @@ export default function ReviewCards({ onClose }: Props) {
           <div className="px-6 pt-4 pb-1">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-gray-500">今日進度 <span className="text-emerald-600">{doneCount}</span> / {sessionTotal}</span>
-              <span className="text-xs text-gray-400">剩 {Math.max(0, queue.length - pos)} 張</span>
+              <span className="text-xs text-gray-400">剩 {queue.length} 張</span>
             </div>
             <div className="flex gap-[5px]">
               {segs.map((c, i) => (
@@ -327,20 +349,18 @@ export default function ReviewCards({ onClose }: Props) {
                   </span>
                 </div>
 
-                {/* 引文 */}
+                {/* 引文 + 附加資訊：自動縮放字體、一頁顯示、免滾動 */}
                 <div className="relative">
                   <span className="absolute -left-1.5 -top-5 text-[60px] leading-none text-emerald-100 pointer-events-none select-none" style={{ fontFamily: 'Georgia, serif' }}>&ldquo;</span>
-                  <div className="relative max-h-[300px] overflow-y-auto overflow-x-hidden pr-1.5 pl-1 py-1">
-                    <p className="text-gray-800" style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 2, overflowWrap: 'break-word', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{card.text}</p>
+                  <div ref={boxRef} className="relative overflow-hidden pr-1.5 pl-1 py-1" style={{ maxHeight: '48vh' }}>
+                    <p data-fit className="text-gray-800" style={{ fontFamily: SERIF, fontSize: fitSize, lineHeight: 1.9, overflowWrap: 'break-word', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{card.text}</p>
+                    {card.meta && (
+                      <div className="mt-3 pt-2.5 border-t border-dashed border-gray-100">
+                        <p className="text-gray-400 whitespace-pre-wrap" style={{ fontSize: Math.max(11, fitSize - 7), lineHeight: 1.6 }}>{card.meta}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* 附加資訊：來源／章節／時間／標籤（匯入時保留）*/}
-                {card.meta && (
-                  <div className="mt-3.5 pt-3 border-t border-dashed border-gray-100">
-                    <p className="text-[12px] text-gray-400 leading-relaxed whitespace-pre-wrap">{card.meta}</p>
-                  </div>
-                )}
 
                 {/* 底列：meta（生成時間＋設備）+ 刪除 */}
                 <div className="flex items-end justify-between mt-4 pt-3.5 border-t border-gray-100">
