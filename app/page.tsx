@@ -27,6 +27,8 @@ import { parseEpubClientSide } from './utils/epubParser'
 import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './utils/musicDB'
 import CharacterGraph from './components/CharacterGraph'
 import ReviewCards from './components/ReviewCards'
+import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
+import { Newspaper } from 'lucide-react'
 
 // ── Vision OCR 設定型別 ──
 interface VisionOcrConfig {
@@ -245,6 +247,9 @@ export default function Home() {
   // 每日温習
   const [showReview, setShowReview] = useState(false)
   const [reviewDue, setReviewDue] = useState(0)
+  // 每日外刊
+  const [extStatus, setExtStatus] = useState<'idle' | 'loading'>('idle')
+  const [extDoneToday, setExtDoneToday] = useState(false)
   // OCR 進度提示文字
   const [ocrProgress, setOcrProgress] = useState<string>('')
   // Vision OCR 設定
@@ -267,6 +272,7 @@ export default function Home() {
     getAllBooksFromIDB().then(setSavedBooks)
     getMusicMeta().then(setMusicMeta)
     setReviewDue(reviewStorage.stats().due)
+    setExtDoneToday(alreadyGeneratedToday())
   }, [])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -415,6 +421,31 @@ export default function Home() {
   const handleSyncComplete = () => {
     getAllBooksFromIDB().then(setSavedBooks)
     setReviewDue(reviewStorage.stats().due)   // 同步後更新温習到期數
+  }
+
+  // 📰 每日外刊：已生成今日份 → 直接打開最新一篇；否則用 DeepSeek 生成再打開
+  const handleDailyExternal = async () => {
+    if (extStatus === 'loading') return
+    const key = deepseekKey || (typeof window !== 'undefined' ? localStorage.getItem('deepseek-api-key') || '' : '')
+    if (!key) {
+      alert('請先設定 DeepSeek API key（右上角「Vision OCR / 設定」→ 人物關係分析 DeepSeek）')
+      return
+    }
+    try {
+      if (alreadyGeneratedToday()) {
+        const existing = await getExternalBook()
+        if (existing) { handleOpenBookAtSentence(existing.book, existing.startIndex); return }
+      }
+      setExtStatus('loading')
+      const { book, startIndex } = await generateTodayArticle(key)
+      await getAllBooksFromIDB().then(setSavedBooks)
+      setExtDoneToday(true)
+      handleOpenBookAtSentence(book, startIndex)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '生成外刊失敗，請稍後再試')
+    } finally {
+      setExtStatus('idle')
+    }
   }
 
   const handleMusicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -597,6 +628,21 @@ export default function Home() {
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
             <div className="flex items-center space-x-3">
+              {/* 每日外刊按鈕 */}
+              <button
+                onClick={handleDailyExternal}
+                disabled={extStatus === 'loading'}
+                className="relative flex items-center space-x-1.5 px-3 py-2 rounded-full border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100 text-sm font-medium transition-colors disabled:opacity-60"
+                title="每日外刊精讀（DeepSeek 生成：英文＋中譯＋講解）"
+              >
+                {extStatus === 'loading'
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Newspaper className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">{extStatus === 'loading' ? '生成中…' : '每日外刊'}</span>
+                {!extDoneToday && extStatus !== 'loading' && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-teal-500" title="今日未生成" />
+                )}
+              </button>
               {/* 每日温習按鈕 */}
               <button
                 onClick={() => setShowReview(true)}
