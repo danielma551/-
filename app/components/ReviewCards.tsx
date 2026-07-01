@@ -6,7 +6,7 @@
 // 升級：牌組層次、引號裝飾的文學排版、分段進度、間隔盒徽章、鍵盤快捷鍵。
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, Upload, Wand2 } from 'lucide-react'
+import { X, Upload, Wand2, ListChecks, Trash2 } from 'lucide-react'
 import { reviewStorage, ReviewNote, parseFlomoExport } from '../utils/storage'
 
 interface Props {
@@ -43,6 +43,24 @@ export default function ReviewCards({ onClose }: Props) {
   const [totalNotes, setTotalNotes] = useState(() => reviewStorage.stats().total)
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // 批量管理／刪除
+  const [manageMode, setManageMode] = useState(false)
+  const [notesList, setNotesList] = useState<ReviewNote[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const openManage = () => { setNotesList(reviewStorage.getAll()); setSelected(new Set()); setManageMode(true) }
+  const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const toggleAll = () => setSelected(prev => prev.size === notesList.length ? new Set() : new Set(notesList.map(n => n.id)))
+  const deleteSelected = () => {
+    if (selected.size === 0) return
+    selected.forEach(id => reviewStorage.remove(id))
+    const remaining = reviewStorage.getAll()
+    setNotesList(remaining)
+    setSelected(new Set())
+    setTotalNotes(reviewStorage.stats().total)
+    const fresh = reviewStorage.pickDaily(DAILY_CAP)
+    setQueue(fresh); setPos(0); setDoneCount(0); setSessionTotal(fresh.length)
+  }
 
   function queueInitLen() { return Math.min(reviewStorage.pickDaily(DAILY_CAP).length, DAILY_CAP) }
 
@@ -170,6 +188,14 @@ export default function ReviewCards({ onClose }: Props) {
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline">清理</span>
             </button>
+            <button
+              onClick={() => (manageMode ? setManageMode(false) : openManage())}
+              title="批量管理／刪除卡片"
+              className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${manageMode ? 'text-white bg-gray-700 hover:bg-gray-800' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
+            >
+              <ListChecks className="w-4 h-4" />
+              <span className="hidden sm:inline">{manageMode ? '完成' : '管理'}</span>
+            </button>
             <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-[10px] transition-colors">
               <X className="w-[18px] h-[18px]" />
             </button>
@@ -184,7 +210,7 @@ export default function ReviewCards({ onClose }: Props) {
         )}
 
         {/* 分段進度 */}
-        {!empty && (
+        {!empty && !manageMode && (
           <div className="px-6 pt-4 pb-1">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-gray-500">今日進度 <span className="text-emerald-600">{doneCount}</span> / {sessionTotal}</span>
@@ -198,7 +224,42 @@ export default function ReviewCards({ onClose }: Props) {
           </div>
         )}
 
+        {/* 批量管理／刪除 */}
+        {manageMode && (
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <button onClick={toggleAll} className="text-sm font-medium text-gray-600 hover:text-gray-800">
+                {selected.size === notesList.length && notesList.length > 0 ? '取消全選' : '全選'}
+                <span className="text-gray-400 ml-1">({selected.size}/{notesList.length})</span>
+              </button>
+              <button
+                onClick={deleteSelected}
+                disabled={selected.size === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-4 h-4" /> 刪除選中 ({selected.size})
+              </button>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-100 border-y border-gray-100">
+              {notesList.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">冇筆記</p>}
+              {notesList.map(n => (
+                <label key={n.id} className="flex items-start gap-3 py-2.5 px-1 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(n.id)}
+                    onChange={() => toggleOne(n.id)}
+                    className="mt-1 w-4 h-4 accent-red-500 flex-shrink-0"
+                  />
+                  <span className="text-sm text-gray-700 leading-snug line-clamp-2">{n.text}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-3">勾選要刪除嘅卡，再㩒「刪除選中」。刪除唔可復原。</p>
+          </div>
+        )}
+
         {/* 內容 */}
+        {!manageMode && (
         <div className="px-[30px] pt-7 pb-3 min-h-[380px] flex flex-col justify-center">
           {empty && (
             <div className="text-center py-6">
@@ -279,9 +340,10 @@ export default function ReviewCards({ onClose }: Props) {
             </div>
           )}
         </div>
+        )}
 
         {/* 操作按鈕 */}
-        {card && (
+        {card && !manageMode && (
           <div className="flex gap-3 px-6 pt-2 pb-6">
             <button
               onClick={again}
