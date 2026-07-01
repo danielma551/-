@@ -12,20 +12,21 @@ const LAST_DATE_KEY = 'external-reading-last-date'
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
 const DEEPSEEK_MODEL = 'deepseek-chat'
 
-interface RawParagraph { en?: string; zh?: string; notes?: string }
+interface RawSentence { en?: string; zh?: string }
+interface RawParagraph { sentences?: RawSentence[]; notes?: string }
 interface RawArticle { title?: string; title_zh?: string; paragraphs?: RawParagraph[] }
 
 const PROMPT = `你是一位英語外刊精讀老師，風格類似「友鄰優課」。請生成一篇高質量、地道的英文短文（模仿 The Economist / The Atlantic / The New Yorker 等外刊的語言風格與思辨視角），主題有趣、有思想性，適合中高級英語學習者。
 
 要求：
 1. 全文約 5 段，每段 2-4 句，總長適中（不要太長）。
-2. 每段提供三部分：
-   - en：英文原文（地道、有文采）
-   - zh：對應的中文翻譯（準確、自然）
-   - notes：語言講解（用中文，挑出該段的重點詞彙／地道搭配／句型／修辭或文化背景，像老師帶讀那樣親切、有洞見）
-3. 主題自選，但要新穎耐讀（科技、社會、文化、心理、經濟、自然皆可）。
-4. 嚴格只輸出 JSON，不要任何多餘文字或 markdown：
-{"title":"English Title","title_zh":"中文標題","paragraphs":[{"en":"...","zh":"...","notes":"..."}]}`
+2. 「以句子為單位」逐句提供英中對照：把每段拆成一句一句（以 . ? ! 等句末標點斷句），每句給出：
+   - en：該句英文原文（地道、有文采）
+   - zh：該句對應的中文翻譯（準確、自然，逐句對照）
+3. 每段另給 notes：語言講解（用中文，挑出該段的重點詞彙／地道搭配／句型／修辭或文化背景，像老師帶讀那樣親切、有洞見）。
+4. 主題自選，但要新穎耐讀（科技、社會、文化、心理、經濟、自然皆可）。
+5. 嚴格只輸出 JSON，不要任何多餘文字或 markdown：
+{"title":"English Title","title_zh":"中文標題","paragraphs":[{"sentences":[{"en":"...","zh":"..."}],"notes":"..."}]}`
 
 export function todayStr(): string {
   return new Date().toLocaleDateString('en-CA')   // YYYY-MM-DD（本地時區）
@@ -68,7 +69,8 @@ async function callDeepSeek(apiKey: string): Promise<RawArticle> {
   return article
 }
 
-// 把文章轉成閱讀器的「句子」卡片：標題 →（英文 → 中譯 → 講解）× N 段
+// 把文章轉成閱讀器的「句子」卡片：
+// 標題 →（每句一張卡：上英文、下中文）→ 該段講解 💡 → 段落分隔，逐段重複。
 function buildCards(a: RawArticle, dateLabel: string): string[] {
   const cards: string[] = []
   const title = (a.title || 'Today’s Reading').trim()
@@ -76,8 +78,13 @@ function buildCards(a: RawArticle, dateLabel: string): string[] {
   cards.push(`📰 ${dateLabel}｜${title}${titleZh ? `\n${titleZh}` : ''}`)
   cards.push(PARA_SEP)
   for (const p of a.paragraphs || []) {
-    if (p.en && p.en.trim()) cards.push(p.en.trim())
-    if (p.zh && p.zh.trim()) cards.push(`🇨🇳 ${p.zh.trim()}`)
+    for (const s of p.sentences || []) {
+      const en = (s.en || '').trim()
+      const zh = (s.zh || '').trim()
+      if (!en && !zh) continue
+      // 一張卡：上面英文，下面中文（閱讀器 white-space: pre-wrap 會保留換行）
+      cards.push(zh ? `${en}\n\n${zh}` : en)
+    }
     if (p.notes && p.notes.trim()) cards.push(`💡 ${p.notes.trim()}`)
     cards.push(PARA_SEP)
   }
