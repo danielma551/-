@@ -358,6 +358,22 @@ export const reviewStorage = {
     if (added > 0) this.saveAll(list)
     return added
   },
+  // 匯入（每條各自帶來源書本資訊），依文字去重
+  addImported(items: ImportedNote[]): number {
+    const list = this.getAll()
+    const seen = new Set(list.map(n => n.text.trim()))
+    const now = Date.now()
+    let added = 0
+    for (const it of items) {
+      const text = (it?.text || '').trim()
+      if (!text || seen.has(text)) continue
+      seen.add(text)
+      list.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, source: it.source || 'Flomo 匯入', createdAt: now, box: 0, due: now, reviewCount: 0, device: detectDevice() })
+      added++
+    }
+    if (added > 0) this.saveAll(list)
+    return added
+  },
   remove(id: string): void {
     this.saveAll(this.getAll().filter(n => n.id !== id))
   },
@@ -428,10 +444,12 @@ export const reviewStorage = {
   },
 }
 
-// 解析 Flomo 匯出檔（.txt / .md / .csv / .html）→ 一條條「筆記正文」。
+export interface ImportedNote { text: string; source?: string }
+
+// 解析 Flomo 匯出檔（.txt / .md / .csv / .html）→ 一條條「筆記正文 + 來源」。
 // Flomo 每則 memo 結構：時間戳行 → 📖標籤/📅日期等 metadata → 正文 →（📚來源/📂章節/📅時間/#標籤）。
-// 做法：以「帶時間的時間戳行」分割每則 memo，剔走 metadata 行，只保留正文，一則一張卡。
-export function parseFlomoExport(raw: string, isHtml: boolean): string[] {
+// 做法：以「帶時間的時間戳行」分割每則 memo，剔走 metadata 只保留正文，並抽出「來源」書本資訊。
+export function parseFlomoExport(raw: string, isHtml: boolean): ImportedNote[] {
   let text = raw
   if (isHtml) {
     text = raw
@@ -468,14 +486,23 @@ export function parseFlomoExport(raw: string, isHtml: boolean): string[] {
   // 冇時間戳格式 → 退回以空行分塊
   const rawGroups = sawTs ? groups : text.split(/\n\s*\n/).map(b => b.split(/\r?\n/))
 
-  const notes: string[] = []
+  const notes: ImportedNote[] = []
   for (const g of rawGroups) {
-    const content = g
-      .filter(l => l.trim() && !isMeta(l))   // 去空行、去 metadata
-      .map(l => l.trim())
-      .join('\n')
-      .trim()
-    if (content.replace(/\s/g, '').length >= 2) notes.push(content)
+    const contentLines: string[] = []
+    let source: string | undefined
+    for (const l of g) {
+      const t = l.trim()
+      if (!t) continue
+      if (isMeta(l)) {
+        // 從 metadata 抽出「來源」書本資訊（可能帶前置 emoji）
+        const m = t.match(/(?:來源|来源|出處|出处)\s*[:：]\s*(.+)$/)
+        if (m && !source) source = m[1].trim()
+        continue
+      }
+      contentLines.push(t)
+    }
+    const content = contentLines.join('\n').trim()
+    if (content.replace(/\s/g, '').length >= 2) notes.push({ text: content, source })
   }
   return notes
 }

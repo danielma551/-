@@ -72,7 +72,7 @@ export default function ReviewCards({ onClose }: Props) {
       const raw = await file.text()
       const isHtml = /\.html?$/i.test(file.name) || /^\s*<!doctype|<html|<div|<p[ >]/i.test(raw)
       const notes = parseFlomoExport(raw, isHtml)
-      const added = reviewStorage.addMany(notes, 'Flomo 匯入')
+      const added = reviewStorage.addImported(notes)
       const fresh = reviewStorage.pickDaily(DAILY_CAP)
       setQueue(fresh); setPos(0); setDoneCount(0)
       setSessionTotal(fresh.length)
