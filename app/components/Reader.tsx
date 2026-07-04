@@ -1472,6 +1472,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         <style>{`
           .paper-cap { opacity: 0; transform: translateX(-50%) translateY(-6px) !important; pointer-events: none; transition: opacity .25s ease, transform .25s ease; }
           .paper-hdr:hover .paper-cap { opacity: 1; transform: translateX(-50%) translateY(0) !important; pointer-events: auto; }
+          .paper-foot:hover .paper-foot-cap { opacity: 1 !important; transform: translateX(-50%) translateY(0) !important; pointer-events: auto !important; }
         `}</style>
       )}
       <header
@@ -1940,8 +1941,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             />
           </div>
 
-          {/* 📅 每日挑戰進度條（普通模式，不在墨水屏顯示） */}
-          {dailyChallenge && !dailyChallenge.completed && (
+          {/* 📅 每日挑戰進度條（普通模式；紙本模式移入底部膠囊）*/}
+          {!isPaper && dailyChallenge && !dailyChallenge.completed && (
             <div className="flex items-center gap-2 mt-2 px-0.5">
               <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 🎯 {dailyChallenge.type === 'kill_monsters'
@@ -1958,7 +1959,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </span>
             </div>
           )}
-          {dailyChallenge?.completed && (
+          {!isPaper && dailyChallenge?.completed && (
             <div className="flex items-center gap-1 mt-2 px-0.5">
               <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 700 }}>✅ 今日挑戰已完成！+{dailyChallenge.bonusXP} XP</span>
             </div>
@@ -2134,8 +2135,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       )}
 
-      {/* 🌿 Flomo 浮動按鈕組（右下角，拇指易按，e-ink 和普通模式都有） */}
-      <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2">
+      {/* 🌿 Flomo 浮動按鈕組（右下角；紙本模式隱藏，改用頂部工具列膠囊裡的 Flomo）*/}
+      <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2" style={isPaper ? { display: 'none' } : undefined}>
 
         {/* 上下文選擇器（點 🌿 且暫存為空時出現） */}
         {showFlomoNPicker && flomoBuffer.length === 0 && (
@@ -2727,8 +2728,39 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       </main>
 
 
-      {/* ── 等級 / XP 徽章：左下角固定，不遮擋主內容 ── */}
-      {!isEink && (() => {
+      {/* ── 紙本模式：底部 hover 狀態膠囊（Lv/XP + 今日挑戰）── */}
+      {isPaper && !isEink && (() => {
+        const li = levelForXP(displayXP)
+        const pct = Math.round(li.progress * 100)
+        const ch = dailyChallenge
+        return (
+          <div className="paper-foot hidden md:block" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, height: 110, zIndex: 40 }}>
+            <div className="paper-foot-cap" style={{
+              position: 'absolute', bottom: 22, left: '50%', transform: 'translateX(-50%) translateY(6px)',
+              opacity: 0, pointerEvents: 'none', transition: 'opacity .25s ease, transform .25s ease',
+              display: 'flex', alignItems: 'center', gap: 14,
+              background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              border: '1px solid rgba(0,0,0,0.06)', borderRadius: 999, boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
+              padding: '9px 18px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap',
+            }}>
+              <span style={{ fontWeight: 700, color: '#4f46e5' }}>Lv.{li.level}</span>
+              <div style={{ width: 56, height: 4, borderRadius: 2, background: '#e0e7ff', overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: '#6366f1' }} />
+              </div>
+              <span style={{ color: '#9ca3af' }}>{li.xpInLevel} / {li.xpNeeded} XP</span>
+              <span style={{ width: 3, height: 3, borderRadius: 999, background: '#d1d5db', flexShrink: 0 }} />
+              {ch?.completed
+                ? <span style={{ fontWeight: 600, color: '#16a34a' }}>✓ 今日挑戰 +{ch.bonusXP} XP</span>
+                : ch
+                  ? <span style={{ color: '#9ca3af' }}>今日挑戰 {ch.progress}/{ch.target} 句</span>
+                  : null}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── 等級 / XP 徽章：左下角固定（紙本模式改用底部膠囊）── */}
+      {!isEink && !isPaper && (() => {
         const li = levelForXP(displayXP)
         const pct = Math.round(li.progress * 100)
         return (
