@@ -92,7 +92,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSearch, setShowSearch] = useState(false)
   const [showGraph, setShowGraph] = useState(false)   // 閱讀時開啟人物關係圖
   const [showBreathing, setShowBreathing] = useState(false)   // 每 4 個循環出呼吸休息動畫
-  const [glossaryCard, setGlossaryCard] = useState<{ word: string; note: string } | null>(null)   // 外刊：向外延伸的詞解卡
+  const [glossaryCard, setGlossaryCard] = useState<{ word: string; note: string; anchor?: { x: number; y: number } } | null>(null)   // 外刊：向外延伸的詞解卡
   const [showSidebar, setShowSidebar] = useState(false)  // 預設收起：入閱讀唔主動彈出，需要時自己展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
@@ -1099,11 +1099,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     [bookId]
   )
 
-  // 渲染正文：外刊書中，命中詞彙表的英文詞加虛線底 + 可點開解釋卡；其他書本原樣輸出
-  const renderSentenceContent = (): React.ReactNode => {
-    const text = effectiveSentence
-    if (bookId !== EXTERNAL_BOOK_ID || Object.keys(glossaryMap).length === 0) return text
-    const parts = text.split(/([A-Za-z][A-Za-z'’-]*)/)
+  // 把一段英文中「有詞解」的詞加虛線底 + 可點（點開時記錄該詞位置，供連線動畫）
+  const renderGlossary = (str: string): React.ReactNode => {
+    if (Object.keys(glossaryMap).length === 0) return str
+    const parts = str.split(/([A-Za-z][A-Za-z'’-]*)/)
     return parts.map((seg, i) => {
       if (i % 2 === 1) {
         const note = glossaryMap[seg.toLowerCase()]
@@ -1111,7 +1110,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           return (
             <span
               key={i}
-              onClick={(e) => { e.stopPropagation(); setGlossaryCard({ word: seg, note }) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                setGlossaryCard({ word: seg, note, anchor: { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+              }}
               style={{
                 textDecoration: 'underline dashed',
                 textUnderlineOffset: '5px',
@@ -1125,6 +1128,25 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }
       return seg
     })
+  }
+
+  // 渲染正文：外刊採「英文為主、中文較細較淡」的精讀排版；其他書本原樣輸出
+  const renderSentenceContent = (): React.ReactNode => {
+    const text = effectiveSentence
+    if (bookId !== EXTERNAL_BOOK_ID) return text
+    const sep = text.indexOf('\n\n')
+    const isSpecial = text.startsWith('📰') || text.startsWith('💡')
+    if (sep !== -1 && !isSpecial) {
+      const en = text.slice(0, sep)
+      const zh = text.slice(sep + 2)
+      return (
+        <>
+          {renderGlossary(en)}
+          <span style={{ display: 'block', marginTop: '0.8em', fontSize: '0.72em', color: '#9aa0a6', fontWeight: 400, letterSpacing: '0.02em' }}>{zh}</span>
+        </>
+      )
+    }
+    return renderGlossary(text)
   }
 
   // ＋ 加入暫存：把當前句子加入 buffer，閃爍提示
@@ -3065,7 +3087,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 外刊詞解卡（選中有解釋的字時，向外延伸）*/}
       {glossaryCard && (
-        <GlossaryCard word={glossaryCard.word} note={glossaryCard.note} onClose={() => setGlossaryCard(null)} />
+        <GlossaryCard word={glossaryCard.word} note={glossaryCard.note} anchor={glossaryCard.anchor} onClose={() => setGlossaryCard(null)} />
       )}
 
       {/* 人物關係圖（閱讀時可開啟）*/}
