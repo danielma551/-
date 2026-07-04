@@ -93,7 +93,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showGraph, setShowGraph] = useState(false)   // 閱讀時開啟人物關係圖
   const [showBreathing, setShowBreathing] = useState(false)   // 每 4 個循環出呼吸休息動畫
   const [glossaryCard, setGlossaryCard] = useState<{ word: string; note: string } | null>(null)   // 外刊：向外延伸的詞解卡
-  const [showSidebar, setShowSidebar] = useState(true)  // 預設展開
+  const [showSidebar, setShowSidebar] = useState(false)  // 預設收起：入閱讀唔主動彈出，需要時自己展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
   // 閱讀模式：'default'（現有樣式）或 'paper'（紙本質感）

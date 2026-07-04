@@ -140,7 +140,7 @@ export default function SearchSidebar({ isOpen, onToggle, currentBookId, onOpenB
         matches: book.sentences
           .map((sentence, index) => ({ sentence, index }))
           .filter(({ sentence }) => sentence.toLowerCase().includes(trimmed.toLowerCase()))
-          .slice(0, 15),
+          .slice(0, 100),   // 每本書最多顯示 100 條匹配（原為 15）
       }))
       .filter(r => r.matches.length > 0)
       .sort((a, b) => (b.isCurrent ? 1 : 0) - (a.isCurrent ? 1 : 0))
