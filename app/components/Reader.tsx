@@ -12,7 +12,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, speedStorage, reviewStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { getMusicObjectURL } from '../utils/musicDB'
@@ -2055,15 +2055,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </header>
 
-      {/* 循環開始提示 Toast */}
-      <div
-        className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-500"
-        style={{ opacity: cycleToast ? 1 : 0, transform: `translateX(-50%) translateY(${cycleToast ? '0px' : '-8px'})` }}
-      >
-        <div className="px-4 py-2 bg-gray-800/80 backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap">
-          🔄 {cycleToast}
+      {/* 循環完成氣泡（4b）：錨在循環進度游標下方，白底小膠囊 */}
+      {!isEink && (
+        <div
+          className="fixed z-50 pointer-events-none transition-all duration-200"
+          style={{
+            top: 92,
+            left: `clamp(16px, ${mergedBarWidth}%, calc(100vw - 16px))`,
+            transform: `translateX(-50%) translateY(${cycleToast ? '0' : '-4px'})`,
+            opacity: cycleToast ? 1 : 0,
+          }}
+        >
+          <div className="flex flex-col items-center">
+            {/* 小箭頭指向游標 */}
+            <div style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '6px solid #ffffff', filter: 'drop-shadow(0 -1px 1px rgba(0,0,0,0.04))' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#ffffff', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 999, padding: '6px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.08)', whiteSpace: 'nowrap' }}>
+              <Check className="w-3 h-3" style={{ stroke: '#16a34a', strokeWidth: 2.5 }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#4f46e5' }}>{cycleToast}</span>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ② 檢查點 micro-toast */}
       <div

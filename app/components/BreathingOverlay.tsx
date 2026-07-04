@@ -76,51 +76,48 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
     )
   }
 
-  // ── 彩色版：置中細卡片（非鋪滿全屏）+ 淡入淡出 ──
+  // ── 彩色版（5c）：米色霧化覆蓋層 + 白圓 + 雨的漣漪，無卡片 ──
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      style={{ opacity: visible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease` }}
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center"
+      style={{
+        background: 'rgba(240,234,218,0.78)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)',
+        opacity: visible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease`,
+      }}
       onClick={close}
     >
-      <div
-        className="flex flex-col items-center rounded-3xl px-10 py-8 shadow-2xl"
-        style={{
-          background: 'linear-gradient(160deg,#1e3a5f,#0f2038)',
-          transform: visible ? 'scale(1)' : 'scale(0.94)',
-          transition: `transform ${FADE_MS}ms ease`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-white/80 text-sm font-medium mb-1">休息一下 🌙</p>
-        <p className="text-white/40 text-xs mb-6">跟住圓圈呼吸 · 放鬆眼睛</p>
+      <style>{`
+        @keyframes rippleOut { 0% { transform: scale(0.45); opacity: 0.6 } 100% { transform: scale(1.7); opacity: 0 } }
+      `}</style>
 
-        <div className="relative flex items-center justify-center" style={{ width: 190, height: 190 }}>
-          {/* 光暈 */}
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: 190, height: 190,
-              background: 'radial-gradient(circle, rgba(96,165,250,0.30) 0%, rgba(96,165,250,0) 70%)',
-              transform: `scale(${big ? 1 : 0.55})`,
-              transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
-            }}
-          />
-          {/* 主圓 */}
-          <div
-            className="rounded-full flex items-center justify-center"
-            style={{
-              width: 110, height: 110,
-              background: 'linear-gradient(150deg,#60a5fa,#3b82f6)',
-              boxShadow: '0 0 40px rgba(96,165,250,0.45)',
-              transform: `scale(${big ? 1.25 : 0.62})`,
-              transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
-            }}
-          >
-            <span className="text-white text-lg font-medium tracking-widest">{inhaling ? '吸氣' : '呼氣'}</span>
-          </div>
+      <div className="relative flex items-center justify-center" style={{ width: 150, height: 150 }} onClick={(e) => e.stopPropagation()}>
+        {/* 漣漪：只在吸氣時向外散開 */}
+        <div className="absolute inset-0" style={{ opacity: inhaling ? 1 : 0, transition: 'opacity .8s ease' }}>
+          {[0, 1.3, 2.6].map((delay, i) => (
+            <div key={i} style={{
+              position: 'absolute', left: '50%', top: '50%', width: 150, height: 150, marginLeft: -75, marginTop: -75,
+              borderRadius: '999px', border: `1.5px solid rgba(96,165,250,${[0.55, 0.45, 0.35][i]})`,
+              animation: `rippleOut 4s ease-out ${delay}s infinite`,
+            }} />
+          ))}
+        </div>
+
+        {/* 主圓 */}
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 112, height: 112, borderRadius: '999px',
+            background: '#ffffff', border: '2px solid #5eead4', boxShadow: '0 8px 30px rgba(20,184,166,0.18)',
+            transform: `scale(${big ? 1.15 : 0.62})`,
+            transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
+          }}
+        >
+          <span style={{ fontSize: 17, fontWeight: 500, letterSpacing: 6, paddingLeft: 6, color: '#0f766e' }}>{inhaling ? '吸氣' : '呼氣'}</span>
         </div>
       </div>
+
+      <p style={{ fontSize: 12.5, letterSpacing: '0.15em', color: '#8d867a', marginTop: 22 }}>休息一下 · 眼睛望遠處</p>
+      <p style={{ fontSize: 10.5, color: '#c4bca6', marginTop: 8 }}>點任意處跳過</p>
     </div>
   )
 }
