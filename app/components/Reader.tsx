@@ -1275,8 +1275,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       setCycleToast(`第 ${currentCycleIdx + 1} 循環 · ${sz} 句`)
       if (cycleToastTimer.current) clearTimeout(cycleToastTimer.current)
       cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
-      // 每看完 4 個循環（進入第 4、8、12… 個循環）→ 呼吸休息動畫
-      if (currentCycleIdx > prevIdx && currentCycleIdx % 4 === 0) {
+      // 每看完 6 個循環（進入第 6、12、18… 個循環）→ 呼吸休息動畫
+      if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0) {
         setShowBreathing(true)
       }
     }
