@@ -2452,34 +2452,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       >
 
         {isPaper ? (
-          /* ── Paper 紙本質感模式 ── */
-          <div style={{ position: 'relative', maxWidth: 680, width: '100%', margin: '0 auto' }}>
+          /* ── Paper 紙本沉浸模式 ── */
+          <div style={{ position: 'relative', maxWidth: 'min(900px, 80vw)', width: '100%', margin: '0 auto' }}>
 
             {/* 章節標題 */}
-            <div style={{ textAlign: 'center', marginBottom: 36, opacity: 0.55 }}>
-              <div style={{ fontSize: 11, letterSpacing: '.3em', color: paperTheme.muted, textTransform: 'uppercase', marginBottom: 4, fontFamily: paperTheme.fontFamily }}>
-                第一章
-              </div>
-              <div style={{ fontSize: 13, color: paperTheme.muted, fontFamily: paperTheme.fontFamily, fontStyle: 'italic' }}>
-                {bookTitle}
-              </div>
+            <div style={{ textAlign: 'center', marginBottom: 22, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
+              第一章 · {bookTitle}
             </div>
 
-            {/* 紙張卡片 */}
-            <div style={{
-              background: paperTheme.cardBg,
-              borderRadius: 4,
-              boxShadow: paperTheme.cardShadow,
-              border: `1px solid ${paperTheme.border}`,
-              padding: '64px 72px',
-              minHeight: 280,
-              position: 'relative',
-              backgroundImage: 'radial-gradient(rgba(160,120,60,.04) 1px, transparent 1px)',
-              backgroundSize: '14px 14px',
-            }}>
-              {/* 四角裝飾線 */}
-              <div style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderTop: `1px solid ${paperTheme.accentColor}66`, borderLeft: `1px solid ${paperTheme.accentColor}66`, borderTopLeftRadius: 4 }} />
-              <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderBottom: `1px solid ${paperTheme.accentColor}66`, borderRight: `1px solid ${paperTheme.accentColor}66`, borderBottomRightRadius: 4 }} />
+            {/* 沉浸內容：移除紙卡容器，句子直接在背景上 */}
+            <div style={{ position: 'relative', padding: '8px 0', minHeight: 200 }}>
 
               {sentences[currentIndex]?.startsWith('data:image/') ? (
                 <img
@@ -2531,7 +2513,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
 
             {/* 頁碼 */}
-            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, color: paperTheme.muted, fontFamily: paperTheme.fontFamily, fontStyle: 'italic' }}>
+            <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, letterSpacing: '0.15em', color: '#c4bca6', fontFamily: paperTheme.fontFamily }}>
               — {currentIndex + 1} —
             </div>
 
