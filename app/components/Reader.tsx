@@ -92,7 +92,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSearch, setShowSearch] = useState(false)
   const [showGraph, setShowGraph] = useState(false)   // 閱讀時開啟人物關係圖
   const [showBreathing, setShowBreathing] = useState(false)   // 每 4 個循環出呼吸休息動畫
-  const [glossaryCard, setGlossaryCard] = useState<{ word: string; note: string; anchor?: { x: number; y: number } } | null>(null)   // 外刊：向外延伸的詞解卡
+  const [glossaryCard, setGlossaryCard] = useState<{ word: string; note: string } | null>(null)   // 外刊：底部浮動詞解卡
   const [showSidebar, setShowSidebar] = useState(false)  // 預設收起：入閱讀唔主動彈出，需要時自己展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
@@ -186,6 +186,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (prev >= 0) setCurrentIndex(prev)
     }
   }, [currentIndex, sentences])
+
+  // 換句時自動關閉外刊詞解卡
+  useEffect(() => { setGlossaryCard(null) }, [currentIndex])
 
   // 下雨特效動畫（eink 模式下強制關閉）
   useEffect(() => {
@@ -1110,16 +1113,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           return (
             <span
               key={i}
-              onClick={(e) => {
-                e.stopPropagation()
-                const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                setGlossaryCard({ word: seg, note, anchor: { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
-              }}
+              onClick={(e) => { e.stopPropagation(); setGlossaryCard({ word: seg, note }) }}
               style={{
                 textDecoration: 'underline dashed',
-                textUnderlineOffset: '5px',
+                textUnderlineOffset: '6px',
                 textDecorationColor: '#14b8a6',
                 textDecorationThickness: '1.5px',
+                color: '#0f766e',
                 cursor: 'pointer',
               }}
             >{seg}</span>
@@ -1130,7 +1130,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     })
   }
 
-  // 渲染正文：外刊採「英文為主、中文較細較淡」的精讀排版；其他書本原樣輸出
+  // 渲染正文：外刊採「左英右中」雙欄精讀排版；其他書本原樣輸出
   const renderSentenceContent = (): React.ReactNode => {
     const text = effectiveSentence
     if (bookId !== EXTERNAL_BOOK_ID) return text
@@ -1140,10 +1140,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       const en = text.slice(0, sep)
       const zh = text.slice(sep + 2)
       return (
-        <>
-          {renderGlossary(en)}
-          <span style={{ display: 'block', marginTop: '0.8em', fontSize: '0.72em', color: '#9aa0a6', fontWeight: 400, letterSpacing: '0.02em' }}>{zh}</span>
-        </>
+        <span style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', columnGap: 'clamp(28px, 6vw, 88px)', alignItems: 'start', width: '100%', textAlign: 'left' }}>
+          <span style={{ fontSize: '0.78em', lineHeight: 2.05, color: '#45423c', letterSpacing: '0.012em', display: 'block' }}>{renderGlossary(en)}</span>
+          <span style={{ paddingTop: '10px', display: 'block' }}>
+            <span style={{ display: 'block', width: '28px', height: '1px', background: 'rgba(120,110,90,0.3)', marginBottom: '22px' }} />
+            <span style={{ fontSize: '0.485em', lineHeight: 2.15, color: '#a6a094', letterSpacing: '0.04em', display: 'block' }}>{zh}</span>
+          </span>
+        </span>
       )
     }
     return renderGlossary(text)
@@ -2575,6 +2578,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   medium: `${displaySettings.fontSize * 22}px`,
                   wide: '100%',
                 }[displaySettings.columnWidth ?? 'medium'])
+                // 外刊左英右中雙欄：需要更闊的頁面與左對齊
+                const extTwoCol = bookId === EXTERNAL_BOOK_ID && !isEink
+                  && effectiveSentence.includes('\n\n')
+                  && !effectiveSentence.startsWith('📰') && !effectiveSentence.startsWith('💡')
                 return sentences[currentIndex]?.startsWith('data:image/') ? (
                 <img
                   src={sentences[currentIndex]}
@@ -2602,7 +2609,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       fontWeight: isEink ? 700 : undefined,
                       letterSpacing: isEink ? '0.02em' : `${displaySettings.letterSpacing ?? 0.05}em`,
                       lineHeight: isEink ? 1.5 : (displaySettings.lineHeight ?? 1.8),
-                      maxWidth: colMaxWidth,
+                      maxWidth: extTwoCol ? 'min(1080px, 92vw)' : colMaxWidth,
+                      textAlign: extTwoCol ? 'left' : undefined,
                       // fade 模式沿用 opacity transition；rise 模式由 CSS animation 接管，opacity 常態 1
                       opacity: isEink ? 1 : (animStyle === 'rise' ? 1 : (fadeVisible ? 1 : 0)),
                       transition: isEink ? 'none' : (animStyle === 'rise' ? 'none' : (fadeVisible ? 'opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1)' : 'opacity 0.12s ease-out')),
@@ -3087,7 +3095,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 外刊詞解卡（選中有解釋的字時，向外延伸）*/}
       {glossaryCard && (
-        <GlossaryCard word={glossaryCard.word} note={glossaryCard.note} anchor={glossaryCard.anchor} onClose={() => setGlossaryCard(null)} />
+        <GlossaryCard word={glossaryCard.word} note={glossaryCard.note} onClose={() => setGlossaryCard(null)} />
       )}
 
       {/* 人物關係圖（閱讀時可開啟）*/}
