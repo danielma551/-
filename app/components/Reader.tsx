@@ -2522,26 +2522,22 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               </div>
             )}
 
-            {/* 桌面導航按鈕 */}
-            <div className="mt-8 hidden md:flex items-center justify-between">
-              <button
-                onClick={goToNext}
-                disabled={currentIndex === sentences.length - 1}
-                className="flex items-center space-x-2 px-6 py-3 rounded-lg shadow hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                style={{ background: paperTheme.accentColor, color: '#fff' }}
-              >
-                <span>下一句</span>
-                <ChevronRight className="w-5 h-5" />
-              </button>
-              <button
-                onClick={goToPrevious}
-                disabled={currentIndex === 0}
-                className="flex items-center space-x-2 px-6 py-3 rounded-lg shadow hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                style={{ background: paperTheme.cardBg, border: `1px solid ${paperTheme.border}`, color: paperTheme.text }}
-              >
-                <ChevronLeft className="w-5 h-5" />
-                <span>上一句</span>
-              </button>
+            {/* 左右半屏翻句：常駐掣移除，改 hover 顯示淡 chevron（點擊翻頁 + 鍵盤沿用）*/}
+            <div
+              className="group hidden md:block"
+              style={{ position: 'fixed', left: 0, top: 120, bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); goToPrevious() }}
+              title="上一句"
+            >
+              <ChevronLeft className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', left: 36, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, color: '#d3c9ae' }} />
+            </div>
+            <div
+              className="group hidden md:block"
+              style={{ position: 'fixed', right: 0, top: 120, bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); goToNext() }}
+              title="下一句"
+            >
+              <ChevronRight className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, color: '#d3c9ae' }} />
             </div>
 
             {/* 手機觸摸提示 */}
