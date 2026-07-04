@@ -1468,7 +1468,21 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         style={{ position: 'fixed', top: 0, left: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}
       />
 
-      <header ref={headerRef} className="bg-white" style={isEink ? { borderBottom: '2px solid #000', boxShadow: 'none' } : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}>
+      {isPaper && (
+        <style>{`
+          .paper-cap { opacity: 0; transform: translateX(-50%) translateY(-6px) !important; pointer-events: none; transition: opacity .25s ease, transform .25s ease; }
+          .paper-hdr:hover .paper-cap { opacity: 1; transform: translateX(-50%) translateY(0) !important; pointer-events: auto; }
+        `}</style>
+      )}
+      <header
+        ref={headerRef}
+        className={isPaper ? 'paper-hdr relative' : 'bg-white'}
+        style={isEink
+          ? { borderBottom: '2px solid #000', boxShadow: 'none' }
+          : isPaper
+            ? { background: 'transparent', boxShadow: 'none', paddingBottom: 96 }
+            : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}
+      >
         {isEink ? (
           /* ── 墨水屏極簡 Header：只剩書名、句數、⋯設定、🏠 ── */
           <div className="px-3 py-1.5 flex items-center justify-between">
@@ -1513,8 +1527,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
           </div>
         ) : (
-          /* ── 正常模式 Header ── */
-          <div className="max-w-7xl mx-auto px-3 py-2 sm:py-4 flex items-center gap-2">
+          /* ── 正常模式 Header（紙本模式：改為 hover 頂部喚出的浮動膠囊）── */
+          <div
+            className={`flex items-center gap-2 ${isPaper ? 'paper-cap' : 'max-w-7xl mx-auto px-3 py-2 sm:py-4'}`}
+            style={isPaper ? {
+              position: 'absolute', top: 70, left: '50%', transform: 'translateX(-50%)',
+              width: 'max-content', maxWidth: '92vw',
+              background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
+              padding: '8px 14px', zIndex: 45, overflowX: 'auto',
+            } : undefined}
+          >
             {/* 返回首頁：永遠顯示在最左邊，手機上只顯示圖示 */}
             <button
               onClick={onReset}
