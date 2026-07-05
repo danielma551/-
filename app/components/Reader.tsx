@@ -1470,8 +1470,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {isPaper && (
         <style>{`
-          .paper-cap { opacity: 0; transform: translateY(-6px); pointer-events: none; transition: opacity .25s ease, transform .25s ease; }
-          .paper-hdr:hover .paper-cap { opacity: 1; transform: translateY(0); pointer-events: auto; }
+          .paper-cap { opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+          .paper-hdr:hover .paper-cap { opacity: 1; pointer-events: auto; }
           .paper-foot:hover .paper-foot-cap { opacity: 1 !important; transform: translateX(-50%) translateY(0) !important; pointer-events: auto !important; }
         `}</style>
       )}
@@ -1533,7 +1533,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             className={`flex items-center gap-2 ${isPaper ? 'paper-cap' : 'max-w-7xl mx-auto px-3 py-2 sm:py-4'}`}
             style={isPaper ? {
               position: 'relative', margin: '8px auto 0', width: 'max-content', maxWidth: '92vw',
-              background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              background: 'rgba(255,255,255,0.96)',
               border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
               padding: '8px 14px', zIndex: 45, flexWrap: 'nowrap',
             } : undefined}
