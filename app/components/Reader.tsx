@@ -2146,8 +2146,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       )}
 
-      {/* 🌿 Flomo 浮動按鈕組（右下角；紙本模式隱藏，改用頂部工具列膠囊裡的 Flomo）*/}
-      <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2" style={isPaper ? { display: 'none' } : undefined}>
+      {/* 🌿 Flomo 浮動按鈕組（右下角，拇指易按，各模式都保留） */}
+      <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end gap-2">
 
         {/* 上下文選擇器（點 🌿 且暫存為空時出現） */}
         {showFlomoNPicker && flomoBuffer.length === 0 && (
