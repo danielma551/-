@@ -1536,7 +1536,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               width: 'max-content', maxWidth: '92vw',
               background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
               border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
-              padding: '8px 14px', zIndex: 45, overflowX: 'auto',
+              padding: '8px 14px', zIndex: 45, flexWrap: 'nowrap',
             } : undefined}
           >
             {/* 返回首頁：永遠顯示在最左邊，手機上只顯示圖示 */}
