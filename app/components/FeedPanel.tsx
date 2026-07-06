@@ -184,10 +184,10 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     setShowAddForm(false)
   }
 
-  // 一鍵訂閱「紐約時報外刊」（NYT 中文網 business RSS；URL 可日後在該訂閱下編輯）
+  // 一鍵訂閱「紐約時報外刊」（RSSHub 紐約時報中文網「雙語 business」；URL 可日後在該訂閱下編輯）
   const handleQuickAddNYT = () => {
     if (feeds.some(f => f.name === '紐約時報外刊')) { setShowAddForm(false); return }
-    const feed: FeedSource = { id: Date.now().toString(), name: '紐約時報外刊', url: 'https://cn.nytimes.com/rss/business.xml' }
+    const feed: FeedSource = { id: Date.now().toString(), name: '紐約時報外刊', url: 'https://rsshub.app/nytimes/dual/business' }
     feedStorage.addFeed(feed)
     setFeeds(prev => [...prev, feed])
     fetchFeed(feed)
