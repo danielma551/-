@@ -709,7 +709,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (isEink) return   // 墨水屏用長按，不用 selection
     const sel = window.getSelection()
     const text = sel?.toString().trim() ?? ''
-    if (!text || text.length > 8) return   // 超過 8 字通常是意外選中，忽略
+    // 中文超過 8 字通常是意外選中；英文（詞／詞組）放寬到 30 字元
+    const isEnglishSel = /^[A-Za-z][A-Za-z'’\- ]*$/.test(text)
+    if (!text || text.length > (isEnglishSel ? 30 : 8)) return
     // 外刊：若選中的字有預生成的詞解，向外延伸一張解釋卡（不開字典彈窗）
     if (bookId === EXTERNAL_BOOK_ID) {
       const note = lookupGlossary(text)
