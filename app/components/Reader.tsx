@@ -2729,7 +2729,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         const pct = Math.round(li.progress * 100)
         const ch = dailyChallenge
         return (
-          <div className="paper-foot hidden md:block" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, height: 110, zIndex: 40 }}>
+          <div className="paper-foot hidden md:block" style={{ position: 'fixed', left: 140, right: 140, bottom: 0, height: 110, zIndex: 40 }}>
             <div className="paper-foot-cap" style={{
               position: 'absolute', bottom: 22, left: '50%', transform: 'translateX(-50%) translateY(6px)',
               opacity: 0, pointerEvents: 'none', transition: 'opacity .25s ease, transform .25s ease',
