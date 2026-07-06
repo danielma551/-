@@ -184,6 +184,16 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
     setShowAddForm(false)
   }
 
+  // 一鍵訂閱「紐約時報外刊」（NYT 中文網 business RSS；URL 可日後在該訂閱下編輯）
+  const handleQuickAddNYT = () => {
+    if (feeds.some(f => f.name === '紐約時報外刊')) { setShowAddForm(false); return }
+    const feed: FeedSource = { id: Date.now().toString(), name: '紐約時報外刊', url: 'https://cn.nytimes.com/rss/business.xml' }
+    feedStorage.addFeed(feed)
+    setFeeds(prev => [...prev, feed])
+    fetchFeed(feed)
+    setShowAddForm(false)
+  }
+
   // 更新某個訂閱的 URL
   const handleUpdateUrl = (id: string) => {
     const trimmed = editingUrl.trim()
@@ -305,6 +315,14 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
       {/* 新增表單 */}
       {showAddForm && (
         <div className="mb-4 p-4 bg-blue-50 rounded-xl space-y-2">
+          {/* 一鍵訂閱推薦專欄 */}
+          <div className="flex items-center gap-2 pb-1">
+            <span className="text-xs text-blue-400">快速訂閱：</span>
+            <button
+              onClick={handleQuickAddNYT}
+              className="text-xs font-medium px-2.5 py-1 rounded-full bg-white border border-blue-200 text-blue-600 hover:bg-blue-100"
+            >📰 紐約時報外刊</button>
+          </div>
           <input
             type="text"
             placeholder="名稱（例如：36氪）"
