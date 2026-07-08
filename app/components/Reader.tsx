@@ -28,7 +28,6 @@ import ImagePopup from './ImagePopup'
 import CharacterGraph from './CharacterGraph'
 import BreathingOverlay from './BreathingOverlay'
 import GlossaryCard from './GlossaryCard'
-import GenerativeArt from './GenerativeArt'
 import { EXTERNAL_BOOK_ID, lookupGlossary, getGlossary } from '../utils/externalReading'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
@@ -2469,10 +2468,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           /* ── Paper 紙本沉浸模式 ── */
           <div style={{ position: 'relative', maxWidth: 'min(900px, 80vw)', width: '100%', margin: '0 auto' }}>
 
-            {/* 章節題圖：以書名＋循環為種子的生成藝術 */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10, opacity: 0.85 }}>
-              <GenerativeArt seed={`${bookTitle}-${currentCycleIdx}`} />
-            </div>
             {/* 章節標題 */}
             <div style={{ textAlign: 'center', marginBottom: 22, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
               第一章 · {bookTitle}
