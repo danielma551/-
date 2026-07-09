@@ -91,6 +91,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         }
         newMap[book.id] = { hash, url }
         bookRefs.push({ id: book.id, url, gz: useGzip })
+        saveBookMap(newMap)   // 每本存一次：中途失敗都保住進度，下次唔使重傳
       }
 
       // ── 清單（指向各書 blob）＋ 字體/閱讀記錄/温習卡（體積細，每次都傳）──
