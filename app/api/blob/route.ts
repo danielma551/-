@@ -30,6 +30,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       onBeforeGenerateToken: async () => ({
         allowedContentTypes: ['application/json', 'application/gzip', 'application/octet-stream'],
         maximumSizeInBytes: 500 * 1024 * 1024,
+        allowOverwrite: true,   // 檔名用內容 hash，重複上傳同名內容一致，允許覆蓋避免「already exists」
       }),
       onUploadCompleted: async () => {},
     })
