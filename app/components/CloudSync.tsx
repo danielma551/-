@@ -19,6 +19,19 @@ const LAST_BLOB_URL_KEY = 'msw_last_blob_url'  // 記住上次的 blob URL，供
 
 // 只同步書籍、字體、閱讀記錄
 // 快捷鍵、字體大小、顯示設定等「裝置偏好」不參與同步，每台設備各自保存
+// gzip 壓縮／解壓（用瀏覽器內建 CompressionStream，大幅減少上傳體積 → 上傳更快）
+function canGzip(): boolean {
+  return typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined'
+}
+async function gzipString(str: string): Promise<Blob> {
+  const stream = new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))
+  return await new Response(stream).blob()
+}
+async function gunzipToString(buf: ArrayBuffer): Promise<string> {
+  const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return await new Response(stream).text()
+}
+
 function makeFingerprint(data: { books: BookData[]; font: unknown; readingHistory?: unknown }): string {
   return JSON.stringify({
     books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate, hasCover: !!b.coverImage })),
@@ -62,11 +75,17 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       // 記住舊 blob URL，等新版上傳成功後刪除
       const oldBlobUrl = localStorage.getItem(LAST_BLOB_URL_KEY)
 
+      // 上傳前 gzip 壓縮（減少體積，加快上傳）；不支援則退回未壓縮
+      const jsonStr = JSON.stringify(data)
+      const useGzip = canGzip()
+      const body: Blob | string = useGzip ? await gzipString(jsonStr) : jsonStr
+      const fileName = useGzip ? `sync-${Date.now()}.json.gz` : `sync-${Date.now()}.json`
+
       // Upload directly to Vercel Blob (bypasses Vercel 4.5MB function body limit)
-      const blob = await upload(`sync-${Date.now()}.json`, JSON.stringify(data), {
+      const blob = await upload(fileName, body, {
         access: 'public',
         handleUploadUrl: '/api/blob',
-        contentType: 'application/json',
+        contentType: useGzip ? 'application/gzip' : 'application/json',
       })
 
       // Store blob URL in Redis and get 4-digit code
@@ -107,10 +126,13 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || '下載失敗')
 
-      // Fetch actual data directly from Vercel Blob
+      // Fetch actual data directly from Vercel Blob（.gz → 解壓；舊版未壓縮則直接 parse）
       const dataRes = await fetch(json.blobUrl)
       if (!dataRes.ok) throw new Error('讀取數據失敗')
-      const data = await dataRes.json()
+      const isGz = typeof json.blobUrl === 'string' && json.blobUrl.includes('.json.gz')
+      const data = isGz
+        ? JSON.parse(await gunzipToString(await dataRes.arrayBuffer()))
+        : await dataRes.json()
 
       const fp = makeFingerprint(data)
       if (fp === localStorage.getItem(DOWNLOAD_FP_KEY)) {
