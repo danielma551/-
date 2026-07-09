@@ -32,12 +32,21 @@ async function gunzipToString(buf: ArrayBuffer): Promise<string> {
   return await new Response(stream).text()
 }
 
-function makeFingerprint(data: { books: BookData[]; font: unknown; readingHistory?: unknown }): string {
-  return JSON.stringify({
-    books: data.books.map(b => ({ id: b.id, currentIndex: b.currentIndex, count: b.sentences.length, lastRead: b.lastReadDate, hasCover: !!b.coverImage })),
-    font: data.font,
-    readingHistory: data.readingHistory
-  })
+// 快速內容雜湊（FNV-1a）：判斷書本／清單有冇改動
+function fastHash(s: string): string {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return (h >>> 0).toString(36)
+}
+
+// 逐書上傳記錄：{ bookId: { hash, url } }，用嚟判斷邊本書要重新上傳、邊本重用舊 URL
+const BOOK_MAP_KEY = 'msw_sync_book_map'
+function getBookMap(): Record<string, { hash: string; url: string }> {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(BOOK_MAP_KEY) || '{}') } catch { return {} }
+}
+function saveBookMap(m: Record<string, { hash: string; url: string }>) {
+  try { localStorage.setItem(BOOK_MAP_KEY, JSON.stringify(m)) } catch { /* 配額滿略過 */ }
 }
 
 interface CloudSyncProps {
@@ -57,58 +66,78 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
     setMessage('')
     try {
       const allBooks = await getAllBooksFromIDB()
-      const data = {
-        books: allBooks,
-        font: fontStorage.getFont(),
-        // 快捷鍵、顯示設定（字體大小、背景色等）不上傳，屬於裝置本地偏好
-        readingHistory: historyStorage.getHistory(),
-        reviewNotes: reviewStorage.getAll()   // 每日温習卡片（跨裝置同步）
+      const useGzip = canGzip()
+
+      // ── 逐本書：只上傳有改動嘅，冇變重用上次 URL ──
+      const prevMap = getBookMap()
+      const newMap: Record<string, { hash: string; url: string }> = {}
+      const bookRefs: { id: string; url: string; gz: boolean }[] = []
+      let uploaded = 0
+      for (const book of allBooks) {
+        const str = JSON.stringify(book)
+        const hash = fastHash(str) + '_' + str.length
+        const prev = prevMap[book.id]
+        let url: string
+        if (prev && prev.hash === hash && prev.url) {
+          url = prev.url   // 內容未變 → 重用，跳過上傳
+        } else {
+          uploaded++
+          setMessage(`上傳有改動的書籍中…（第 ${uploaded} 本）`)
+          const bBody: Blob | string = useGzip ? await gzipString(str) : str
+          const bBlob = await upload(`book-${book.id}-${hash}.json${useGzip ? '.gz' : ''}`, bBody, {
+            access: 'public', handleUploadUrl: '/api/blob', contentType: useGzip ? 'application/gzip' : 'application/json',
+          })
+          url = bBlob.url
+        }
+        newMap[book.id] = { hash, url }
+        bookRefs.push({ id: book.id, url, gz: useGzip })
       }
 
-      const fp = makeFingerprint(data)
+      // ── 清單（指向各書 blob）＋ 字體/閱讀記錄/温習卡（體積細，每次都傳）──
+      const manifest = {
+        v: 2,
+        bookRefs,
+        font: fontStorage.getFont(),
+        readingHistory: historyStorage.getHistory(),
+        reviewNotes: reviewStorage.getAll(),
+      }
+      const manifestStr = JSON.stringify(manifest)
+      const fp = fastHash(manifestStr)
       if (fp === localStorage.getItem(UPLOAD_FP_KEY)) {
+        saveBookMap(newMap)
         setStatus('success')
         setMessage('數據與上次上傳完全一致，無需重新上傳')
         return
       }
 
-      // 記住舊 blob URL，等新版上傳成功後刪除
       const oldBlobUrl = localStorage.getItem(LAST_BLOB_URL_KEY)
-
-      // 上傳前 gzip 壓縮（減少體積，加快上傳）；不支援則退回未壓縮
-      const jsonStr = JSON.stringify(data)
-      const useGzip = canGzip()
-      const body: Blob | string = useGzip ? await gzipString(jsonStr) : jsonStr
-      const fileName = useGzip ? `sync-${Date.now()}.json.gz` : `sync-${Date.now()}.json`
-
-      // Upload directly to Vercel Blob (bypasses Vercel 4.5MB function body limit)
-      const blob = await upload(fileName, body, {
-        access: 'public',
-        handleUploadUrl: '/api/blob',
-        contentType: useGzip ? 'application/gzip' : 'application/json',
+      const mBody: Blob | string = useGzip ? await gzipString(manifestStr) : manifestStr
+      const mBlob = await upload(`sync-${Date.now()}.json${useGzip ? '.gz' : ''}`, mBody, {
+        access: 'public', handleUploadUrl: '/api/blob', contentType: useGzip ? 'application/gzip' : 'application/json',
       })
 
-      // Store blob URL in Redis and get 4-digit code
+      // Store manifest URL in Redis and get 4-digit code
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blobUrl: blob.url })
+        body: JSON.stringify({ blobUrl: mBlob.url })
       })
       const json = await res.json()
       if (!res.ok || !json.code) throw new Error(json.error || '上傳失敗')
       setSyncCode(json.code)
+      saveBookMap(newMap)
       localStorage.setItem(UPLOAD_FP_KEY, fp)
-      localStorage.setItem(LAST_BLOB_URL_KEY, blob.url)  // 記住本次 blob URL
+      localStorage.setItem(LAST_BLOB_URL_KEY, mBlob.url)
       setStatus('success')
-      setMessage('上傳成功！請記下同步碼，在其他設備輸入')
+      setMessage(uploaded > 0 ? `上傳成功！本次只更新 ${uploaded} 本書，請記下同步碼` : '上傳成功！請記下同步碼')
 
-      // 刪除上一次的舊 blob（不阻塞主流程，失敗也沒關係）
+      // 刪除上一次的舊「清單」blob（各書 blob 保留供重用）
       if (oldBlobUrl) {
         fetch('/api/blob', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: oldBlobUrl })
-        }).catch(() => {})  // 靜默失敗
+        }).catch(() => {})
       }
     } catch (e: unknown) {
       setStatus('error')
@@ -134,15 +163,29 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         ? JSON.parse(await gunzipToString(await dataRes.arrayBuffer()))
         : await dataRes.json()
 
-      const fp = makeFingerprint(data)
+      const fp = fastHash(JSON.stringify(data))
       if (fp === localStorage.getItem(DOWNLOAD_FP_KEY)) {
         setStatus('success')
         setMessage('數據與上次同步完全一致，無需更新')
         return
       }
 
-      if (data.books) {
+      let bookCount = 0
+      if (Array.isArray(data.bookRefs)) {
+        // 新版（v2）：逐本書 blob 下載（未變的瀏覽器會用快取）
+        for (const ref of data.bookRefs) {
+          bookCount++
+          setMessage(`下載書籍中…（${bookCount}/${data.bookRefs.length}）`)
+          const br = await fetch(ref.url)
+          if (!br.ok) continue
+          const refGz = ref.gz || (typeof ref.url === 'string' && ref.url.includes('.json.gz'))
+          const bookStr = refGz ? await gunzipToString(await br.arrayBuffer()) : await br.text()
+          await saveBookToIDB(JSON.parse(bookStr))
+        }
+      } else if (Array.isArray(data.books)) {
+        // 舊版快照：向後相容
         for (const book of data.books) await saveBookToIDB(book)
+        bookCount = data.books.length
       }
       if (data.font) {
         fontStorage.saveFont(data.font.fontFamily)
@@ -165,7 +208,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')
-      setMessage(`同步成功！共 ${data.books?.length ?? 0} 本書`)
+      setMessage(`同步成功！共 ${bookCount} 本書`)
       setTimeout(() => { onSyncComplete?.(); setIsOpen(false) }, 1500)
     } catch (e: unknown) {
       setStatus('error')
