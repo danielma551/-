@@ -1368,12 +1368,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── E-ink 墨水屏模式 ──
   const isEink = einkMode
+  // 墨水屏模式配色（Ink Mode 設計稿）：暖灰底 + 柔黑，貼近真實 e-ink 顯示
   const einkTheme = {
-    bg: '#ffffff',
-    text: '#000000',
-    muted: '#555555',
-    cardBorder: '#000000',
-    barColor: '#000000',
+    bg: '#eeece9',
+    text: '#111827',
+    muted: '#6b7280',
+    cardBorder: '#1f2937',
+    barColor: '#1f2937',
+    barTrack: '#dcdad2',
   }
   const toggleEinkMode = () => {
     const next = !einkMode
