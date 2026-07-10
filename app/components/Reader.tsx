@@ -1368,14 +1368,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── E-ink 墨水屏模式 ──
   const isEink = einkMode
-  // 墨水屏模式配色（Ink Mode 設計稿）：暖灰底 + 柔黑，貼近真實 e-ink 顯示
+  // 墨水屏模式配色：純白底 + 純黑（避免暖灰底在真墨水屏造成刷新殘影）
   const einkTheme = {
-    bg: '#eeece9',
-    text: '#111827',
-    muted: '#6b7280',
-    cardBorder: '#1f2937',
-    barColor: '#1f2937',
-    barTrack: '#dcdad2',
+    bg: '#ffffff',
+    text: '#000000',
+    muted: '#555555',
+    cardBorder: '#000000',
+    barColor: '#000000',
+    barTrack: '#e5e5e5',
   }
   const toggleEinkMode = () => {
     const next = !einkMode
@@ -1979,24 +1979,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <span>第 {currentCycleIdx + 1}/{cycleData.count} 循環 · {Math.max(posInCycle, 0)}/{cycleSize} 句</span>
             <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
           </div>
-          <div className="w-full relative" style={{ height: 12 }}>
-            <div className="absolute inset-0 rounded-full" style={{ background: '#e0e0e0' }} />
+          {/* 點狀分段進度（墨水屏：虛線刻度軌 + 純色塊，無漸層無動畫） */}
+          <div className="w-full relative" style={{ height: 8 }}>
             <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${mergedBarWidth}%`, background: '#000', transition: 'none' }}
+              className="absolute inset-0"
+              style={{ borderRadius: 3, background: 'repeating-linear-gradient(90deg, #9ca3af 0 1px, transparent 1px 6px)' }}
             />
-            {/* 25/75 細刻度 */}
-            {[25, 75].map(m => (
-              <div
-                key={m}
-                className="absolute top-0 bottom-0 z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: 1, background: '#888', transform: 'translateX(-50%)' }}
-              />
-            ))}
-            {/* 50% 加粗中點刻度（上半/下半交界） */}
             <div
-              className="absolute z-10 pointer-events-none"
-              style={{ left: '50%', top: -2, bottom: -2, width: 3, background: '#000', transform: 'translateX(-50%)' }}
+              className="absolute inset-y-0 left-0"
+              style={{ width: `${mergedBarWidth}%`, background: '#000', borderRadius: 3, transition: 'none' }}
             />
           </div>
 
