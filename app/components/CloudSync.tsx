@@ -101,6 +101,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         font: fontStorage.getFont(),
         readingHistory: historyStorage.getHistory(),
         reviewNotes: reviewStorage.getAll(),
+        reviewSession: reviewStorage.getSession(),   // 今日温習進度（跨裝置：知道今日已温習）
       }
       const manifestStr = JSON.stringify(manifest)
       const fp = fastHash(manifestStr)
@@ -206,6 +207,16 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       // 合併每日温習卡片（以文字去重，保留複習進度較深者）
       if (data.reviewNotes) {
         reviewStorage.merge(data.reviewNotes)
+      }
+      // 合併今日温習 session：若雲端係今日且進度更深（做得更多），採用之 → 電腦會知「今日已温習」
+      if (data.reviewSession && typeof data.reviewSession === 'object') {
+        const today = new Date().toLocaleDateString('en-CA')
+        if (data.reviewSession.date === today) {
+          const local = reviewStorage.getSession()
+          const remoteDone = data.reviewSession.done ?? 0
+          const localDone = local && local.date === today ? (local.done ?? 0) : -1
+          if (remoteDone >= localDone) reviewStorage.saveSession(data.reviewSession)
+        }
       }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')
