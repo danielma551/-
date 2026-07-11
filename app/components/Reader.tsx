@@ -1411,6 +1411,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       style={{
         backgroundColor: isEink ? einkTheme.bg : isPaper ? paperTheme.bg : displaySettings.backgroundColor,
         paddingRight: (!isEink && showSidebar) ? SIDEBAR_WIDTH : 0,
+        animation: isEink ? undefined : 'reader-in 340ms cubic-bezier(0.23,1,0.32,1) both',
       }}
     >
       {/* 章節目錄抽屜（非墨水屏模式，有 chapters 才顯示）*/}
@@ -2978,7 +2979,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       {einkDict && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
+          style={{ background: 'rgba(0,0,0,0.5)', animation: isEink ? undefined : 'overlay-fade 220ms ease both' }}
           onClick={() => {
             // 吸收 touchend 後嘅合成 click，避免彈窗一開即關
             if (Date.now() - dictOpenedAt.current < 600) return
@@ -3001,6 +3002,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               maxHeight: '65vh',
               overflowY: 'auto',
               boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+              animation: 'sheet-up 300ms cubic-bezier(0.23,1,0.32,1) both',
             }}
             onClick={e => e.stopPropagation()}
           >
