@@ -6,7 +6,7 @@
 // 升級：牌組層次、引號裝飾的文學排版、分段進度、間隔盒徽章、鍵盤快捷鍵。
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
-import { X, Upload, Wand2, ListChecks, Trash2 } from 'lucide-react'
+import { X, Upload, Wand2, ListChecks, Trash2, Search } from 'lucide-react'
 import { reviewStorage, ReviewNote, parseFlomoExport } from '../utils/storage'
 
 interface Props {
@@ -55,8 +55,9 @@ export default function ReviewCards({ onClose }: Props) {
   const [manageMode, setManageMode] = useState(false)
   const [notesList, setNotesList] = useState<ReviewNote[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [manageQuery, setManageQuery] = useState('')
 
-  const openManage = () => { setNotesList(reviewStorage.getAll()); setSelected(new Set()); setManageMode(true) }
+  const openManage = () => { setNotesList(reviewStorage.getAll()); setSelected(new Set()); setManageQuery(''); setManageMode(true) }
   const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const toggleAll = () => setSelected(prev => prev.size === notesList.length ? new Set() : new Set(notesList.map(n => n.id)))
   const deleteSelected = () => {
@@ -230,7 +231,7 @@ export default function ReviewCards({ onClose }: Props) {
             </button>
             <button
               onClick={() => (manageMode ? setManageMode(false) : openManage())}
-              title="批量管理／刪除卡片"
+              title="搜尋卡片／批量管理／刪除"
               className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${manageMode ? 'text-white bg-gray-700 hover:bg-gray-800' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
             >
               <ListChecks className="w-4 h-4" />
@@ -264,13 +265,31 @@ export default function ReviewCards({ onClose }: Props) {
           </div>
         )}
 
-        {/* 批量管理／刪除 */}
-        {manageMode && (
+        {/* 批量管理／搜尋／刪除 */}
+        {manageMode && (() => {
+          const q = manageQuery.trim().toLowerCase()
+          const shown = q
+            ? notesList.filter(n => `${n.text} ${n.source || ''} ${n.meta || ''}`.toLowerCase().includes(q))
+            : notesList
+          return (
           <div className="px-6 py-4">
+            {/* 🔍 搜尋卡片 */}
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+              <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <input
+                value={manageQuery}
+                onChange={e => setManageQuery(e.target.value)}
+                placeholder="搜尋卡片（內容 / 來源 / 標籤）"
+                className="flex-1 bg-transparent text-sm outline-none"
+              />
+              {manageQuery && (
+                <button onClick={() => setManageQuery('')} className="p-0.5 text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+              )}
+            </div>
             <div className="flex items-center justify-between mb-3">
               <button onClick={toggleAll} className="text-sm font-medium text-gray-600 hover:text-gray-800">
                 {selected.size === notesList.length && notesList.length > 0 ? '取消全選' : '全選'}
-                <span className="text-gray-400 ml-1">({selected.size}/{notesList.length})</span>
+                <span className="text-gray-400 ml-1">({selected.size}/{q ? shown.length : notesList.length})</span>
               </button>
               <button
                 onClick={deleteSelected}
@@ -281,8 +300,8 @@ export default function ReviewCards({ onClose }: Props) {
               </button>
             </div>
             <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-100 border-y border-gray-100">
-              {notesList.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">冇筆記</p>}
-              {notesList.map(n => (
+              {shown.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">{q ? '冇符合嘅卡片' : '冇筆記'}</p>}
+              {shown.map(n => (
                 <label key={n.id} className="flex items-start gap-3 py-2.5 px-1 cursor-pointer hover:bg-gray-50">
                   <input
                     type="checkbox"
@@ -290,13 +309,17 @@ export default function ReviewCards({ onClose }: Props) {
                     onChange={() => toggleOne(n.id)}
                     className="mt-1 w-4 h-4 accent-red-500 flex-shrink-0"
                   />
-                  <span className="text-sm text-gray-700 leading-snug line-clamp-2">{n.text}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-gray-700 leading-snug line-clamp-2">{n.text}</span>
+                    {n.source && <span className="block text-[11px] text-gray-400 mt-0.5 truncate">📖 {n.source}</span>}
+                  </span>
                 </label>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-3">勾選要刪除嘅卡，再㩒「刪除選中」。刪除唔可復原。</p>
+            <p className="text-xs text-gray-400 mt-3">搜尋卡片，或勾選後㩒「刪除選中」。刪除唔可復原。</p>
           </div>
-        )}
+          )
+        })()}
 
         {/* 內容 */}
         {!manageMode && (

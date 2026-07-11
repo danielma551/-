@@ -297,6 +297,7 @@ export interface ReviewNote {
   reviewCount: number   // 已温習次數
   device?: string       // 建立這張卡的設備（例如 iPhone / Mac / Windows）
   meta?: string         // 附加資訊（來源／章節／時間／標籤，匯入時保留）
+  lastReviewed?: number // 最後一次温習時間（用於「今日已温習不再出現」）
 }
 
 // 由 UA 粗略判斷設備類型（建立卡片時記錄，跨裝置同步後可看到來源）
@@ -399,6 +400,7 @@ export const reviewStorage = {
     n.box = Math.min(BOX_DAYS.length - 1, n.box + 1)
     n.due = Date.now() + BOX_DAYS[n.box] * DAY_MS
     n.reviewCount++
+    n.lastReviewed = Date.now()
     this.saveAll(list)
   },
   // 標記「要再温」：歸零，今天再出現
@@ -409,6 +411,7 @@ export const reviewStorage = {
     n.box = 0
     n.due = Date.now()
     n.reviewCount++
+    n.lastReviewed = Date.now()
     this.saveAll(list)
   },
   // 今天到期（含逾期）的卡片，依到期時間排序
@@ -458,7 +461,10 @@ export const reviewStorage = {
   },
   // 每日温習抽卡：先取今天到期，不足則按最近到期補足，最後「隨機打亂」，固定取 limit 張
   pickDaily(limit = 24): ReviewNote[] {
-    const all = this.getAll()
+    const today = todayLocal()
+    // 排除「今日已温習」的卡：暫時不再出現，明天到期才回來
+    const reviewedToday = (n: ReviewNote) => !!n.lastReviewed && new Date(n.lastReviewed).toLocaleDateString('en-CA') === today
+    const all = this.getAll().filter(n => !reviewedToday(n))
     const end = new Date(); end.setHours(23, 59, 59, 999)
     const due = all.filter(n => n.due <= end.getTime())
     const rest = all.filter(n => n.due > end.getTime()).sort((a, b) => a.due - b.due)
