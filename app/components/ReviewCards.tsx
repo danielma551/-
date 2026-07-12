@@ -231,7 +231,15 @@ export default function ReviewCards({ onClose }: Props) {
             </button>
             <button
               onClick={() => (manageMode ? setManageMode(false) : openManage())}
-              title="搜尋卡片／批量管理／刪除"
+              title="搜尋卡片"
+              className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${manageMode ? 'text-white bg-gray-700 hover:bg-gray-800' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
+            >
+              <Search className="w-4 h-4" />
+              <span className="hidden sm:inline">{manageMode ? '完成' : '搜尋'}</span>
+            </button>
+            <button
+              onClick={() => (manageMode ? setManageMode(false) : openManage())}
+              title="批量管理／刪除卡片"
               className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${manageMode ? 'text-white bg-gray-700 hover:bg-gray-800' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
             >
               <ListChecks className="w-4 h-4" />

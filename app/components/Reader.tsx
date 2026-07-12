@@ -845,12 +845,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }
 
-  const LONG_PRESS_MS = 650
+  const LONG_PRESS_MS = 650   // 較長門檻：需刻意按住先觸發查詞，避免快速輕觸翻頁被誤判
   const startLongPress = (x: number, y: number) => {
     if (!einkMode) return
-    // 左右翻頁區（側邊約各 28%）唔啟動長按查詞 → 觸側邊只翻頁，唔會誤彈詞典/AI
-    const w = typeof window !== 'undefined' ? window.innerWidth : 0
-    if (w && (x < w * 0.28 || x > w * 0.72)) return
     longPressStart.current = { x, y }
     if (longPressTimer.current) clearTimeout(longPressTimer.current)
     longPressTimer.current = setTimeout(() => einkDictLookup(x, y), LONG_PRESS_MS)

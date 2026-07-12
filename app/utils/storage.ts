@@ -462,19 +462,18 @@ export const reviewStorage = {
   // 每日温習抽卡：先取今天到期，不足則按最近到期補足，最後「隨機打亂」，固定取 limit 張
   pickDaily(limit = 24): ReviewNote[] {
     const today = todayLocal()
-    // 排除「今日已温習」的卡：暫時不再出現，明天到期才回來
+    // 排除「今日已温習」的卡（今日暫不再出現）
     const reviewedToday = (n: ReviewNote) => !!n.lastReviewed && new Date(n.lastReviewed).toLocaleDateString('en-CA') === today
-    const all = this.getAll().filter(n => !reviewedToday(n))
-    const end = new Date(); end.setHours(23, 59, 59, 999)
-    const due = all.filter(n => n.due <= end.getTime())
-    const rest = all.filter(n => n.due > end.getTime()).sort((a, b) => a.due - b.due)
-    const sel = due.concat(rest.slice(0, Math.max(0, limit - due.length)))
-    // Fisher–Yates 隨機打亂
+    const pool = this.getAll().filter(n => !reviewedToday(n))
+    // 循環模式：最久未温習（含從未温習）優先 → 温習過的卡要等所有卡都看過一次先再出現
+    pool.sort((a, b) => (a.lastReviewed ?? 0) - (b.lastReviewed ?? 0))
+    const sel = pool.slice(0, limit)
+    // 選出的一批內部隨機打亂順序（呈現次序隨機，但「選誰」仍照循環）
     for (let i = sel.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[sel[i], sel[j]] = [sel[j], sel[i]]
     }
-    return sel.slice(0, limit)
+    return sel
   },
   stats(): { total: number; due: number } {
     return { total: this.getAll().length, due: this.dueToday().length }
