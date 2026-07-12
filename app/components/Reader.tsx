@@ -599,7 +599,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [charRel, setCharRel] = useState<{ status: 'idle' | 'loading' | 'ok' | 'error'; text?: string }>({ status: 'idle' })
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)        // 長按已觸發：抑制隨後嘅 click 翻頁
-  const longPressStart = useRef<{ x: number; y: number } | null>(null)
+  const longPressStart = useRef<{ x: number; y: number; t: number; moved: boolean } | null>(null)
   const dictOpenedAt = useRef(0)              // 開啟時間：吸收 touchend 後嘅合成 click
 
   // 清理計時器（unmount 時）
@@ -845,32 +845,41 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }
 
-  const LONG_PRESS_MS = 650   // 較長門檻：需刻意按住先觸發查詞，避免快速輕觸翻頁被誤判
-  const startLongPress = (x: number, y: number) => {
+  // ── 墨水屏：輕觸 = 翻頁、長按 = AI 查詞 ──
+  // 關鍵：喺「放手嗰刻」先按實際按住時長判斷，唔用計時器喺按住途中觸發，
+  // 咁墨水屏事件延遲都唔會令快速輕觸被誤判成長按。
+  const LONG_PRESS_MS = 480   // 按住 ≥ 480ms 且冇移動 → 長按查詞；短於此 = 輕觸翻頁
+  const beginPress = (x: number, y: number) => {
     if (!einkMode) return
-    longPressStart.current = { x, y }
-    if (longPressTimer.current) clearTimeout(longPressTimer.current)
-    longPressTimer.current = setTimeout(() => einkDictLookup(x, y), LONG_PRESS_MS)
+    longPressStart.current = { x, y, t: Date.now(), moved: false }
   }
-  const cancelLongPress = () => {
-    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
-  }
-  const moveLongPress = (x: number, y: number) => {
-    // 手指移動超過 10px = 想滑動/選字，取消長按
+  const movePress = (x: number, y: number) => {
     const s = longPressStart.current
-    if (s && (Math.abs(x - s.x) > 10 || Math.abs(y - s.y) > 10)) cancelLongPress()
+    if (s && (Math.abs(x - s.x) > 10 || Math.abs(y - s.y) > 10)) s.moved = true  // 移動 = 想滑動/選字，取消長按
+  }
+  const endPress = (x: number, y: number) => {
+    const s = longPressStart.current
+    longPressStart.current = null
+    if (!einkMode || !s || s.moved) return
+    if (Date.now() - s.t >= LONG_PRESS_MS) {
+      // 長按 → 查詞 + AI；標記已觸發，抑制隨後嘅 click 翻頁
+      longPressFired.current = true
+      setTimeout(() => { longPressFired.current = false }, 700)
+      einkDictLookup(x, y)
+    }
+    // 否則：輕觸 → 唔做嘢，交俾 handleMainTap 翻頁
   }
 
   // 掛喺句子 <p> 上嘅事件（只在墨水屏模式生效）
   const einkPressHandlers = einkMode ? {
-    onTouchStart: (e: React.TouchEvent) => startLongPress(e.touches[0].clientX, e.touches[0].clientY),
-    onTouchMove: (e: React.TouchEvent) => moveLongPress(e.touches[0].clientX, e.touches[0].clientY),
-    onTouchEnd: cancelLongPress,
-    onTouchCancel: cancelLongPress,
-    onMouseDown: (e: React.MouseEvent) => startLongPress(e.clientX, e.clientY),
-    onMouseMove: (e: React.MouseEvent) => { if (e.buttons === 1) moveLongPress(e.clientX, e.clientY) },
-    onMouseUp: cancelLongPress,
-    onMouseLeave: cancelLongPress,
+    onTouchStart: (e: React.TouchEvent) => beginPress(e.touches[0].clientX, e.touches[0].clientY),
+    onTouchMove: (e: React.TouchEvent) => movePress(e.touches[0].clientX, e.touches[0].clientY),
+    onTouchEnd: (e: React.TouchEvent) => { const t = e.changedTouches[0]; if (t) endPress(t.clientX, t.clientY) },
+    onTouchCancel: () => { longPressStart.current = null },
+    onMouseDown: (e: React.MouseEvent) => beginPress(e.clientX, e.clientY),
+    onMouseMove: (e: React.MouseEvent) => { if (e.buttons === 1) movePress(e.clientX, e.clientY) },
+    onMouseUp: (e: React.MouseEvent) => endPress(e.clientX, e.clientY),
+    onMouseLeave: () => { longPressStart.current = null },
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),   // 阻止長按彈出系統選單
   } : {}
 
