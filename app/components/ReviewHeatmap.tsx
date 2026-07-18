@@ -34,7 +34,19 @@ export default function ReviewHeatmap({ onStart, onManage, refreshKey }: Props) 
   const [tooltip, setTooltip] = useState<{ date: string; count: number; x: number; y: number } | null>(null)
 
   useEffect(() => {
-    const heat = reviewStorage.getHeat()
+    // 熱圖數據 = 記錄值 與 由 lastReviewed 推算值 取較大者
+    // （推算值補返「熱圖功能上線前」嘅温習記錄，以及跨裝置同步返嚟嘅卡）
+    const heat: Record<string, number> = { ...reviewStorage.getHeat() }
+    const derived: Record<string, number> = {}
+    for (const n of reviewStorage.getAll()) {
+      if (n.lastReviewed) {
+        const d = new Date(n.lastReviewed).toLocaleDateString('en-CA')
+        derived[d] = (derived[d] || 0) + 1
+      }
+    }
+    for (const [d, c] of Object.entries(derived)) {
+      if (c > (heat[d] || 0)) heat[d] = c
+    }
     const list: { date: string; count: number }[] = []
     const d = new Date()
     d.setDate(d.getDate() - 363)
