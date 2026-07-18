@@ -21,16 +21,27 @@ export interface ReviewPage {
   sc?: number       // 呢張筆記共幾多句
 }
 
-// 把筆記內容拆成句子（按 。！？；… ! ? 同換行斷開，標點保留喺句末）
+// 把筆記內容拆成句子——同平時閱讀一樣嘅斷句規則（epubParser）：
+// 按 。！？；，：（及英文 .!?;,:）斷開，標點保留喺句末
 function splitSentences(text: string): string[] {
-  const SEP = '\u0001'
-  const parts = text
-    .replace(/([\u3002\uff01\uff1f\uff1b\u2026])/g, '$1' + SEP)      // 中文句末標點
-    .replace(/([.!?])(\s+|$)/g, '$1' + SEP)                              // 英文句末標點（後接空白或結尾）
-    .split(new RegExp(SEP + '|\\n+'))
-    .map(s => s.trim())
-    .filter(Boolean)
-  return parts.length > 0 ? parts : [text]
+  const out: string[] = []
+  for (const line of text.split(/\n+/)) {
+    const t = line.trim()
+    if (!t) continue
+    const matched = t.match(/[^.!?\u3002\uff01\uff1f;\uff1b,\uff0c:\uff1a]+[.!?\u3002\uff01\uff1f;\uff1b,\uff0c:\uff1a]+/g)
+    if (matched) {
+      out.push(...matched.map(m => m.trim()).filter(Boolean))
+      // 行尾冇標點嘅殘句都要保留
+      const joined = matched.join('')
+      if (joined.length < t.length) {
+        const rest = t.slice(joined.length).trim()
+        if (rest) out.push(rest)
+      }
+    } else {
+      out.push(t)
+    }
+  }
+  return out.length > 0 ? out : [text]
 }
 
 // 一張筆記 → 多頁（每頁一句；最後一句嗰頁先有 ✓ 掣）
@@ -70,7 +81,7 @@ export async function openReviewBook(limit = 24): Promise<{ book: BookData; star
   const today = todayStr()
   const books = await getAllBooksFromIDB()
   let book = books.find(b => b.id === REVIEW_BOOK_ID)
-  const builtStamp = `${today}|v2`   // v2：一頁一句（格式變更時 bump 版本以強制重建）
+  const builtStamp = `${today}|v3`   // v3：斷句規則對齊閱讀（含逗號），bump 版本以強制重建
   const builtDate = typeof window !== 'undefined' ? localStorage.getItem(BOOK_DATE_KEY) : null
 
   if (!book || builtDate !== builtStamp || book.sentences.length === 0) {
