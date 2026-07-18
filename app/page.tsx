@@ -10,7 +10,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, Sparkles } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, Sparkles, ListChecks } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -28,6 +28,7 @@ import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './u
 import CharacterGraph from './components/CharacterGraph'
 import ReviewCards from './components/ReviewCards'
 import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
+import { openReviewBook } from './utils/reviewBook'
 import { Newspaper } from 'lucide-react'
 
 // ── Vision OCR 設定型別 ──
@@ -423,6 +424,17 @@ export default function Home() {
     setReviewDue(reviewStorage.stats().due)   // 同步後更新温習到期數
   }
 
+  // 📖 每日温習書：今日 24 張筆記做成一本書，一頁一張（書名／日期／內容）
+  const handleOpenReviewBook = async () => {
+    try {
+      const { book, startIndex } = await openReviewBook(24)
+      await getAllBooksFromIDB().then(setSavedBooks)
+      handleOpenBookAtSentence(book, startIndex)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '打開每日温習失敗')
+    }
+  }
+
   // 📰 每日外刊：已生成今日份 → 直接打開最新一篇；否則用 DeepSeek 生成再打開
   const handleDailyExternal = async () => {
     if (extStatus === 'loading') return
@@ -643,17 +655,25 @@ export default function Home() {
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-teal-500" title="今日未生成" />
                 )}
               </button>
-              {/* 每日温習按鈕 */}
+              {/* 每日温習：打開「每日温習」書（今日 24 張，一頁一張） */}
               <button
-                onClick={() => setShowReview(true)}
+                onClick={handleOpenReviewBook}
                 className="relative flex items-center space-x-1.5 px-3 py-2 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-sm font-medium transition-colors"
-                title="每日温習（你儲存到 Flomo 的筆記）"
+                title="每日温習（今日 24 張筆記，一頁一張）"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">每日温習</span>
                 {reviewDue > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">{reviewDue}</span>
                 )}
+              </button>
+              {/* 卡片管理（Flomo 匯入／搜尋／批量管理） */}
+              <button
+                onClick={() => setShowReview(true)}
+                className="flex items-center px-2.5 py-2 rounded-full border border-gray-300 text-gray-500 hover:bg-gray-50 text-sm transition-colors"
+                title="温習卡片管理（Flomo 匯入／搜尋／刪除）"
+              >
+                <ListChecks className="w-3.5 h-3.5" />
               </button>
               {/* Vision OCR 設定按鈕 */}
               <button

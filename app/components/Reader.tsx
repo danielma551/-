@@ -29,6 +29,7 @@ import CharacterGraph from './CharacterGraph'
 import BreathingOverlay from './BreathingOverlay'
 import GlossaryCard from './GlossaryCard'
 import { EXTERNAL_BOOK_ID, lookupGlossary, getGlossary } from '../utils/externalReading'
+import { REVIEW_BOOK_ID, REVIEW_NOTE_PREFIX, parseReviewPage, isReviewedToday } from '../utils/reviewBook'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
 // 「空白句」判定：空字串、純空白（含全形/不換行/零寬空格）都當作要跳過的空句；
@@ -1141,9 +1142,72 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     })
   }
 
+  // ── 每日温習書：一頁一張卡（書名／日期／內容 + ✓ 確認掣）──
+  const [reviewTick, setReviewTick] = useState(0)   // ✓ 後強制重繪
+  const reviewNoteMap = useMemo(() => {
+    if (bookId !== REVIEW_BOOK_ID) return new Map<string, import('../utils/storage').ReviewNote>()
+    void reviewTick
+    return new Map(reviewStorage.getAll().map(n => [n.id, n]))
+  }, [bookId, reviewTick])
+
+  const renderReviewCard = (raw: string): React.ReactNode => {
+    const pg = parseReviewPage(raw)
+    if (!pg) return raw
+    const note = reviewNoteMap.get(pg.id)
+    const done = isReviewedToday(note)
+    const muted = isEink ? '#555' : '#a8a29e'
+    return (
+      <span style={{ display: 'block', width: '100%', maxWidth: 640, margin: '0 auto', textAlign: 'left' }}>
+        {/* 書本名稱 + 日期 */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.5em', marginBottom: '1.2em', fontWeight: isEink ? 700 : 600 }}>
+          {pg.source && (
+            <span style={isEink
+              ? { border: '1.5px solid #000', padding: '2px 10px', color: '#000' }
+              : { background: '#f5f0e8', borderRadius: 999, padding: '3px 12px', color: '#78716c' }}>
+              {pg.source}
+            </span>
+          )}
+          <span style={{ color: muted, fontWeight: 500 }}>{pg.date}</span>
+          {done && <span style={{ marginLeft: 'auto', color: isEink ? '#000' : '#0f766e' }}>✓ 已温習</span>}
+        </span>
+        {/* 內容 */}
+        <span style={{ display: 'block', fontSize: '0.85em', lineHeight: 1.9, whiteSpace: 'pre-wrap' }}>{pg.text}</span>
+        {pg.meta && (
+          <span style={{ display: 'block', fontSize: '0.42em', color: muted, marginTop: '1.4em', whiteSpace: 'pre-wrap', fontWeight: 400 }}>{pg.meta}</span>
+        )}
+        {/* ✓ 温習咗（要撳掣確認先計數） */}
+        {!done && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              reviewStorage.markKnown(pg.id)
+              reviewStorage.sessionMarkKnown(pg.id)
+              setReviewTick(t => t + 1)
+            }}
+            onTouchEnd={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            style={isEink ? {
+              display: 'block', marginTop: '1.6em', padding: '10px 26px',
+              border: '2px solid #000', background: '#fff', color: '#000',
+              fontSize: '0.55em', fontWeight: 700, borderRadius: 0,
+            } : {
+              display: 'block', marginTop: '1.6em', padding: '10px 26px',
+              border: 'none', background: '#0f766e', color: '#fff',
+              fontSize: '0.55em', fontWeight: 600, borderRadius: 12,
+              cursor: 'pointer', boxShadow: '0 2px 10px rgba(15,118,110,0.25)',
+            }}
+          >
+            ✓ 温習咗
+          </button>
+        )}
+      </span>
+    )
+  }
+
   // 渲染正文：外刊採「左英右中」雙欄精讀排版；其他書本原樣輸出
   const renderSentenceContent = (): React.ReactNode => {
     const text = effectiveSentence
+    if (bookId === REVIEW_BOOK_ID && text.startsWith(REVIEW_NOTE_PREFIX)) return renderReviewCard(text)
     if (bookId !== EXTERNAL_BOOK_ID) return text
     const sep = text.indexOf('\n\n')
     const isSpecial = text.startsWith('📰') || text.startsWith('💡')
