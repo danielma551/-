@@ -90,11 +90,14 @@ export async function openReviewBook(limit = 24): Promise<{ book: BookData; star
     if (typeof window !== 'undefined') localStorage.setItem(BOOK_DATE_KEY, builtStamp)
   }
 
-  // 跳到第一張今日未温習嘅卡（全部温習晒就由第一頁開始）
+  // 續讀位置：取「離開嗰陣嘅頁數」同「第一張未温卡」較後者
+  // （揭過但未撳 ✓ 嘅卡唔會迫你由頭嚟過；撳咗 ✓ 嘅卡直接跳過）
   const notes = new Map(reviewStorage.getAll().map(n => [n.id, n]))
-  const idx = book.sentences.findIndex(s => {
+  const firstUnreviewed = book.sentences.findIndex(s => {
     const pg = parseReviewPage(s)
     return !!pg && !isReviewedToday(notes.get(pg.id))
   })
-  return { book, startIndex: idx >= 0 ? idx : 0 }
+  const saved = Math.min(Math.max(book.currentIndex || 0, 0), book.sentences.length - 1)
+  const startIndex = Math.max(firstUnreviewed >= 0 ? firstUnreviewed : 0, saved)
+  return { book, startIndex }
 }
