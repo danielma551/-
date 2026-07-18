@@ -13,21 +13,38 @@ const BOOK_DATE_KEY = 'review-book-date'   // 呢本書係邊一日嘅（每日�
 // 一頁卡片嘅內容（序列化存入 sentences）
 export interface ReviewPage {
   id: string        // 對應 ReviewNote.id（撳 ✓ 時標記温習）
-  text: string      // 筆記內容
+  text: string      // 呢一頁顯示嘅一句
   source?: string   // 書本名稱
   date: string      // 建立日期 YYYY-MM-DD
   meta?: string     // 附加資訊（章節／時間／標籤）
+  si?: number       // 第幾句（1 起）
+  sc?: number       // 呢張筆記共幾多句
 }
 
-export function encodeReviewPage(n: ReviewNote): string {
-  const pg: ReviewPage = {
-    id: n.id,
-    text: n.text,
-    source: n.source,
-    date: new Date(n.createdAt).toLocaleDateString('en-CA'),
-    meta: n.meta,
-  }
-  return REVIEW_NOTE_PREFIX + encodeURIComponent(JSON.stringify(pg))
+// 把筆記內容拆成句子（按 。！？；… ! ? 同換行斷開，標點保留喺句末）
+function splitSentences(text: string): string[] {
+  const SEP = '\u0001'
+  const parts = text
+    .replace(/([\u3002\uff01\uff1f\uff1b\u2026])/g, '$1' + SEP)      // 中文句末標點
+    .replace(/([.!?])(\s+|$)/g, '$1' + SEP)                              // 英文句末標點（後接空白或結尾）
+    .split(new RegExp(SEP + '|\\n+'))
+    .map(s => s.trim())
+    .filter(Boolean)
+  return parts.length > 0 ? parts : [text]
+}
+
+// 一張筆記 → 多頁（每頁一句；最後一句嗰頁先有 ✓ 掣）
+export function encodeReviewPages(n: ReviewNote): string[] {
+  const date = new Date(n.createdAt).toLocaleDateString('en-CA')
+  const sens = splitSentences(n.text)
+  return sens.map((s, i) => {
+    const pg: ReviewPage = {
+      id: n.id, text: s, source: n.source, date,
+      meta: i === sens.length - 1 ? n.meta : undefined,   // meta 只喺最後一頁顯示
+      si: i + 1, sc: sens.length,
+    }
+    return REVIEW_NOTE_PREFIX + encodeURIComponent(JSON.stringify(pg))
+  })
 }
 
 export function parseReviewPage(s: string): ReviewPage | null {
@@ -53,15 +70,16 @@ export async function openReviewBook(limit = 24): Promise<{ book: BookData; star
   const today = todayStr()
   const books = await getAllBooksFromIDB()
   let book = books.find(b => b.id === REVIEW_BOOK_ID)
+  const builtStamp = `${today}|v2`   // v2：一頁一句（格式變更時 bump 版本以強制重建）
   const builtDate = typeof window !== 'undefined' ? localStorage.getItem(BOOK_DATE_KEY) : null
 
-  if (!book || builtDate !== today || book.sentences.length === 0) {
+  if (!book || builtDate !== builtStamp || book.sentences.length === 0) {
     if (queue.length === 0) throw new Error('今日冇可温習嘅卡片（可能已全部温習完，聽日再嚟）')
     const now = Date.now()
     book = {
       id: REVIEW_BOOK_ID,
       title: BOOK_TITLE,
-      sentences: queue.map(encodeReviewPage),
+      sentences: queue.flatMap(encodeReviewPages),
       currentIndex: 0,
       uploadDate: book?.uploadDate ?? now,
       lastReadDate: now,
@@ -69,7 +87,7 @@ export async function openReviewBook(limit = 24): Promise<{ book: BookData; star
       chapters: [{ title: `${today} · ${queue.length} 張`, startIndex: 0 }],
     }
     await saveBookToIDB(book)
-    if (typeof window !== 'undefined') localStorage.setItem(BOOK_DATE_KEY, today)
+    if (typeof window !== 'undefined') localStorage.setItem(BOOK_DATE_KEY, builtStamp)
   }
 
   // 跳到第一張今日未温習嘅卡（全部温習晒就由第一頁開始）

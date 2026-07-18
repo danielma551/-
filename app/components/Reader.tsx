@@ -1168,6 +1168,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </span>
           )}
           <span style={{ color: muted, fontWeight: 500 }}>{pg.date}</span>
+          {!!pg.sc && pg.sc > 1 && <span style={{ color: muted, fontWeight: 500 }}>{pg.si}/{pg.sc} 句</span>}
           {done && <span style={{ marginLeft: 'auto', color: isEink ? '#000' : '#0f766e' }}>✓ 已温習</span>}
         </span>
         {/* 內容 */}
@@ -1175,8 +1176,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         {pg.meta && (
           <span style={{ display: 'block', fontSize: '0.42em', color: muted, marginTop: '1.4em', whiteSpace: 'pre-wrap', fontWeight: 400 }}>{pg.meta}</span>
         )}
-        {/* ✓ 温習咗（要撳掣確認先計數） */}
-        {!done && (
+        {/* ✓ 温習咗（要撳掣確認先計數；一頁一句時只喺最後一句出現） */}
+        {!done && (!pg.sc || pg.si === pg.sc) && (
           <button
             onClick={(e) => {
               e.stopPropagation()
