@@ -298,6 +298,7 @@ export interface ReviewNote {
   device?: string       // 建立這張卡的設備（例如 iPhone / Mac / Windows）
   meta?: string         // 附加資訊（來源／章節／時間／標籤，匯入時保留）
   lastReviewed?: number // 最後一次温習時間（用於「今日已温習不再出現」）
+  again?: boolean       // 「再重温」標記：唔理循環，下次抽卡優先返嚟
 }
 
 // 由 UA 粗略判斷設備類型（建立卡片時記錄，跨裝置同步後可看到來源）
@@ -315,6 +316,8 @@ export function detectDevice(): string {
 
 const REVIEW_KEY = 'review-notes'
 const REVIEW_SESSION_KEY = 'review-session'
+const REVIEW_HEAT_KEY = 'review-heat'          // 每日温習張數 { 'YYYY-MM-DD': n }（温習熱圖）
+const REVIEW_CYCLE_KEY = 'review-cycle-start'  // 本輪循環開始時間戳：早於此時間温習過先算「未出現」
 
 // 每日温習 session（記錄當天進度，退出可續做）
 export interface DailySession {
@@ -401,7 +404,9 @@ export const reviewStorage = {
     n.due = Date.now() + BOX_DAYS[n.box] * DAY_MS
     n.reviewCount++
     n.lastReviewed = Date.now()
+    n.again = false            // 清走「再重温」標記
     this.saveAll(list)
+    this.bumpHeat()
   },
   // 標記「要再温」：歸零，今天再出現
   markAgain(id: string): void {
@@ -413,6 +418,39 @@ export const reviewStorage = {
     n.reviewCount++
     n.lastReviewed = Date.now()
     this.saveAll(list)
+    this.bumpHeat()
+  },
+  // 「再重温」：今日計進度，但標記返嚟——下次抽卡唔理循環都會再出現
+  markAgainLater(id: string): void {
+    const list = this.getAll()
+    const n = list.find(x => x.id === id)
+    if (!n) return
+    n.again = true
+    n.reviewCount++
+    n.lastReviewed = Date.now()
+    this.saveAll(list)
+    this.bumpHeat()
+  },
+  // ── 温習熱圖：每日温習張數 ──
+  getHeat(): Record<string, number> {
+    if (typeof window === 'undefined') return {}
+    try { return JSON.parse(localStorage.getItem(REVIEW_HEAT_KEY) || '{}') } catch { return {} }
+  },
+  bumpHeat(): void {
+    if (typeof window === 'undefined') return
+    const heat = this.getHeat()
+    const today = todayLocal()
+    heat[today] = (heat[today] || 0) + 1
+    try { localStorage.setItem(REVIEW_HEAT_KEY, JSON.stringify(heat)) } catch { /* ignore */ }
+  },
+  // 跨裝置合併熱圖：每日取較大值
+  mergeHeat(remote: Record<string, number> | undefined | null): void {
+    if (!remote || typeof window === 'undefined') return
+    const heat = this.getHeat()
+    for (const [d, c] of Object.entries(remote)) {
+      if (typeof c === 'number' && c > (heat[d] || 0)) heat[d] = c
+    }
+    try { localStorage.setItem(REVIEW_HEAT_KEY, JSON.stringify(heat)) } catch { /* ignore */ }
   },
   // 今天到期（含逾期）的卡片，依到期時間排序
   dueToday(): ReviewNote[] {
@@ -429,13 +467,22 @@ export const reviewStorage = {
     try { localStorage.setItem(REVIEW_SESSION_KEY, JSON.stringify(s)) } catch { /* ignore */ }
   },
   // 開始或續做今天嘅 session：回傳剩餘卡片、已完成數、當天總數
+  // 配額會累積：尋日（或之前）冇温完嘅張數帶落今日，每過一日再加 base 張
+  // 例：base=24，今日冇温 → 聽日配額 48
   resumeOrStartDaily(limit = 24): { queue: ReviewNote[]; done: number; total: number } {
     const today = todayLocal()
     const all = this.getAll()
     const map = new Map(all.map(n => [n.id, n]))
     let s = this.getSession()
     if (!s || s.date !== today) {
-      const picked = this.pickDaily(limit)
+      // 帶配額落嚟：上個 session 未完成嘅張數 + 中間錯過嘅整日每日 base 張
+      let quota = limit
+      if (s) {
+        const prevUnfinished = s.ids.filter(id => map.has(id)).length
+        const daysGap = Math.max(1, Math.round((new Date(today).getTime() - new Date(s.date).getTime()) / 86400000))
+        quota = limit * daysGap + prevUnfinished   // 今日 base×日差 + 上次未温完
+      }
+      const picked = this.pickDaily(quota)
       s = { date: today, ids: picked.map(n => n.id), done: 0, total: picked.length }
     } else {
       s.ids = s.ids.filter(id => map.has(id))   // 剔走已刪除嘅卡
@@ -459,21 +506,40 @@ export const reviewStorage = {
   resetSession() {
     if (typeof window !== 'undefined') localStorage.removeItem(REVIEW_SESSION_KEY)
   },
-  // 每日温習抽卡：先取今天到期，不足則按最近到期補足，最後「隨機打亂」，固定取 limit 張
+  // 本輪循環開始時間（0 = 未開始過新循環）
+  getCycleStart(): number {
+    if (typeof window === 'undefined') return 0
+    return Number(localStorage.getItem(REVIEW_CYCLE_KEY) || 0)
+  },
+  // 判斷一張卡「本輪循環未出現過」：從未温習、上次温習早過循環開始，或有「再重温」標記
+  unseenInCycle(n: ReviewNote, cycleStart: number): boolean {
+    return !!n.again || !n.lastReviewed || n.lastReviewed < cycleStart
+  },
+  // 仲有幾多張未温（本輪循環）
+  remainingInCycle(): number {
+    const cs = this.getCycleStart()
+    return this.getAll().filter(n => this.unseenInCycle(n, cs)).length
+  },
+  // 每日温習抽卡：循環制＋隨機——只喺「本輪未出現過」嘅卡入面隨機抽；
+  // 全部出現晒就自動開新一輪。出現過嘅卡唔會再出現（除非撳「再重温」）。
   pickDaily(limit = 24): ReviewNote[] {
     const today = todayLocal()
-    // 排除「今日已温習」的卡（今日暫不再出現）
     const reviewedToday = (n: ReviewNote) => !!n.lastReviewed && new Date(n.lastReviewed).toLocaleDateString('en-CA') === today
-    const pool = this.getAll().filter(n => !reviewedToday(n))
-    // 循環模式：最久未温習（含從未温習）優先 → 温習過的卡要等所有卡都看過一次先再出現
-    pool.sort((a, b) => (a.lastReviewed ?? 0) - (b.lastReviewed ?? 0))
-    const sel = pool.slice(0, limit)
-    // 選出的一批內部隨機打亂順序（呈現次序隨機，但「選誰」仍照循環）
-    for (let i = sel.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[sel[i], sel[j]] = [sel[j], sel[i]]
+    const all = this.getAll().filter(n => !reviewedToday(n))
+    let cs = this.getCycleStart()
+    let pool = all.filter(n => this.unseenInCycle(n, cs))
+    if (pool.length === 0 && all.length > 0) {
+      // 本輪全部温習晒 → 開新一輪
+      cs = Date.now()
+      if (typeof window !== 'undefined') localStorage.setItem(REVIEW_CYCLE_KEY, String(cs))
+      pool = all
     }
-    return sel
+    // Fisher–Yates 隨機打亂，取前 limit 張
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    }
+    return pool.slice(0, limit)
   },
   stats(): { total: number; due: number } {
     return { total: this.getAll().length, due: this.dueToday().length }

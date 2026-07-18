@@ -102,6 +102,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         readingHistory: historyStorage.getHistory(),
         reviewNotes: reviewStorage.getAll(),
         reviewSession: reviewStorage.getSession(),   // 今日温習進度（跨裝置：知道今日已温習）
+        reviewHeat: reviewStorage.getHeat(),         // 温習熱圖（每日張數）
       }
       const manifestStr = JSON.stringify(manifest)
       const fp = fastHash(manifestStr)
@@ -217,6 +218,10 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
           const localDone = local && local.date === today ? (local.done ?? 0) : -1
           if (remoteDone >= localDone) reviewStorage.saveSession(data.reviewSession)
         }
+      }
+      // 合併温習熱圖（每日取較大值）
+      if (data.reviewHeat) {
+        reviewStorage.mergeHeat(data.reviewHeat)
       }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')

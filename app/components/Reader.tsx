@@ -1176,30 +1176,55 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         {pg.meta && (
           <span style={{ display: 'block', fontSize: '0.42em', color: muted, marginTop: '1.4em', whiteSpace: 'pre-wrap', fontWeight: 400 }}>{pg.meta}</span>
         )}
-        {/* ✓ 温習咗（要撳掣確認先計數；一頁一句時只喺最後一句出現） */}
+        {/* 最後一句先出確認掣：✓ 温習咗（唔會再出現）／再重温（下次抽卡再返嚟） */}
         {!done && (!pg.sc || pg.si === pg.sc) && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              reviewStorage.markKnown(pg.id)
-              reviewStorage.sessionMarkKnown(pg.id)
-              setReviewTick(t => t + 1)
-            }}
-            onTouchEnd={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-            style={isEink ? {
-              display: 'block', marginTop: '1.6em', padding: '10px 26px',
-              border: '2px solid #000', background: '#fff', color: '#000',
-              fontSize: '0.55em', fontWeight: 700, borderRadius: 0,
-            } : {
-              display: 'block', marginTop: '1.6em', padding: '10px 26px',
-              border: 'none', background: '#0f766e', color: '#fff',
-              fontSize: '0.55em', fontWeight: 600, borderRadius: 12,
-              cursor: 'pointer', boxShadow: '0 2px 10px rgba(15,118,110,0.25)',
-            }}
-          >
-            ✓ 温習咗
-          </button>
+          <span style={{ display: 'flex', gap: 12, marginTop: '1.6em' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                reviewStorage.markKnown(pg.id)
+                reviewStorage.sessionMarkKnown(pg.id)
+                setReviewTick(t => t + 1)
+              }}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              style={isEink ? {
+                padding: '10px 26px',
+                border: '2px solid #000', background: '#000', color: '#fff',
+                fontSize: '0.55em', fontWeight: 700, borderRadius: 0,
+              } : {
+                padding: '10px 26px',
+                border: 'none', background: '#0f766e', color: '#fff',
+                fontSize: '0.55em', fontWeight: 600, borderRadius: 12,
+                cursor: 'pointer', boxShadow: '0 2px 10px rgba(15,118,110,0.25)',
+              }}
+            >
+              ✓ 温習咗
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                reviewStorage.markAgainLater(pg.id)
+                reviewStorage.sessionMarkKnown(pg.id)
+                setReviewTick(t => t + 1)
+              }}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              title="今日計進度，但呢張卡下次抽卡會再出現"
+              style={isEink ? {
+                padding: '10px 26px',
+                border: '2px solid #000', background: '#fff', color: '#000',
+                fontSize: '0.55em', fontWeight: 700, borderRadius: 0,
+              } : {
+                padding: '10px 26px',
+                border: '1.5px solid #d6d3d1', background: '#fff', color: '#78716c',
+                fontSize: '0.55em', fontWeight: 600, borderRadius: 12,
+                cursor: 'pointer',
+              }}
+            >
+              ↻ 再重温
+            </button>
+          </span>
         )}
       </span>
     )

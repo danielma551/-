@@ -10,12 +10,13 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, Sparkles, ListChecks } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
 import ReadingHeatmap from './components/ReadingHeatmap'
+import ReviewHeatmap from './components/ReviewHeatmap'
 import SpeedChart from './components/SpeedChart'
 import FeedPanel from './components/FeedPanel'
 import GamifyBar from './components/GamifyBar'
@@ -655,26 +656,6 @@ export default function Home() {
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-teal-500" title="今日未生成" />
                 )}
               </button>
-              {/* 每日温習：打開「每日温習」書（今日 24 張，一頁一張） */}
-              <button
-                onClick={handleOpenReviewBook}
-                className="relative flex items-center space-x-1.5 px-3 py-2 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-sm font-medium transition-colors"
-                title="每日温習（今日 24 張筆記，一頁一張）"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">每日温習</span>
-                {reviewDue > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">{reviewDue}</span>
-                )}
-              </button>
-              {/* 卡片管理（Flomo 匯入／搜尋／批量管理） */}
-              <button
-                onClick={() => setShowReview(true)}
-                className="flex items-center px-2.5 py-2 rounded-full border border-gray-300 text-gray-500 hover:bg-gray-50 text-sm transition-colors"
-                title="温習卡片管理（Flomo 匯入／搜尋／刪除）"
-              >
-                <ListChecks className="w-3.5 h-3.5" />
-              </button>
               {/* Vision OCR 設定按鈕 */}
               <button
                 onClick={() => { setVisionKeyInput(visionApiKey); setDeepseekKeyInput(deepseekKey); setShowVisionSettings(true) }}
@@ -840,6 +821,13 @@ export default function Home() {
           {/* 30天閱讀趨勢圖（有資料時才顯示） */}
           <ReadingTrend />
           <ReadingHeatmap />
+
+          {/* 温習熱圖：每日温習嘅入口（有温習嗰日有顏色；配額冇温完會累積落聽日） */}
+          <ReviewHeatmap
+            onStart={handleOpenReviewBook}
+            onManage={() => setShowReview(true)}
+            refreshKey={reviewDue}
+          />
           <SpeedChart />
 
           {/* 閱讀冒險：等級 / XP / 連續打卡 / 怪物擊殺 */}
