@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, flomoStorage, speedStorage, reviewStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { getMusicObjectURL } from '../utils/musicDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
@@ -133,9 +133,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [cycleToast, setCycleToast] = useState<string | null>(null)
   const cycleToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevCycleIdxRef = useRef<number>(-1)
-  // Flomo 同步：狀態 'idle' | 'sending' | 'ok' | 'error' | 'setup'
-  const [flomoStatus, setFlomoStatus] = useState<'idle' | 'sending' | 'ok' | 'error' | 'setup'>('idle')
-  const [flomoSetupInput, setFlomoSetupInput] = useState('')
+  // 📝 筆記儲存狀態（沿用舊變數名，儲存目標已改為自己網站嘅每日温習卡庫）
+  const [flomoStatus, setFlomoStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   // 🌿 Flomo 暫存區：逐句加入，最後一起發
   const [flomoBuffer, setFlomoBuffer] = useState<string[]>([])
   const [flomoAddFlash, setFlomoAddFlash] = useState(false)
@@ -1331,12 +1330,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   // 🌿 核心發送函數（接受要發送的句子陣列）
+  // 📝 儲存筆記到自己網站嘅「每日温習」卡庫（唔再經 Flomo）
   const sendToFlomoWithContent = async (toSend: string[]) => {
-    const url = flomoStorage.getUrl()
-    if (!url) { setFlomoStatus('setup'); return }
     if (!toSend[0] || toSend[0].startsWith('data:image/')) return
-    const today = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    // 按 PARA_SEP 分段，段內句子 join 成一行，段間用 \n\n
+    // 按 PARA_SEP 分段，段內句子 join 成一行
     const paragraphs: string[] = []
     let cur: string[] = []
     for (const s of toSend) {
@@ -1347,30 +1344,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }
     }
     if (cur.length > 0) paragraphs.push(cur.join(''))
-    const content = `📖 ${bookTitle}\n📅 ${today}\n\n${paragraphs.join('\n\n')}`
     setFlomoStatus('sending')
-    try {
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      setFlomoStatus('ok')
-      // 同時存一份到本機「每日温習」（每段為一張卡，依文字去重）
-      reviewStorage.addMany(paragraphs, bookTitle)
-      setFlomoBuffer([])
-      setTimeout(() => setFlomoStatus('idle'), 2000)
-    } catch {
-      setFlomoStatus('error')
-      setTimeout(() => {
-        const savedUrl = flomoStorage.getUrl() ?? ''
-        setFlomoSetupInput(savedUrl)
-        setFlomoStatus('setup')
-      }, 1500)
-    }
+    // 每段一張卡，依文字去重；來源記住書名（雲端同步會帶去其他裝置）
+    reviewStorage.addMany(paragraphs, bookTitle)
+    setFlomoStatus('ok')
+    setFlomoBuffer([])
+    setTimeout(() => setFlomoStatus('idle'), 2000)
   }
 
-  // 🌿 點 Flomo 按鈕：有暫存就發，沒暫存就彈出 N 句選擇器
+  // 📝 點筆記按鈕：有暫存就存，沒暫存就彈出 N 句選擇器
   const sendToFlomo = () => {
     if (flomoBuffer.length > 0) {
       sendToFlomoWithContent(flomoBuffer)
@@ -1772,12 +1754,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     transform: flomoAddFlash ? 'scale(1.2)' : 'scale(1)',
                     transition: 'transform 200ms cubic-bezier(0.23,1,0.32,1), background 200ms',
                   }}
-                  title="加入 Flomo 暫存"
+                  title="加入筆記暫存"
                 >
                   ＋
                 </button>
 
-                {/* 🌿 發送暫存到 Flomo */}
+                {/* 📝 儲存暫存做筆記（存入每日温習） */}
                 <button
                   onClick={sendToFlomo}
                   disabled={flomoStatus === 'sending'}
@@ -1786,11 +1768,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     background: flomoStatus === 'ok' ? '#dcfce7' : flomoStatus === 'error' ? '#fee2e2' : '#f0fdf4',
                     color: flomoStatus === 'ok' ? '#16a34a' : flomoStatus === 'error' ? '#dc2626' : '#15803d',
                   }}
-                  title={flomoBuffer.length > 0 ? `發送 ${flomoBuffer.length} 句到 Flomo` : '儲存到 Flomo'}
+                  title={flomoBuffer.length > 0 ? `儲存 ${flomoBuffer.length} 句做筆記（入每日温習）` : '儲存筆記（入每日温習）'}
                 >
-                  <span>{flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '🌿'}</span>
+                  <span>{flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '📝'}</span>
                   <span className="hidden sm:inline text-xs">
-                    {flomoStatus === 'ok' ? '已發送' : flomoStatus === 'error' ? '失敗' : 'Flomo'}
+                    {flomoStatus === 'ok' ? '已儲存' : flomoStatus === 'error' ? '失敗' : '筆記'}
                   </span>
                   {/* 暫存計數徽章 */}
                   {flomoBuffer.length > 0 && flomoStatus === 'idle' && (
@@ -2323,7 +2305,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               animation: 'panel-in 150ms cubic-bezier(0.23,1,0.32,1) both',
             }}
           >
-            {flomoBuffer.length} 句待發
+            {flomoBuffer.length} 句待存
           </div>
         )}
 
@@ -2364,7 +2346,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             ➕
           </button>
 
-          {/* 🌿 發送到 Flomo */}
+          {/* 📝 儲存筆記（存入每日温習） */}
           <button
             onClick={sendToFlomo}
             disabled={flomoStatus === 'sending'}
@@ -2382,10 +2364,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               border: isEink ? '2px solid #000' : '1.5px solid #86efac',
               boxShadow: isEink ? '2px 2px 0 #000' : '0 4px 12px rgba(0,0,0,0.12)',
             }}
-            title={flomoBuffer.length > 0 ? `發送 ${flomoBuffer.length} 句到 Flomo` : '發送到 Flomo'}
+            title={flomoBuffer.length > 0 ? `儲存 ${flomoBuffer.length} 句做筆記（入每日温習）` : '儲存筆記（入每日温習）'}
           >
             <span className="text-sm">
-              {flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '🌿'}
+              {flomoStatus === 'sending' ? '⏳' : flomoStatus === 'ok' ? '✅' : flomoStatus === 'error' ? '❌' : '📝'}
             </span>
             {/* 計數徽章 */}
             {flomoBuffer.length > 0 && flomoStatus === 'idle' && (
@@ -2400,7 +2382,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       </div>
 
-      {/* 🌿 Flomo 預覽彈窗：確認後才發送 */}
+      {/* 📝 筆記預覽彈窗：確認後才儲存 */}
       {flomoPreview && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
@@ -2420,7 +2402,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               style={{ borderColor: isEink ? '#000' : '#e5e7eb' }}>
               <div>
                 <p className="font-bold text-base" style={{ color: isEink ? '#000' : '#1f2937' }}>
-                  🌿 預覽 · 確認後發送
+                  📝 預覽 · 確認後儲存做筆記
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: isEink ? '#555' : '#6b7280' }}>
                   📖 {bookTitle}
@@ -2490,59 +2472,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   border: isEink ? '2px solid #000' : 'none',
                 }}
               >
-                確認發送 🌿
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Flomo 設定彈窗：第一次用時要求輸入 API 網址 */}
-      {flomoStatus === 'setup' && (
-        <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={() => setFlomoStatus('idle')}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
-            style={{ animation: 'panel-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-bold text-gray-800 mb-1">🌿 設定 Flomo API</h3>
-            {flomoSetupInput && (
-              <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
-                ❌ 發送失敗，請確認 API 網址是否正確
-              </div>
-            )}
-            <p className="text-sm text-gray-500 mb-4">
-              在 Flomo →「設定」→「開放 API」找到你的網址，貼在下方：
-            </p>
-            <input
-              type="url"
-              value={flomoSetupInput}
-              onChange={e => setFlomoSetupInput(e.target.value)}
-              placeholder="https://flomoapp.com/iwh/..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-400"
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFlomoStatus('idle')}
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => {
-                  if (flomoSetupInput.trim()) {
-                    flomoStorage.saveUrl(flomoSetupInput.trim())
-                    setFlomoStatus('idle')
-                    setTimeout(sendToFlomo, 100)
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium"
-              >
-                儲存並發送
+                確認儲存 📝
               </button>
             </div>
           </div>
