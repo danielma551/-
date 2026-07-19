@@ -467,22 +467,14 @@ export const reviewStorage = {
     try { localStorage.setItem(REVIEW_SESSION_KEY, JSON.stringify(s)) } catch { /* ignore */ }
   },
   // 開始或續做今天嘅 session：回傳剩餘卡片、已完成數、當天總數
-  // 配額會累積：尋日（或之前）冇温完嘅張數帶落今日，每過一日再加 base 張
-  // 例：base=24，今日冇温 → 聽日配額 48
+  // 每日固定 limit 張（唔累積：尋日冇温完嘅唔會滾落今日）
   resumeOrStartDaily(limit = 24): { queue: ReviewNote[]; done: number; total: number } {
     const today = todayLocal()
     const all = this.getAll()
     const map = new Map(all.map(n => [n.id, n]))
     let s = this.getSession()
     if (!s || s.date !== today) {
-      // 帶配額落嚟：上個 session 未完成嘅張數 + 中間錯過嘅整日每日 base 張
-      let quota = limit
-      if (s) {
-        const prevUnfinished = s.ids.filter(id => map.has(id)).length
-        const daysGap = Math.max(1, Math.round((new Date(today).getTime() - new Date(s.date).getTime()) / 86400000))
-        quota = limit * daysGap + prevUnfinished   // 今日 base×日差 + 上次未温完
-      }
-      const picked = this.pickDaily(quota)
+      const picked = this.pickDaily(limit)
       s = { date: today, ids: picked.map(n => n.id), done: 0, total: picked.length }
     } else {
       s.ids = s.ids.filter(id => map.has(id))   // 剔走已刪除嘅卡
