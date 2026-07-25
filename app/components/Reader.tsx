@@ -491,7 +491,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
-      
+
+      // 📝 每日温習：喺「最後一句頁」按空白鍵 = 温習咗（唔使用滑鼠撳掣）
+      if (e.key === ' ' && bookId === REVIEW_BOOK_ID) {
+        e.preventDefault()
+        const pg = parseReviewPage(sentences[currentIndex] || '')
+        if (pg && (!pg.sc || pg.si === pg.sc)) {
+          // 最後一句：未温就標記温習咗，然後跳去下一張
+          if (!isReviewedToday(reviewStorage.getAll().find(n => n.id === pg.id))) {
+            reviewStorage.markKnown(pg.id)
+            reviewStorage.sessionMarkKnown(pg.id)
+            setReviewTick(t => t + 1)
+          }
+          goToNext()
+        } else {
+          // 唔係最後一句：空白鍵照樣揭去下一句
+          goToNext()
+        }
+        return
+      }
+
       if (e.key === shortcuts.nextSentence) {
         e.preventDefault()
         goToNext()
@@ -507,7 +526,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, sentences, shortcuts, onReset])
+  }, [currentIndex, sentences, shortcuts, onReset, bookId])
 
   // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
   // 過濾掉點按鈕、輸入框等互動元素的情況，反饋改用振動（無視覺閃光）
