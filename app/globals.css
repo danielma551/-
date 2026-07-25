@@ -72,6 +72,25 @@ button:active:not(:disabled) {
   to   { opacity: 1; }
 }
 
+/* 9. 温習咗打卡：綠色 ✓ 圈彈出 → 稍停 → 放大淡出 */
+@keyframes review-check-pop {
+  0%   { opacity: 0; transform: scale(0.4); }
+  25%  { opacity: 1; transform: scale(1.08); }
+  45%  { transform: scale(1); }
+  75%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+/* ✓ 勾號描邊 */
+@keyframes review-check-draw {
+  from { stroke-dashoffset: 32; }
+  to   { stroke-dashoffset: 0; }
+}
+/* 外圈漣漪擴散 */
+@keyframes review-check-ripple {
+  0%   { opacity: 0.5; transform: scale(0.6); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+
 /* 5. 觸控裝置保護：hover 動效只在有真實游標的裝置上生效 */
 /*    Emil: 觸控裝置的 tap 會觸發 hover，造成誤判 */
 @media not all and (hover: hover) {

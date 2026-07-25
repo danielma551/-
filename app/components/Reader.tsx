@@ -497,13 +497,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         e.preventDefault()
         const pg = parseReviewPage(sentences[currentIndex] || '')
         if (pg && (!pg.sc || pg.si === pg.sc)) {
-          // 最後一句：未温就標記温習咗，然後跳去下一張
+          // 最後一句：未温就標記温習咗（帶打卡動畫），然後跳去下一張
           if (!isReviewedToday(reviewStorage.getAll().find(n => n.id === pg.id))) {
-            reviewStorage.markKnown(pg.id)
-            reviewStorage.sessionMarkKnown(pg.id)
-            setReviewTick(t => t + 1)
+            markReviewKnown(pg.id)
+            setTimeout(() => goToNext(), 260)   // 畀動畫閃一閃先跳下一張
+          } else {
+            goToNext()
           }
-          goToNext()
         } else {
           // 唔係最後一句：空白鍵照樣揭去下一句
           goToNext()
@@ -1162,6 +1162,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── 每日温習書：一頁一張卡（書名／日期／內容 + ✓ 確認掣）──
   const [reviewTick, setReviewTick] = useState(0)   // ✓ 後強制重繪
+  const [reviewDoneFlash, setReviewDoneFlash] = useState(0)   // 打卡動畫觸發（每次 +1 重播）
+
+  // 統一：標記「温習咗」+ 打卡動畫（非墨水屏先播）
+  const markReviewKnown = (id: string) => {
+    reviewStorage.markKnown(id)
+    reviewStorage.sessionMarkKnown(id)
+    setReviewTick(t => t + 1)
+    if (!isEink) setReviewDoneFlash(f => f + 1)
+  }
   const reviewNoteMap = useMemo(() => {
     if (bookId !== REVIEW_BOOK_ID) return new Map<string, import('../utils/storage').ReviewNote>()
     void reviewTick
@@ -1200,9 +1209,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                reviewStorage.markKnown(pg.id)
-                reviewStorage.sessionMarkKnown(pg.id)
-                setReviewTick(t => t + 1)
+                markReviewKnown(pg.id)
               }}
               onTouchEnd={(e) => e.stopPropagation()}
               onMouseUp={(e) => e.stopPropagation()}
@@ -2226,6 +2233,26 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 +{luckyReward.xp} XP
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✓ 温習咗打卡動畫（非墨水屏；每次觸發重播） */}
+      {!isEink && reviewDoneFlash > 0 && (
+        <div
+          key={reviewDoneFlash}
+          className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+        >
+          <div style={{ position: 'relative', width: 96, height: 96, animation: 'review-check-pop 900ms cubic-bezier(0.23,1,0.32,1) both' }}>
+            {/* 漣漪 */}
+            <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid #34d399', animation: 'review-check-ripple 900ms ease-out both' }} />
+            {/* 圓底 */}
+            <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#10b981', boxShadow: '0 8px 30px rgba(16,185,129,0.45)' }} />
+            {/* ✓ 勾 */}
+            <svg viewBox="0 0 48 48" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+              <path d="M14 25 L21 32 L34 17" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
+                style={{ strokeDasharray: 32, animation: 'review-check-draw 360ms 120ms ease-out both' }} />
+            </svg>
           </div>
         </div>
       )}
