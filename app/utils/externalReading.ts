@@ -10,7 +10,7 @@ const PARA_SEP = ' '   // 與 epubParser / Reader 一致的段落分隔符
 const LAST_DATE_KEY = 'external-reading-last-date'
 
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
-const DEEPSEEK_MODEL = 'deepseek-chat'
+const DEEPSEEK_MODEL = 'deepseek-v4-flash'   // deepseek-chat 已於 2026-07-24 停用
 
 interface RawSentence { en?: string; zh?: string }
 interface RawParagraph { sentences?: RawSentence[]; notes?: string }

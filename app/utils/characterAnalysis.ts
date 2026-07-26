@@ -275,7 +275,7 @@ function normalizeLLMResult(raw: { characters: RawCharacter[]; relations: RawRel
 
 // DeepSeek API（OpenAI 相容端點）
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
-const DEEPSEEK_MODEL = 'deepseek-chat'
+const DEEPSEEK_MODEL = 'deepseek-v4-flash'   // deepseek-chat 已於 2026-07-24 停用
 
 export async function analyzeCharactersWithLLM(
   sentences: string[],
