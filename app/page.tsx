@@ -249,6 +249,18 @@ export default function Home() {
   // 每日温習
   const [showReview, setShowReview] = useState(false)
   const [reviewDue, setReviewDue] = useState(0)
+  // 首頁快速加筆記
+  const [quickNote, setQuickNote] = useState('')
+  const [quickNoteMsg, setQuickNoteMsg] = useState('')
+  const handleQuickAddNote = () => {
+    const text = quickNote.trim()
+    if (!text) return
+    const added = reviewStorage.addMany([text], '手動筆記')
+    setQuickNote('')
+    setReviewDue(reviewStorage.stats().due)
+    setQuickNoteMsg(added > 0 ? '已加入筆記 📝' : '呢條筆記已存在')
+    setTimeout(() => setQuickNoteMsg(''), 2000)
+  }
   // 每日外刊
   const [extStatus, setExtStatus] = useState<'idle' | 'loading'>('idle')
   const [extDoneToday, setExtDoneToday] = useState(false)
@@ -728,6 +740,28 @@ export default function Home() {
               </label>
             </div>
           </header>
+
+          {/* ✍️ 快速加筆記（首頁顯眼位置：隨手記，即刻入温習循環） */}
+          <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <textarea
+                value={quickNote}
+                onChange={e => setQuickNote(e.target.value)}
+                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleQuickAddNote() } }}
+                placeholder="✍️ 隨手寫低一個諗法／筆記…（⌘/Ctrl + Enter 快速加入，即刻入温習循環）"
+                rows={2}
+                className="flex-1 bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-gray-400 pt-1"
+              />
+              <button
+                onClick={handleQuickAddNote}
+                disabled={!quickNote.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 self-stretch"
+              >
+                <Plus className="w-4 h-4" /> 加入筆記
+              </button>
+            </div>
+            {quickNoteMsg && <p className="text-xs text-emerald-700 mt-2 px-1">{quickNoteMsg}</p>}
+          </div>
 
           {/* Vision OCR 設定面板 */}
           {showVisionSettings && (
