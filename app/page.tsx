@@ -27,7 +27,7 @@ import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bo
 import { parseEpubClientSide } from './utils/epubParser'
 import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './utils/musicDB'
 import CharacterGraph from './components/CharacterGraph'
-import ReviewCards from './components/ReviewCards'
+import NotesPanel from './components/NotesPanel'
 import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
 import { openReviewBook } from './utils/reviewBook'
 import { Newspaper } from 'lucide-react'
@@ -629,7 +629,7 @@ export default function Home() {
 
       {/* 每日温習卡片 */}
       {showReview && (
-        <ReviewCards onClose={() => { setShowReview(false); setReviewDue(reviewStorage.stats().due) }} />
+        <NotesPanel onClose={() => { setShowReview(false); setReviewDue(reviewStorage.stats().due) }} />
       )}
 
       {sentences.length === 0 ? (

@@ -5,7 +5,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Sparkles, ListChecks } from 'lucide-react'
+import { Sparkles, BookText } from 'lucide-react'
 import { reviewStorage } from '../utils/storage'
 
 // 按張數決定格子顏色（0 → 灰；越多越深琥珀）
@@ -123,10 +123,11 @@ export default function ReviewHeatmap({ onStart, onManage, refreshKey }: Props) 
           </button>
           <button
             onClick={onManage}
-            className="flex items-center px-2.5 py-2 rounded-full border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
-            title="温習卡片管理（Flomo 匯入／搜尋／刪除）"
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-sm font-medium transition-colors"
+            title="加筆記／瀏覽所有筆記"
           >
-            <ListChecks className="w-3.5 h-3.5" />
+            <BookText className="w-3.5 h-3.5" />
+            <span>筆記</span>
           </button>
         </div>
       </div>
