@@ -23,6 +23,7 @@ export default function NotesPanel({ onClose }: Props) {
   const [input, setInput] = useState('')
   const [query, setQuery] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  const [sort, setSort] = useState<'new' | 'old' | 'random'>('new')   // 排序：由新到舊／由舊到新／隨機
 
   const refresh = () => setNotes(reviewStorage.getAll())
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 2000) }
@@ -47,9 +48,16 @@ export default function NotesPanel({ onClose }: Props) {
   }
 
   const q = query.trim().toLowerCase()
-  const shown = q
+  const filtered = q
     ? notes.filter(n => `${n.text} ${n.source || ''} ${n.meta || ''}`.toLowerCase().includes(q))
     : notes
+  const shown = (() => {
+    const arr = [...filtered]
+    if (sort === 'new') arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    else if (sort === 'old') arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    else for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[arr[i], arr[j]] = [arr[j], arr[i]] }
+    return arr
+  })()
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
@@ -129,7 +137,20 @@ export default function NotesPanel({ onClose }: Props) {
               <button onClick={() => setQuery('')} className="p-0.5 text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
             )}
           </div>
-          <p className="text-xs text-gray-400 mb-2">共 {notes.length} 張{q ? `，符合 ${shown.length} 張` : ''}</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-400">共 {notes.length} 張{q ? `，符合 ${shown.length} 張` : ''}</p>
+            <div className="flex items-center gap-1 text-xs">
+              {([['new', '由新到舊'], ['old', '由舊到新'], ['random', '隨機']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setSort(v)}
+                  className={`px-2.5 py-1 rounded-full transition-colors ${sort === v ? 'bg-emerald-100 text-emerald-700 font-medium' : 'text-gray-400 hover:bg-gray-100'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="max-h-[46vh] overflow-y-auto divide-y divide-gray-100 border-y border-gray-100">
             {shown.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">{q ? '冇符合嘅筆記' : '仲未有筆記，喺上面寫低第一條啦 ✍️'}</p>}
             {shown.map(n => (
