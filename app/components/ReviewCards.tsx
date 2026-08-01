@@ -6,8 +6,8 @@
 // 升級：牌組層次、引號裝飾的文學排版、分段進度、間隔盒徽章、鍵盤快捷鍵。
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
-import { X, Upload, Wand2, ListChecks, Trash2, Search } from 'lucide-react'
-import { reviewStorage, ReviewNote, parseFlomoExport } from '../utils/storage'
+import { X, Wand2, ListChecks, Trash2, Search, BookText, Plus } from 'lucide-react'
+import { reviewStorage, ReviewNote } from '../utils/storage'
 
 interface Props {
   onClose: () => void
@@ -43,7 +43,6 @@ export default function ReviewCards({ onClose }: Props) {
   const [sessionTotal, setSessionTotal] = useState(initRef.current.total)
   const [totalNotes, setTotalNotes] = useState(() => reviewStorage.stats().total)
   const [importMsg, setImportMsg] = useState<string | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   // 由 session 重建佇列（匯入／清理／刪除後用，保留今日進度）
   const refreshFromSession = () => {
@@ -58,6 +57,29 @@ export default function ReviewCards({ onClose }: Props) {
   const [manageQuery, setManageQuery] = useState('')
 
   const openManage = () => { setNotesList(reviewStorage.getAll()); setSelected(new Set()); setManageQuery(''); setManageMode(true) }
+
+  // 📝 筆記模式：自己打字加新筆記 + 瀏覽／搜尋所有筆記
+  const [notesMode, setNotesMode] = useState(false)
+  const [noteInput, setNoteInput] = useState('')
+  const [browseQuery, setBrowseQuery] = useState('')
+  const openNotes = () => { setNotesList(reviewStorage.getAll()); setBrowseQuery(''); setNoteInput(''); setNotesMode(true) }
+  const addNote = () => {
+    const text = noteInput.trim()
+    if (!text) return
+    const added = reviewStorage.addMany([text], '手動筆記')
+    setNoteInput('')
+    setNotesList(reviewStorage.getAll())
+    setTotalNotes(reviewStorage.stats().total)
+    refreshFromSession()
+    setImportMsg(added > 0 ? '已加入筆記 📝' : '呢條筆記已存在')
+    setTimeout(() => setImportMsg(null), 2000)
+  }
+  const deleteNote = (id: string) => {
+    reviewStorage.remove(id); reviewStorage.sessionRemove(id)
+    setNotesList(reviewStorage.getAll())
+    setTotalNotes(reviewStorage.stats().total)
+    refreshFromSession()
+  }
   const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const toggleAll = () => setSelected(prev => prev.size === notesList.length ? new Set() : new Set(notesList.map(n => n.id)))
   const deleteSelected = () => {
@@ -66,26 +88,6 @@ export default function ReviewCards({ onClose }: Props) {
     setNotesList(reviewStorage.getAll())
     setSelected(new Set())
     refreshFromSession()
-  }
-
-  // 匯入 Flomo 筆記檔 → 加入温習卡 → 重新抽卡
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const raw = await file.text()
-      const isHtml = /\.html?$/i.test(file.name) || /^\s*<!doctype|<html|<div|<p[ >]/i.test(raw)
-      const notes = parseFlomoExport(raw, isHtml)
-      const added = reviewStorage.addImported(notes)
-      refreshFromSession()
-      setImportMsg(added > 0 ? `已匯入 ${added} 條筆記 🎉（明天起加入温習）` : '冇新筆記可匯入（可能已存在）')
-      setTimeout(() => setImportMsg(null), 3000)
-    } catch {
-      setImportMsg('讀取檔案失敗，請用 .txt / .md / .csv / .html')
-      setTimeout(() => setImportMsg(null), 3000)
-    } finally {
-      if (fileRef.current) fileRef.current.value = ''
-    }
   }
 
   // 一鍵清理：移除純時間戳／純 metadata 等雜項卡
@@ -213,14 +215,13 @@ export default function ReviewCards({ onClose }: Props) {
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => fileRef.current?.click()}
-              title="上傳 Flomo 筆記（.txt / .md / .csv / .html）"
-              className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-[10px] transition-colors"
+              onClick={() => (notesMode ? setNotesMode(false) : (setManageMode(false), openNotes()))}
+              title="加筆記／瀏覽所有筆記"
+              className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${notesMode ? 'text-white bg-emerald-600 hover:bg-emerald-700' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'}`}
             >
-              <Upload className="w-4 h-4" />
-              <span className="hidden sm:inline">上傳 Flomo</span>
+              <BookText className="w-4 h-4" />
+              <span className="hidden sm:inline">{notesMode ? '完成' : '筆記'}</span>
             </button>
-            <input ref={fileRef} type="file" accept=".txt,.md,.csv,.html,.htm,text/plain,text/html" className="hidden" onChange={handleImportFile} />
             <button
               onClick={handleCleanup}
               title="一鍵清理：移除純時間戳／metadata 等雜項卡"
@@ -230,15 +231,7 @@ export default function ReviewCards({ onClose }: Props) {
               <span className="hidden sm:inline">清理</span>
             </button>
             <button
-              onClick={() => (manageMode ? setManageMode(false) : openManage())}
-              title="搜尋卡片"
-              className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${manageMode ? 'text-white bg-gray-700 hover:bg-gray-800' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
-            >
-              <Search className="w-4 h-4" />
-              <span className="hidden sm:inline">{manageMode ? '完成' : '搜尋'}</span>
-            </button>
-            <button
-              onClick={() => (manageMode ? setManageMode(false) : openManage())}
+              onClick={() => (manageMode ? setManageMode(false) : (setNotesMode(false), openManage()))}
               title="批量管理／刪除卡片"
               className={`inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-[10px] transition-colors ${manageMode ? 'text-white bg-gray-700 hover:bg-gray-800' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
             >
@@ -258,8 +251,77 @@ export default function ReviewCards({ onClose }: Props) {
           </div>
         )}
 
+        {/* 📝 筆記模式：加筆記 + 瀏覽／搜尋所有筆記 */}
+        {notesMode && (() => {
+          const q = browseQuery.trim().toLowerCase()
+          const shown = q
+            ? notesList.filter(n => `${n.text} ${n.source || ''} ${n.meta || ''}`.toLowerCase().includes(q))
+            : notesList
+          return (
+          <div className="px-6 py-4">
+            {/* ✍️ 加新筆記 */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 mb-4">
+              <textarea
+                value={noteInput}
+                onChange={e => setNoteInput(e.target.value)}
+                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); addNote() } }}
+                placeholder="寫低你嘅諗法／筆記…（⌘/Ctrl + Enter 快速加入）"
+                rows={3}
+                className="w-full bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-gray-400"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[11px] text-gray-400">加入後即刻進入温習循環</span>
+                <button
+                  onClick={addNote}
+                  disabled={!noteInput.trim()}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Plus className="w-4 h-4" /> 加入筆記
+                </button>
+              </div>
+            </div>
+
+            {/* 🔍 瀏覽／搜尋 */}
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+              <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <input
+                value={browseQuery}
+                onChange={e => setBrowseQuery(e.target.value)}
+                placeholder="搜尋筆記（內容 / 來源 / 標籤）"
+                className="flex-1 bg-transparent text-sm outline-none"
+              />
+              {browseQuery && (
+                <button onClick={() => setBrowseQuery('')} className="p-0.5 text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-2">共 {notesList.length} 張{q ? `，符合 ${shown.length} 張` : ''}</p>
+            <div className="max-h-[42vh] overflow-y-auto divide-y divide-gray-100 border-y border-gray-100">
+              {shown.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">{q ? '冇符合嘅筆記' : '仲未有筆記，喺上面寫低第一條啦 ✍️'}</p>}
+              {shown.map(n => (
+                <div key={n.id} className="group flex items-start gap-3 py-3 px-1">
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{n.text}</span>
+                    <span className="flex items-center gap-2 mt-1 text-[11px] text-gray-400">
+                      {n.source && <span className="truncate">📖 {n.source}</span>}
+                      <span className="flex-shrink-0">{fmtCreated(n.createdAt)}</span>
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => deleteNote(n.id)}
+                    title="刪除呢張筆記"
+                    className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          )
+        })()}
+
         {/* 分段進度 */}
-        {!empty && !manageMode && (
+        {!empty && !manageMode && !notesMode && (
           <div className="px-6 pt-4 pb-1">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-gray-500">今日進度 <span className="text-emerald-600">{doneCount}</span> / {sessionTotal}</span>
@@ -330,13 +392,13 @@ export default function ReviewCards({ onClose }: Props) {
         })()}
 
         {/* 內容 */}
-        {!manageMode && (
+        {!manageMode && !notesMode && (
         <div className="px-[30px] pt-7 pb-3 min-h-[380px] flex flex-col justify-center">
           {empty && (
             <div className="text-center py-6">
               <div className="text-5xl mb-4">🌱</div>
               <p className="text-gray-700 font-semibold mb-1">今日冇卡要温習</p>
-              <p className="text-sm text-gray-400">閱讀時㩒「＋ / 寄去 Flomo」就會自動儲存做温習卡片。</p>
+              <p className="text-sm text-gray-400">閱讀時㩒「＋ / 📝 儲存筆記」，或者喺「筆記」入面自己加，都會變成温習卡片。</p>
               {totalNotes > 0 && <p className="text-xs text-gray-400 mt-2">（你總共有 {totalNotes} 張卡，已全部温習到期外）</p>}
               <button onClick={onClose} className="mt-6 px-6 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">關閉</button>
             </div>
