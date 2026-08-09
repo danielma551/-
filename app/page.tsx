@@ -225,6 +225,7 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState<number>(0)
   const [activeChapters, setActiveChapters] = useState<import('./utils/storage').ChapterMark[] | undefined>(undefined)
   const [tracks, setTracks] = useState<MusicTrack[]>([])
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [showMusicList, setShowMusicList] = useState(false)
   const [isSavingMusic, setIsSavingMusic] = useState(false)
   const musicInputRef = useRef<HTMLInputElement>(null)
@@ -286,6 +287,7 @@ export default function Home() {
   useEffect(() => {
     getAllBooksFromIDB().then(setSavedBooks)
     listTracks().then(setTracks)
+    setSelectedTrackId(localStorage.getItem('reader-music-track-id'))
     setReviewDue(reviewStorage.stats().due)
     setExtDoneToday(alreadyGeneratedToday())
   }, [])
@@ -747,11 +749,19 @@ export default function Home() {
                       {/* 清單 */}
                       <div className="max-h-64 overflow-y-auto divide-y divide-gray-50 mt-2">
                         {tracks.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">仲未有歌，上面加入啦 🎵</p>}
-                        {tracks.map((t, i) => (
-                          <div key={t.id} className="group flex items-center gap-2 px-1 py-2">
+                        {tracks.map((t, i) => {
+                          const selected = selectedTrackId === t.id
+                          return (
+                          <div key={t.id} className={`group flex items-center gap-2 px-1 py-2 rounded-lg ${selected ? 'bg-purple-50' : ''}`}>
                             <span className="text-[11px] text-gray-300 w-4 flex-shrink-0 tabular-nums">{i + 1}</span>
-                            <span className="flex-shrink-0">{t.kind === 'youtube' ? '▶️' : '🎵'}</span>
-                            <span className="text-sm text-gray-700 truncate flex-1" title={t.name}>{t.name.replace(/\.[^.]+$/, '')}</span>
+                            <button
+                              onClick={() => { localStorage.setItem('reader-music-track-id', t.id); setSelectedTrackId(t.id) }}
+                              className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                              title="設做開始播放嘅一首"
+                            >
+                              <span className="flex-shrink-0">{selected ? '🔊' : (t.kind === 'youtube' ? '▶️' : '🎵')}</span>
+                              <span className={`text-sm truncate ${selected ? 'text-purple-700 font-medium' : 'text-gray-700'}`} title={t.name}>{t.name.replace(/\.[^.]+$/, '')}</span>
+                            </button>
                             <button
                               onClick={() => handleDeleteTrack(t.id)}
                               className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
@@ -760,7 +770,8 @@ export default function Home() {
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                       <p className="text-[11px] text-gray-400 px-1 py-1.5">閱讀時循環播放整個清單，可按上一首／下一首。YouTube 自動播可能要撳一下播放掣先開始。</p>
                     </div>

@@ -171,6 +171,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const trackIdxRef = useRef(0)
   const [trackName, setTrackName] = useState('')
   const [trackCount, setTrackCount] = useState(0)
+  const [trackListState, setTrackListState] = useState<import('../utils/musicDB').MusicTrack[]>([])
+  const [curTrackIdx, setCurTrackIdx] = useState(0)
+  const [showTrackPicker, setShowTrackPicker] = useState(false)
   const ytPlayerRef = useRef<any>(null)              // YouTube IFrame 播放器
   const currentKindRef = useRef<'file' | 'youtube'>('file')
   const musicVolumeRef = useRef(0.4)
@@ -469,6 +472,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       trackIdxRef.current = idx
       const t = list[idx]
       setTrackName(t.name.replace(/\.[^.]+$/, ''))
+      setCurTrackIdx(idx)
+      try { localStorage.setItem('reader-music-track-id', t.id) } catch {}
       if (t.kind === 'youtube' && t.youtubeId) {
         currentKindRef.current = 'youtube'
         audio.pause()
@@ -496,10 +501,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     listTracks().then(list => {
       if (cancelled || list.length === 0) return
       trackListRef.current = list
+      setTrackListState(list)
       setTrackCount(list.length)
       setHasMusicFile(true)
       const enabled = localStorage.getItem('reader-music-enabled')
-      loadTrack(0, enabled === null || enabled === 'true')
+      const savedId = localStorage.getItem('reader-music-track-id')
+      const startIdx = Math.max(0, list.findIndex(t => t.id === savedId))
+      loadTrack(startIdx, enabled === null || enabled === 'true')
     })
     return () => {
       cancelled = true
@@ -517,6 +525,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const playTrackDelta = (d: number) => {
     setMusicEnabled(true)
     loadTrackRef.current?.(trackIdxRef.current + d, true)
+  }
+  const playTrackAt = (i: number) => {
+    setMusicEnabled(true)
+    loadTrackRef.current?.(i, true)
+    setShowTrackPicker(false)
   }
 
   // 音樂開關：按當前音源（檔案／YouTube）播放或暫停
@@ -1965,9 +1978,35 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                       </button>
                     )}
 
-                    {/* 歌名（多首先顯示） */}
-                    {trackCount > 1 && trackName && (
-                      <span className="hidden md:inline text-[10px] text-purple-500 font-medium max-w-[90px] truncate" title={trackName}>{trackName}</span>
+                    {/* 歌名 + 清單挑選（多首先顯示） */}
+                    {trackCount > 1 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowTrackPicker(v => !v)}
+                          className="hidden md:flex items-center gap-0.5 text-[10px] text-purple-500 font-medium max-w-[110px] hover:text-purple-700"
+                          title="揀一首播放"
+                        >
+                          <span className="truncate">{trackName || '選歌'}</span>
+                          <List className="w-3 h-3 flex-shrink-0" />
+                        </button>
+                        {showTrackPicker && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowTrackPicker(false)} />
+                            <div className="absolute right-0 bottom-full mb-2 w-56 max-h-64 overflow-y-auto bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-1">
+                              {trackListState.map((t, i) => (
+                                <button
+                                  key={t.id}
+                                  onClick={() => playTrackAt(i)}
+                                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors ${i === curTrackIdx ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                                >
+                                  <span className="flex-shrink-0">{i === curTrackIdx ? '🔊' : (t.kind === 'youtube' ? '▶️' : '🎵')}</span>
+                                  <span className="truncate flex-1">{t.name.replace(/\.[^.]+$/, '')}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
 
                     {/* 時間顯示 */}
