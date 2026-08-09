@@ -12,10 +12,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network, SkipBack, SkipForward } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
-import { getMusicObjectURL } from '../utils/musicDB'
+import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
@@ -166,6 +166,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [hasMusicFile, setHasMusicFile] = useState(false)
   const [musicCurrentTime, setMusicCurrentTime] = useState(0)
   const [musicDuration, setMusicDuration] = useState(0)
+  // 播放清單
+  const trackListRef = useRef<import('../utils/musicDB').MusicTrack[]>([])
+  const trackIdxRef = useRef(0)
+  const [trackName, setTrackName] = useState('')
+  const [trackCount, setTrackCount] = useState(0)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -403,38 +408,55 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 背景音樂：載入 IDB，自動播放，unmount 時停止並釋放 URL
   useEffect(() => {
     let cancelled = false
-    getMusicObjectURL().then(url => {
+    const audio = new Audio()
+    audio.volume = parseFloat(localStorage.getItem('reader-music-volume') ?? '0.4')
+    audioRef.current = audio
+    audio.addEventListener('timeupdate', () => setMusicCurrentTime(audio.currentTime))
+    audio.addEventListener('durationchange', () => setMusicDuration(audio.duration || 0))
+    audio.addEventListener('loadedmetadata', () => setMusicDuration(audio.duration || 0))
+    // 一首播完 → 自動下一首（清單循環）
+    audio.addEventListener('ended', () => { loadTrack(trackIdxRef.current + 1, true) })
+
+    // 載入第 i 首（會 wrap），autoplay=係咪即刻播
+    const loadTrack = async (i: number, autoplay: boolean) => {
+      const list = trackListRef.current
+      if (list.length === 0) return
+      const idx = ((i % list.length) + list.length) % list.length
+      trackIdxRef.current = idx
+      const t = list[idx]
+      const url = await getTrackObjectURL(t.id)
       if (cancelled || !url) return
-      setHasMusicFile(true)
+      if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current)
       musicUrlRef.current = url
-      const audio = new Audio(url)
-      audio.loop = true
-      audio.volume = parseFloat(localStorage.getItem('reader-music-volume') ?? '0.4')
-      audioRef.current = audio
-      audio.addEventListener('timeupdate', () => setMusicCurrentTime(audio.currentTime))
-      audio.addEventListener('durationchange', () => setMusicDuration(audio.duration || 0))
-      audio.addEventListener('loadedmetadata', () => setMusicDuration(audio.duration || 0))
+      audio.src = url
+      audio.loop = list.length === 1   // 只有一首就循環單曲
+      setTrackName(t.name.replace(/\.[^.]+$/, ''))
+      if (autoplay) audio.play().catch(() => {})
+    }
+    loadTrackRef.current = loadTrack
+
+    listTracks().then(list => {
+      if (cancelled || list.length === 0) return
+      trackListRef.current = list
+      setTrackCount(list.length)
+      setHasMusicFile(true)
       const enabled = localStorage.getItem('reader-music-enabled')
-      if (enabled === null || enabled === 'true') {
-        audio.play().catch(() => {
-          // 瀏覽器自動播放政策：需要用戶互動才能播放
-          // 靜默失敗，等用戶點擊音樂按鈕手動觸發
-        })
-      }
+      loadTrack(0, enabled === null || enabled === 'true')
     })
     return () => {
       cancelled = true
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current = null
-      }
-      if (musicUrlRef.current) {
-        URL.revokeObjectURL(musicUrlRef.current)
-        musicUrlRef.current = null
-      }
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
+      if (musicUrlRef.current) { URL.revokeObjectURL(musicUrlRef.current); musicUrlRef.current = null }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 切歌（上一首/下一首）供 UI 呼叫
+  const loadTrackRef = useRef<((i: number, autoplay: boolean) => void) | null>(null)
+  const playTrackDelta = (d: number) => {
+    setMusicEnabled(true)
+    loadTrackRef.current?.(trackIdxRef.current + d, true)
+  }
 
   // 音樂開關與音量同步到 Audio 元素
   useEffect(() => {
@@ -1838,6 +1860,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 }
                 return (
                   <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-purple-50 border border-purple-100 flex-shrink-0">
+                    {/* 上一首（多首先顯示） */}
+                    {trackCount > 1 && (
+                      <button
+                        onClick={() => playTrackDelta(-1)}
+                        className="text-purple-400 hover:text-purple-700 transition-colors flex-shrink-0"
+                        title="上一首"
+                      >
+                        <SkipBack className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {/* 靜音/播放切換 */}
                     <button
                       onClick={() => {
@@ -1855,6 +1887,21 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                         ? <Music className="w-3.5 h-3.5" />
                         : <VolumeX className="w-3.5 h-3.5" />}
                     </button>
+                    {/* 下一首（多首先顯示） */}
+                    {trackCount > 1 && (
+                      <button
+                        onClick={() => playTrackDelta(1)}
+                        className="text-purple-400 hover:text-purple-700 transition-colors flex-shrink-0"
+                        title="下一首"
+                      >
+                        <SkipForward className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {/* 歌名（多首先顯示） */}
+                    {trackCount > 1 && trackName && (
+                      <span className="hidden md:inline text-[10px] text-purple-500 font-medium max-w-[90px] truncate" title={trackName}>{trackName}</span>
+                    )}
 
                     {/* 時間顯示 */}
                     <span className="text-[10px] text-purple-400 font-mono tabular-nums whitespace-nowrap">

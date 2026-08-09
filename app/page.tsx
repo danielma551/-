@@ -25,7 +25,7 @@ import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData, reviewStorage } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 import { parseEpubClientSide } from './utils/epubParser'
-import { saveMusicToIDB, getMusicMeta, deleteMusicFromIDB, MusicMeta } from './utils/musicDB'
+import { addTrack, listTracks, deleteTrack, MusicTrack } from './utils/musicDB'
 import CharacterGraph from './components/CharacterGraph'
 import NotesPanel from './components/NotesPanel'
 import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
@@ -224,7 +224,8 @@ export default function Home() {
   const [bookId, setBookId] = useState<string>('')
   const [currentIndex, setCurrentIndex] = useState<number>(0)
   const [activeChapters, setActiveChapters] = useState<import('./utils/storage').ChapterMark[] | undefined>(undefined)
-  const [musicMeta, setMusicMeta] = useState<MusicMeta | null>(null)
+  const [tracks, setTracks] = useState<MusicTrack[]>([])
+  const [showMusicList, setShowMusicList] = useState(false)
   const [isSavingMusic, setIsSavingMusic] = useState(false)
   const musicInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -284,7 +285,7 @@ export default function Home() {
 
   useEffect(() => {
     getAllBooksFromIDB().then(setSavedBooks)
-    getMusicMeta().then(setMusicMeta)
+    listTracks().then(setTracks)
     setReviewDue(reviewStorage.stats().due)
     setExtDoneToday(alreadyGeneratedToday())
   }, [])
@@ -474,27 +475,26 @@ export default function Home() {
   }
 
   const handleMusicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|m4a|aac|ogg|flac|wav)$/i)) {
-      alert('請上傳音頻文件（MP3、AAC、OGG 等）')
-      return
-    }
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const valid = files.filter(f => f.type.startsWith('audio/') || /\.(mp3|m4a|aac|ogg|flac|wav)$/i.test(f.name))
+    if (valid.length === 0) { alert('請上傳音頻文件（MP3、AAC、OGG 等）'); return }
     setIsSavingMusic(true)
     try {
-      await saveMusicToIDB(file)
-      const meta = await getMusicMeta()
-      setMusicMeta(meta)
+      for (const f of valid) await addTrack(f)
+      setTracks(await listTracks())
+      setShowMusicList(true)
     } finally {
       setIsSavingMusic(false)
       if (musicInputRef.current) musicInputRef.current.value = ''
     }
   }
 
-  const handleDeleteMusic = async () => {
-    await deleteMusicFromIDB()
-    setMusicMeta(null)
-    localStorage.removeItem('reader-music-enabled')
+  const handleDeleteTrack = async (id: string) => {
+    await deleteTrack(id)
+    const next = await listTracks()
+    setTracks(next)
+    if (next.length === 0) localStorage.removeItem('reader-music-enabled')
   }
 
   // 儲存 Vision OCR 設定到 localStorage
@@ -680,30 +680,22 @@ export default function Home() {
               <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
 
-              {/* 🎵 背景音樂管理 */}
+              {/* 🎵 背景音樂管理（多首播放清單） */}
               <div className="relative">
-                {musicMeta ? (
-                  <div className="flex items-center gap-1">
-                    <div
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium"
-                      title={musicMeta.name}
-                    >
-                      <span>🎵</span>
-                      <span className="hidden sm:inline max-w-[120px] truncate">{musicMeta.name.replace(/\.[^.]+$/, '')}</span>
-                    </div>
-                    <button
-                      onClick={handleDeleteMusic}
-                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-50 rounded-full transition-colors"
-                      title="移除背景音樂"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                {tracks.length > 0 ? (
+                  <button
+                    onClick={() => setShowMusicList(v => !v)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition-colors"
+                    title="管理背景音樂清單"
+                  >
+                    {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
+                    <span className="hidden sm:inline">背景音樂 · {tracks.length}</span>
+                  </button>
                 ) : (
                   <label
                     htmlFor="music-upload"
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-500 cursor-pointer transition-colors hover:bg-gray-50 ${isSavingMusic ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="上傳閱讀背景音樂"
+                    title="上傳閱讀背景音樂（可多選）"
                   >
                     {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
                     <span className="hidden sm:inline">{isSavingMusic ? '存儲中...' : '背景音樂'}</span>
@@ -714,10 +706,41 @@ export default function Home() {
                   ref={musicInputRef}
                   type="file"
                   accept="audio/*,.mp3,.m4a,.aac,.ogg,.flac,.wav"
+                  multiple
                   className="hidden"
                   onChange={handleMusicUpload}
                   disabled={isSavingMusic}
                 />
+                {/* 播放清單下拉 */}
+                {showMusicList && tracks.length > 0 && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowMusicList(false)} />
+                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-2">
+                      <div className="flex items-center justify-between px-2 py-1.5">
+                        <span className="text-xs font-semibold text-gray-500">播放清單 · {tracks.length} 首</span>
+                        <label htmlFor="music-upload" className="text-xs font-medium text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-1">
+                          <Plus className="w-3 h-3" /> 加歌
+                        </label>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                        {tracks.map((t, i) => (
+                          <div key={t.id} className="group flex items-center gap-2 px-2 py-2">
+                            <span className="text-[11px] text-gray-300 w-4 flex-shrink-0 tabular-nums">{i + 1}</span>
+                            <span className="text-sm text-gray-700 truncate flex-1" title={t.name}>{t.name.replace(/\.[^.]+$/, '')}</span>
+                            <button
+                              onClick={() => handleDeleteTrack(t.id)}
+                              className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                              title="移除呢首歌"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-gray-400 px-2 py-1.5">閱讀時會循環播放整個清單，可按上一首／下一首。</p>
+                    </div>
+                  </>
+                )}
               </div>
               <label
                 htmlFor="file-upload"
