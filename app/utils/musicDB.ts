@@ -18,6 +18,23 @@ export interface MusicMeta {
 
 export interface MusicTrack extends MusicMeta {
   id: string
+  kind?: 'file' | 'youtube'   // 預設 file（舊資料無此欄位＝file）
+  youtubeId?: string          // kind==='youtube' 時的影片 ID
+}
+
+// 由各種 YouTube 連結格式抽出影片 ID
+export function parseYouTubeId(url: string): string | null {
+  const s = url.trim()
+  const patterns = [
+    /(?:youtube\.com\/watch\?[^ ]*v=)([\w-]{11})/,
+    /(?:youtu\.be\/)([\w-]{11})/,
+    /(?:youtube\.com\/embed\/)([\w-]{11})/,
+    /(?:youtube\.com\/shorts\/)([\w-]{11})/,
+    /(?:music\.youtube\.com\/watch\?[^ ]*v=)([\w-]{11})/,
+  ]
+  for (const p of patterns) { const m = s.match(p); if (m) return m[1] }
+  if (/^[\w-]{11}$/.test(s)) return s   // 直接畀 ID
+  return null
 }
 
 function openMusicDB(): Promise<IDBDatabase> {
@@ -80,7 +97,7 @@ export async function listTracks(): Promise<MusicTrack[]> {
   } catch { return [] }
 }
 
-// 新增一首歌，回傳新 track
+// 新增一首歌（上傳檔案），回傳新 track
 export async function addTrack(file: File): Promise<MusicTrack> {
   const db = await openMusicDB()
   const blob = new Blob([await file.arrayBuffer()], { type: file.type })
@@ -91,12 +108,38 @@ export async function addTrack(file: File): Promise<MusicTrack> {
     type: file.type,
     size: file.size,
     savedAt: Date.now(),
+    kind: 'file',
   }
   const next = [...list, track]
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
     store.put(blob, BLOB_PREFIX + track.id)
+    store.put(next, LIST_KEY)
+    tx.oncomplete = () => resolve(track)
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+// 新增一條 YouTube 連結（唔存 Blob，只記影片 ID）
+export async function addYouTubeTrack(url: string, name?: string): Promise<MusicTrack> {
+  const id = parseYouTubeId(url)
+  if (!id) throw new Error('唔係有效嘅 YouTube 連結')
+  const db = await openMusicDB()
+  const list = (await get<MusicTrack[]>(db, LIST_KEY)) || []
+  const track: MusicTrack = {
+    id: newId(),
+    name: name?.trim() || `YouTube ${id}`,
+    type: 'youtube',
+    size: 0,
+    savedAt: Date.now(),
+    kind: 'youtube',
+    youtubeId: id,
+  }
+  const next = [...list, track]
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
     store.put(next, LIST_KEY)
     tx.oncomplete = () => resolve(track)
     tx.onerror = () => reject(tx.error)

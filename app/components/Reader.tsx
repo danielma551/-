@@ -166,11 +166,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [hasMusicFile, setHasMusicFile] = useState(false)
   const [musicCurrentTime, setMusicCurrentTime] = useState(0)
   const [musicDuration, setMusicDuration] = useState(0)
-  // 播放清單
+  // 播放清單（支援上傳檔案 + YouTube）
   const trackListRef = useRef<import('../utils/musicDB').MusicTrack[]>([])
   const trackIdxRef = useRef(0)
   const [trackName, setTrackName] = useState('')
   const [trackCount, setTrackCount] = useState(0)
+  const ytPlayerRef = useRef<any>(null)              // YouTube IFrame 播放器
+  const currentKindRef = useRef<'file' | 'youtube'>('file')
+  const musicVolumeRef = useRef(0.4)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -408,14 +411,55 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 背景音樂：載入 IDB，自動播放，unmount 時停止並釋放 URL
   useEffect(() => {
     let cancelled = false
+    let ytPollTimer: ReturnType<typeof setInterval> | null = null
     const audio = new Audio()
     audio.volume = parseFloat(localStorage.getItem('reader-music-volume') ?? '0.4')
+    musicVolumeRef.current = audio.volume
     audioRef.current = audio
     audio.addEventListener('timeupdate', () => setMusicCurrentTime(audio.currentTime))
     audio.addEventListener('durationchange', () => setMusicDuration(audio.duration || 0))
     audio.addEventListener('loadedmetadata', () => setMusicDuration(audio.duration || 0))
-    // 一首播完 → 自動下一首（清單循環）
     audio.addEventListener('ended', () => { loadTrack(trackIdxRef.current + 1, true) })
+
+    // 載入 YouTube IFrame API（只載一次）
+    const ensureYT = (): Promise<void> => new Promise(resolve => {
+      const w = window as any
+      if (w.YT && w.YT.Player) { resolve(); return }
+      if (!document.getElementById('yt-iframe-api')) {
+        const tag = document.createElement('script')
+        tag.id = 'yt-iframe-api'
+        tag.src = 'https://www.youtube.com/iframe_api'
+        document.body.appendChild(tag)
+      }
+      const iv = setInterval(() => { if (w.YT && w.YT.Player) { clearInterval(iv); resolve() } }, 150)
+    })
+    const createYT = (): Promise<void> => new Promise(async resolve => {
+      await ensureYT()
+      if (cancelled) { resolve(); return }
+      const w = window as any
+      ytPlayerRef.current = new w.YT.Player('msw-yt-player', {
+        height: '1', width: '1',
+        playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1 },
+        events: {
+          onReady: () => resolve(),
+          onStateChange: (e: any) => {
+            if (e.data === w.YT.PlayerState.ENDED) {
+              const list = trackListRef.current
+              if (list.length === 1) { ytPlayerRef.current?.seekTo(0); ytPlayerRef.current?.playVideo() }
+              else loadTrack(trackIdxRef.current + 1, true)
+            }
+          },
+        },
+      })
+    })
+    const startYtPoll = () => {
+      if (ytPollTimer) clearInterval(ytPollTimer)
+      ytPollTimer = setInterval(() => {
+        const p = ytPlayerRef.current
+        if (p && p.getCurrentTime) { setMusicCurrentTime(p.getCurrentTime() || 0); setMusicDuration(p.getDuration() || 0) }
+      }, 500)
+    }
+    const stopYtPoll = () => { if (ytPollTimer) { clearInterval(ytPollTimer); ytPollTimer = null } }
 
     // 載入第 i 首（會 wrap），autoplay=係咪即刻播
     const loadTrack = async (i: number, autoplay: boolean) => {
@@ -424,14 +468,28 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       const idx = ((i % list.length) + list.length) % list.length
       trackIdxRef.current = idx
       const t = list[idx]
-      const url = await getTrackObjectURL(t.id)
-      if (cancelled || !url) return
-      if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current)
-      musicUrlRef.current = url
-      audio.src = url
-      audio.loop = list.length === 1   // 只有一首就循環單曲
       setTrackName(t.name.replace(/\.[^.]+$/, ''))
-      if (autoplay) audio.play().catch(() => {})
+      if (t.kind === 'youtube' && t.youtubeId) {
+        currentKindRef.current = 'youtube'
+        audio.pause()
+        if (!ytPlayerRef.current) await createYT()
+        if (cancelled || !ytPlayerRef.current) return
+        try { ytPlayerRef.current.setVolume(Math.round(musicVolumeRef.current * 100)) } catch {}
+        if (autoplay) ytPlayerRef.current.loadVideoById(t.youtubeId)
+        else ytPlayerRef.current.cueVideoById?.(t.youtubeId)
+        startYtPoll()
+      } else {
+        currentKindRef.current = 'file'
+        stopYtPoll()
+        try { ytPlayerRef.current?.pauseVideo?.() } catch {}
+        const url = await getTrackObjectURL(t.id)
+        if (cancelled || !url) return
+        if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current)
+        musicUrlRef.current = url
+        audio.src = url
+        audio.loop = list.length === 1
+        if (autoplay) audio.play().catch(() => {})
+      }
     }
     loadTrackRef.current = loadTrack
 
@@ -445,8 +503,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     })
     return () => {
       cancelled = true
+      stopYtPoll()
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
       if (musicUrlRef.current) { URL.revokeObjectURL(musicUrlRef.current); musicUrlRef.current = null }
+      try { ytPlayerRef.current?.destroy?.() } catch {}
+      ytPlayerRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -458,20 +519,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     loadTrackRef.current?.(trackIdxRef.current + d, true)
   }
 
-  // 音樂開關與音量同步到 Audio 元素
+  // 音樂開關：按當前音源（檔案／YouTube）播放或暫停
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (musicEnabled) {
-      audio.play().catch(() => {})
+    if (currentKindRef.current === 'youtube') {
+      const p = ytPlayerRef.current
+      try { if (musicEnabled) p?.playVideo?.(); else p?.pauseVideo?.() } catch {}
     } else {
-      audio.pause()
+      const audio = audioRef.current
+      if (audio) { if (musicEnabled) audio.play().catch(() => {}); else audio.pause() }
     }
     localStorage.setItem('reader-music-enabled', String(musicEnabled))
   }, [musicEnabled])
 
+  // 音量：同步到 Audio 同 YouTube 播放器
   useEffect(() => {
+    musicVolumeRef.current = musicVolume
     if (audioRef.current) audioRef.current.volume = musicVolume
+    try { ytPlayerRef.current?.setVolume?.(Math.round(musicVolume * 100)) } catch {}
     localStorage.setItem('reader-music-volume', String(musicVolume))
   }, [musicVolume])
 
@@ -1540,6 +1604,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         animation: isEink ? undefined : 'reader-in 340ms cubic-bezier(0.23,1,0.32,1) both',
       }}
     >
+      {/* 隱藏嘅 YouTube 背景音樂播放器（只作聲音用途） */}
+      <div id="msw-yt-player" style={{ position: 'fixed', width: 1, height: 1, left: -9999, top: -9999, pointerEvents: 'none', opacity: 0 }} />
+
       {/* 章節目錄抽屜（非墨水屏模式，有 chapters 才顯示）*/}
       {!isEink && showToc && chapters && chapters.length > 0 && (
         <>

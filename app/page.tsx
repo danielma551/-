@@ -25,7 +25,7 @@ import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData, reviewStorage } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 import { parseEpubClientSide } from './utils/epubParser'
-import { addTrack, listTracks, deleteTrack, MusicTrack } from './utils/musicDB'
+import { addTrack, addYouTubeTrack, listTracks, deleteTrack, MusicTrack } from './utils/musicDB'
 import CharacterGraph from './components/CharacterGraph'
 import NotesPanel from './components/NotesPanel'
 import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
@@ -497,6 +497,20 @@ export default function Home() {
     if (next.length === 0) localStorage.removeItem('reader-music-enabled')
   }
 
+  const [ytInput, setYtInput] = useState('')
+  const [ytErr, setYtErr] = useState('')
+  const handleAddYouTube = async () => {
+    const url = ytInput.trim()
+    if (!url) return
+    try {
+      await addYouTubeTrack(url)
+      setYtInput(''); setYtErr('')
+      setTracks(await listTracks())
+    } catch {
+      setYtErr('唔係有效嘅 YouTube 連結')
+    }
+  }
+
   // 儲存 Vision OCR 設定到 localStorage
   const saveVisionSettings = () => {
     localStorage.setItem('vision-ocr-provider', visionProvider)
@@ -680,27 +694,16 @@ export default function Home() {
               <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
 
-              {/* 🎵 背景音樂管理（多首播放清單） */}
+              {/* 🎵 背景音樂管理（上傳檔案 + YouTube 連結，多首播放清單） */}
               <div className="relative">
-                {tracks.length > 0 ? (
-                  <button
-                    onClick={() => setShowMusicList(v => !v)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition-colors"
-                    title="管理背景音樂清單"
-                  >
-                    {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
-                    <span className="hidden sm:inline">背景音樂 · {tracks.length}</span>
-                  </button>
-                ) : (
-                  <label
-                    htmlFor="music-upload"
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-500 cursor-pointer transition-colors hover:bg-gray-50 ${isSavingMusic ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="上傳閱讀背景音樂（可多選）"
-                  >
-                    {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
-                    <span className="hidden sm:inline">{isSavingMusic ? '存儲中...' : '背景音樂'}</span>
-                  </label>
-                )}
+                <button
+                  onClick={() => setShowMusicList(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full border text-sm font-medium transition-colors ${tracks.length > 0 ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}
+                  title="背景音樂：上傳檔案或加 YouTube 連結"
+                >
+                  {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
+                  <span className="hidden sm:inline">{isSavingMusic ? '存儲中...' : (tracks.length > 0 ? `背景音樂 · ${tracks.length}` : '背景音樂')}</span>
+                </button>
                 <input
                   id="music-upload"
                   ref={musicInputRef}
@@ -711,21 +714,43 @@ export default function Home() {
                   onChange={handleMusicUpload}
                   disabled={isSavingMusic}
                 />
-                {/* 播放清單下拉 */}
-                {showMusicList && tracks.length > 0 && (
+                {/* 播放清單面板 */}
+                {showMusicList && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setShowMusicList(false)} />
-                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-2">
-                      <div className="flex items-center justify-between px-2 py-1.5">
-                        <span className="text-xs font-semibold text-gray-500">播放清單 · {tracks.length} 首</span>
-                        <label htmlFor="music-upload" className="text-xs font-medium text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-1">
-                          <Plus className="w-3 h-3" /> 加歌
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-3">
+                      {/* 加音源 */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <label htmlFor="music-upload" className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
+                          <Plus className="w-3.5 h-3.5" /> 上傳檔案
                         </label>
                       </div>
-                      <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                      {/* YouTube 連結 */}
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <input
+                          value={ytInput}
+                          onChange={e => { setYtInput(e.target.value); setYtErr('') }}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddYouTube() }}
+                          placeholder="貼 YouTube 連結…"
+                          className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:border-purple-400"
+                        />
+                        <button
+                          onClick={handleAddYouTube}
+                          disabled={!ytInput.trim()}
+                          className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 disabled:opacity-40"
+                        >
+                          加入
+                        </button>
+                      </div>
+                      {ytErr && <p className="text-[11px] text-red-500 px-1 mb-1">{ytErr}</p>}
+
+                      {/* 清單 */}
+                      <div className="max-h-64 overflow-y-auto divide-y divide-gray-50 mt-2">
+                        {tracks.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">仲未有歌，上面加入啦 🎵</p>}
                         {tracks.map((t, i) => (
-                          <div key={t.id} className="group flex items-center gap-2 px-2 py-2">
+                          <div key={t.id} className="group flex items-center gap-2 px-1 py-2">
                             <span className="text-[11px] text-gray-300 w-4 flex-shrink-0 tabular-nums">{i + 1}</span>
+                            <span className="flex-shrink-0">{t.kind === 'youtube' ? '▶️' : '🎵'}</span>
                             <span className="text-sm text-gray-700 truncate flex-1" title={t.name}>{t.name.replace(/\.[^.]+$/, '')}</span>
                             <button
                               onClick={() => handleDeleteTrack(t.id)}
@@ -737,7 +762,7 @@ export default function Home() {
                           </div>
                         ))}
                       </div>
-                      <p className="text-[11px] text-gray-400 px-2 py-1.5">閱讀時會循環播放整個清單，可按上一首／下一首。</p>
+                      <p className="text-[11px] text-gray-400 px-1 py-1.5">閱讀時循環播放整個清單，可按上一首／下一首。YouTube 自動播可能要撳一下播放掣先開始。</p>
                     </div>
                   </>
                 )}
