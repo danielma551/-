@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
-import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage } from '../utils/storage'
+import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 
@@ -103,6 +103,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         reviewNotes: reviewStorage.getAll(),
         reviewSession: reviewStorage.getSession(),   // 今日温習進度（跨裝置：知道今日已温習）
         reviewHeat: reviewStorage.getHeat(),         // 温習熱圖（每日張數）
+        bookReadDays: bookReadingStorage.getAll(),   // 每本書閱讀日
       }
       const manifestStr = JSON.stringify(manifest)
       const fp = fastHash(manifestStr)
@@ -222,6 +223,10 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       // 合併温習熱圖（每日取較大值）
       if (data.reviewHeat) {
         reviewStorage.mergeHeat(data.reviewHeat)
+      }
+      // 合併每本書閱讀日（每日取較大值）
+      if (data.bookReadDays) {
+        bookReadingStorage.merge(data.bookReadDays)
       }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')

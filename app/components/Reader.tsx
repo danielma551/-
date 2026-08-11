@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network, SkipBack, SkipForward } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, bookReadingStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
@@ -1042,6 +1042,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (next !== -1) {
       vibrate(displaySettings.vibrationIntensity)
       historyStorage.recordRead(1)
+      bookReadingStorage.recordRead(bookId, 1)
       // 📅 每日挑戰：讀句進度
       if (!einkMode) {
         const ch = updateDailyChallenge('read_sentences', 1)

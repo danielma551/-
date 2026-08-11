@@ -17,6 +17,7 @@ import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
 import ReadingHeatmap from './components/ReadingHeatmap'
 import ReviewHeatmap from './components/ReviewHeatmap'
+import BookCalendar from './components/BookCalendar'
 import SpeedChart from './components/SpeedChart'
 import FeedPanel from './components/FeedPanel'
 import GamifyBar from './components/GamifyBar'
@@ -248,6 +249,8 @@ export default function Home() {
   const [appendingBookId, setAppendingBookId] = useState<string | null>(null)
   // 人物關係圖
   const [graphBook, setGraphBook] = useState<BookData | null>(null)
+  // 單本書閱讀日曆
+  const [calendarBook, setCalendarBook] = useState<{ id: string; title: string } | null>(null)
   // 每日温習
   const [showReview, setShowReview] = useState(false)
   const [reviewDue, setReviewDue] = useState(0)
@@ -658,6 +661,11 @@ export default function Home() {
       {/* 每日温習卡片 */}
       {showReview && (
         <NotesPanel onClose={() => { setShowReview(false); setReviewDue(reviewStorage.stats().due) }} />
+      )}
+
+      {/* 單本書閱讀日曆 */}
+      {calendarBook && (
+        <BookCalendar bookId={calendarBook.id} bookTitle={calendarBook.title} onClose={() => setCalendarBook(null)} />
       )}
 
       {sentences.length === 0 ? (
@@ -1078,13 +1086,22 @@ export default function Home() {
                         </p>
                       )}
                     </div>
-                    {/* 人物關係圖入口 */}
-                    <button
-                      onClick={e => { e.stopPropagation(); setGraphBook(book) }}
-                      className="mt-1.5 w-full text-[10px] text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded px-1.5 py-0.5 transition-colors text-left"
-                    >
-                      🎭 人物關係圖
-                    </button>
+                    {/* 人物關係圖 + 閱讀日曆入口 */}
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <button
+                        onClick={e => { e.stopPropagation(); setGraphBook(book) }}
+                        className="flex-1 text-[10px] text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded px-1.5 py-0.5 transition-colors text-left"
+                      >
+                        🎭 人物關係圖
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); setCalendarBook({ id: book.id, title: book.title }) }}
+                        className="text-[10px] text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded px-1.5 py-0.5 transition-colors flex-shrink-0"
+                        title="呢本書嘅閱讀日曆"
+                      >
+                        📅 日曆
+                      </button>
+                    </div>
                   </div>
                 )
               })}

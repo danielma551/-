@@ -768,6 +768,60 @@ export const historyStorage = {
   }
 }
 
+// ── 每本書閱讀日記錄（邊一日有睇過呢本書，睇咗幾句）──
+// 格式：{ [bookId]: { "YYYY-MM-DD": 句數 } }
+const BOOK_READ_DAYS_KEY = 'book-reading-days'
+export type BookReadDays = Record<string, Record<string, number>>
+
+export const bookReadingStorage = {
+  getAll(): BookReadDays {
+    if (typeof window === 'undefined') return {}
+    try { return JSON.parse(localStorage.getItem(BOOK_READ_DAYS_KEY) || '{}') } catch { return {} }
+  },
+  saveAll(map: BookReadDays): void {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(BOOK_READ_DAYS_KEY, JSON.stringify(map)) } catch { /* 配額滿略過 */ }
+  },
+  // 記錄今日又睇咗某本書幾句（累加）
+  recordRead(bookId: string, count: number): void {
+    if (!bookId) return
+    const map = this.getAll()
+    const today = new Date().toLocaleDateString('en-CA')
+    const days = map[bookId] || (map[bookId] = {})
+    days[today] = (days[today] || 0) + count
+    this.saveAll(map)
+  },
+  // 某本書每日句數 { date: count }
+  getBookDays(bookId: string): Record<string, number> {
+    return this.getAll()[bookId] || {}
+  },
+  // 某本書統計：總天數、連續天數（去到今日／尋日為止）
+  getStats(bookId: string): { totalDays: number; streak: number; firstDate?: string } {
+    const days = this.getBookDays(bookId)
+    const dates = Object.keys(days).filter(d => (days[d] || 0) > 0).sort()
+    const totalDays = dates.length
+    // 連續天數：由今日往前數，容許今日未讀（由尋日起計）
+    const set = new Set(dates)
+    let streak = 0
+    const d = new Date()
+    if (!set.has(d.toLocaleDateString('en-CA'))) d.setDate(d.getDate() - 1)  // 今日未讀就由尋日起
+    while (set.has(d.toLocaleDateString('en-CA'))) { streak++; d.setDate(d.getDate() - 1) }
+    return { totalDays, streak, firstDate: dates[0] }
+  },
+  // 跨裝置合併：每日取較大值
+  merge(remote: BookReadDays | undefined | null): void {
+    if (!remote) return
+    const map = this.getAll()
+    for (const [bid, days] of Object.entries(remote)) {
+      const local = map[bid] || (map[bid] = {})
+      for (const [d, c] of Object.entries(days)) {
+        if (typeof c === 'number' && c > (local[d] || 0)) local[d] = c
+      }
+    }
+    this.saveAll(map)
+  },
+}
+
 // ── 閱讀速度記錄 ──
 export interface SpeedRecord {
   date: string      // 'YYYY-MM-DD'
