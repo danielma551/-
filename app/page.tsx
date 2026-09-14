@@ -677,6 +677,15 @@ export default function Home() {
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
             <div className="flex items-center space-x-3">
+              {/* 打電話賺錢 */}
+              <a
+                href="/work"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-sm font-medium transition-colors"
+                title="打電話賺錢：把打電話 confirm payment 金錢化"
+              >
+                <span>💰</span>
+                <span className="hidden sm:inline">打電話賺錢</span>
+              </a>
               {/* 每日外刊按鈕 */}
               <button
                 onClick={handleDailyExternal}
