@@ -686,6 +686,15 @@ export default function Home() {
                 <span>💰</span>
                 <span className="hidden sm:inline">打電話賺錢</span>
               </a>
+              {/* 音頻轉文字 */}
+              <a
+                href="/transcribe"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium transition-colors"
+                title="音頻轉文字：Whisper 本機轉錄（免費、免 key）"
+              >
+                <span>🎙️</span>
+                <span className="hidden sm:inline">音頻轉文字</span>
+              </a>
               {/* 每日外刊按鈕 */}
               <button
                 onClick={handleDailyExternal}
