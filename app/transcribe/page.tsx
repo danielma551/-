@@ -40,12 +40,23 @@ export default function TranscribePage() {
   const [elapsed, setElapsed] = useState(0)       // 轉錄已用時（秒）
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pipeRef = useRef<{ id: string; fn: any } | null>(null)
+  const modRef = useRef<any>(null)   // transformers.js 模組（用 read_audio 解碼）
   const fileRef = useRef<HTMLInputElement>(null)
 
   const fmt = (s: number) => { const m = Math.floor(s / 60); const x = Math.floor(s % 60); return `${m}:${String(x).padStart(2, '0')}` }
 
   // 解碼音頻 → 單聲道 16kHz Float32Array（Whisper 要求）
+  // 優先用 transformers.js 內建 read_audio（直接 16kHz 解碼，穩陣）；失敗才手動 OfflineAudioContext
   const decodeAudio = async (file: File): Promise<{ data: Float32Array; duration: number }> => {
+    const mod = modRef.current
+    if (mod?.read_audio) {
+      const url = URL.createObjectURL(file)
+      try {
+        const data: Float32Array = await mod.read_audio(url, 16000)
+        return { data, duration: data.length / 16000 }
+      } finally { URL.revokeObjectURL(url) }
+    }
+    // 後備：手動解碼 + 重採樣
     const buf = await file.arrayBuffer()
     const AC = (window.AudioContext || (window as any).webkitAudioContext)
     const ctx = new AC()
@@ -66,6 +77,7 @@ export default function TranscribePage() {
     if (pipeRef.current && pipeRef.current.id === model) return pipeRef.current.fn
     setPhase('loadingModel'); setStatusMsg('載入模型中（首次要下載，有快取）…'); setProgress(0)
     const mod: any = await import(/* webpackIgnore: true */ TRANSFORMERS_URL)
+    modRef.current = mod
     mod.env.allowLocalModels = false
     mod.env.useBrowserCache = true
     const fn = await mod.pipeline('automatic-speech-recognition', model, {
