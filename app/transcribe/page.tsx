@@ -4,7 +4,7 @@
 // 完全免費、開源、唔使 API key、唔上傳伺服器（私隱好），支援中英混合。
 // 首次要下載模型（有快取），長音頻會慢啲。
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Upload, Loader2, Copy, Download, FileAudio, Plus } from 'lucide-react'
 import { reviewStorage } from '../utils/storage'
 
@@ -39,94 +39,125 @@ export default function TranscribePage() {
   const [chunkTotal, setChunkTotal] = useState(0) // 估計總段數
   const [elapsed, setElapsed] = useState(0)       // 轉錄已用時（秒）
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const pipeRef = useRef<{ id: string; fn: any } | null>(null)
-  const modRef = useRef<any>(null)   // transformers.js 模組（用 read_audio 解碼）
+  const workerRef = useRef<Worker | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const fmt = (s: number) => { const m = Math.floor(s / 60); const x = Math.floor(s % 60); return `${m}:${String(x).padStart(2, '0')}` }
 
-  // 解碼音頻 → 單聲道 16kHz Float32Array（Whisper 要求）
-  // 優先用 transformers.js 內建 read_audio（直接 16kHz 解碼，穩陣）；失敗才手動 OfflineAudioContext
+  const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }
+
+  useEffect(() => () => { stopTimer(); workerRef.current?.terminate() }, [])
+
+  // 主線程解碼 → 單聲道 16kHz Float32Array（Whisper 要求）；推理喺 Worker 做，唔阻塞畫面
   const decodeAudio = async (file: File): Promise<{ data: Float32Array; duration: number }> => {
-    const mod = modRef.current
-    if (mod?.read_audio) {
-      const url = URL.createObjectURL(file)
-      try {
-        const data: Float32Array = await mod.read_audio(url, 16000)
-        return { data, duration: data.length / 16000 }
-      } finally { URL.revokeObjectURL(url) }
-    }
-    // 後備：手動解碼 + 重採樣
     const buf = await file.arrayBuffer()
     const AC = (window.AudioContext || (window as any).webkitAudioContext)
-    const ctx = new AC()
+    // 直接用 16kHz context 解碼 → 免另外重採樣（大部分瀏覽器支援）
+    let ctx: AudioContext
+    try { ctx = new AC({ sampleRate: 16000 }) } catch { ctx = new AC() }
     const decoded = await ctx.decodeAudioData(buf)
-    const duration = decoded.duration
+    const srcRate = ctx.sampleRate || decoded.sampleRate
     ctx.close()
-    const rate = 16000
-    const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(duration * rate)), rate)
-    const src = offline.createBufferSource()
-    src.buffer = decoded
-    src.connect(offline.destination)
-    src.start()
-    const rendered = await offline.startRendering()
-    return { data: rendered.getChannelData(0), duration }
+    // 混成單聲道
+    let mono: Float32Array
+    if (decoded.numberOfChannels === 1) {
+      mono = decoded.getChannelData(0).slice()
+    } else {
+      const L = decoded.getChannelData(0), R = decoded.getChannelData(1)
+      mono = new Float32Array(L.length)
+      for (let i = 0; i < L.length; i++) mono[i] = (L[i] + R[i]) / 2
+    }
+    // 若唔係 16kHz（後備 context），做線性重採樣
+    let data = mono
+    if (srcRate !== 16000) {
+      const ratio = 16000 / srcRate
+      const outLen = Math.round(mono.length * ratio)
+      data = new Float32Array(outLen)
+      for (let i = 0; i < outLen; i++) {
+        const pos = i / ratio
+        const i0 = Math.floor(pos), i1 = Math.min(i0 + 1, mono.length - 1)
+        const f = pos - i0
+        data[i] = mono[i0] * (1 - f) + mono[i1] * f
+      }
+    }
+    return { data, duration: data.length / 16000 }
   }
 
-  const getPipeline = async () => {
-    if (pipeRef.current && pipeRef.current.id === model) return pipeRef.current.fn
-    setPhase('loadingModel'); setStatusMsg('載入模型中（首次要下載，有快取）…'); setProgress(0)
-    const mod: any = await import(/* webpackIgnore: true */ TRANSFORMERS_URL)
-    modRef.current = mod
-    mod.env.allowLocalModels = false
-    mod.env.useBrowserCache = true
-    const fn = await mod.pipeline('automatic-speech-recognition', model, {
-      progress_callback: (p: any) => {
-        if (p.status === 'progress' && typeof p.progress === 'number') setProgress(Math.round(p.progress))
-      },
-    })
-    pipeRef.current = { id: model, fn }
-    return fn
+  // 建立 Worker（背景線程行 transformers.js 推理）
+  const ensureWorker = (): Worker => {
+    if (workerRef.current) return workerRef.current
+    const code = `
+      import { pipeline, env } from '${TRANSFORMERS_URL}';
+      env.allowLocalModels = false; env.useBrowserCache = true;
+      let transcriber = null, curModel = null;
+      self.onmessage = async (e) => {
+        const { model, audio, lang } = e.data;
+        try {
+          if (!transcriber || curModel !== model) {
+            self.postMessage({ type: 'phase', phase: 'loadingModel' });
+            transcriber = await pipeline('automatic-speech-recognition', model, {
+              progress_callback: (p) => { if (p.status === 'progress' && typeof p.progress === 'number') self.postMessage({ type: 'dl', progress: Math.round(p.progress) }); }
+            });
+            curModel = model;
+          }
+          self.postMessage({ type: 'phase', phase: 'transcribing' });
+          const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', chunk_callback: () => self.postMessage({ type: 'chunk' }) };
+          if (lang !== 'auto') opts.language = lang;
+          const out = await transcriber(audio, opts);
+          const txt = Array.isArray(out) ? out.map(o => o.text).join('') : out.text;
+          self.postMessage({ type: 'done', text: (txt || '').trim() });
+        } catch (err) {
+          self.postMessage({ type: 'error', message: String((err && err.message) || err) });
+        }
+      };
+    `
+    const blob = new Blob([code], { type: 'text/javascript' })
+    const w = new Worker(URL.createObjectURL(blob), { type: 'module' })
+    w.onmessage = (e: MessageEvent) => {
+      const d = e.data
+      if (d.type === 'phase') {
+        setPhase(d.phase)
+        if (d.phase === 'transcribing') {
+          const t0 = Date.now()
+          stopTimer()
+          timerRef.current = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500)
+        }
+      } else if (d.type === 'dl') {
+        setProgress(d.progress)
+      } else if (d.type === 'chunk') {
+        setChunkDone(n => n + 1)
+      } else if (d.type === 'done') {
+        stopTimer()
+        setText(d.text)
+        setPhase('done')
+      } else if (d.type === 'error') {
+        stopTimer()
+        setPhase('error')
+        setStatusMsg(d.message || '轉錄失敗，請換一個檔案或模型再試')
+      }
+    }
+    workerRef.current = w
+    return w
   }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setFileName(file.name); setText(''); setSaved(false)
+    setFileName(file.name); setText(''); setSaved(false); setStatusMsg('')
     setAudioDur(0); setChunkDone(0); setChunkTotal(0); setElapsed(0)
     try {
-      const transcriber = await getPipeline()
       setPhase('decoding')
       const { data: audio, duration } = await decodeAudio(file)
       setAudioDur(duration)
-      // 估計段數：chunk 30s、每邊 stride 5s → 每段有效前進約 20s
-      const total = Math.max(1, Math.ceil(duration / 20))
-      setChunkTotal(total)
-
-      setPhase('transcribing')
-      // 計時器：顯示已用時
-      const t0 = Date.now()
-      if (timerRef.current) clearInterval(timerRef.current)
-      timerRef.current = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500)
-
-      const opts: any = {
-        chunk_length_s: 30,
-        stride_length_s: 5,
-        task: 'transcribe',
-        // 每處理完一段就回呼一次 → 更新進度
-        chunk_callback: () => setChunkDone(n => n + 1),
-      }
-      if (lang !== 'auto') opts.language = lang
-      const out = await transcriber(audio, opts)
-      const result = (Array.isArray(out) ? out.map((o: any) => o.text).join('') : out.text) || ''
-      setText(result.trim())
-      setPhase('done'); setStatusMsg('')
+      setChunkTotal(Math.max(1, Math.ceil(duration / 20)))   // 每段有效前進約 20s
+      const worker = ensureWorker()
+      // 傳走 audio.buffer（轉移擁有權，零複製）
+      worker.postMessage({ model, audio, lang }, [audio.buffer])
     } catch (err) {
       console.error(err)
       setPhase('error')
-      setStatusMsg(err instanceof Error ? err.message : '轉錄失敗，請換一個檔案或模型再試')
+      setStatusMsg(err instanceof Error ? `解碼失敗：${err.message}` : '解碼失敗，請換一個音頻檔再試')
     } finally {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
       if (fileRef.current) fileRef.current.value = ''
     }
   }
