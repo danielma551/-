@@ -21,7 +21,8 @@ const LANGS = [
 ]
 
 // 用變數避免 webpack 靜態分析，直接由 CDN 動態載入 transformers.js
-const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2'
+// 用 /+esm 端點：正式 ESM 打包，模型類型（whisper 等）先會齊全註冊
+const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/+esm'
 
 export default function TranscribePage() {
   const [model, setModel] = useState(MODELS[0].id)
