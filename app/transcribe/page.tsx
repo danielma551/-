@@ -33,24 +33,33 @@ export default function TranscribePage() {
   const [text, setText] = useState('')
   const [fileName, setFileName] = useState('')
   const [saved, setSaved] = useState(false)
+  // 進度細節
+  const [audioDur, setAudioDur] = useState(0)     // 音頻長度（秒）
+  const [chunkDone, setChunkDone] = useState(0)   // 已處理段數
+  const [chunkTotal, setChunkTotal] = useState(0) // 估計總段數
+  const [elapsed, setElapsed] = useState(0)       // 轉錄已用時（秒）
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pipeRef = useRef<{ id: string; fn: any } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const fmt = (s: number) => { const m = Math.floor(s / 60); const x = Math.floor(s % 60); return `${m}:${String(x).padStart(2, '0')}` }
+
   // 解碼音頻 → 單聲道 16kHz Float32Array（Whisper 要求）
-  const decodeAudio = async (file: File): Promise<Float32Array> => {
+  const decodeAudio = async (file: File): Promise<{ data: Float32Array; duration: number }> => {
     const buf = await file.arrayBuffer()
     const AC = (window.AudioContext || (window as any).webkitAudioContext)
     const ctx = new AC()
     const decoded = await ctx.decodeAudioData(buf)
+    const duration = decoded.duration
     ctx.close()
     const rate = 16000
-    const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate)
+    const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(duration * rate)), rate)
     const src = offline.createBufferSource()
     src.buffer = decoded
     src.connect(offline.destination)
     src.start()
     const rendered = await offline.startRendering()
-    return rendered.getChannelData(0)
+    return { data: rendered.getChannelData(0), duration }
   }
 
   const getPipeline = async () => {
@@ -72,12 +81,29 @@ export default function TranscribePage() {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name); setText(''); setSaved(false)
+    setAudioDur(0); setChunkDone(0); setChunkTotal(0); setElapsed(0)
     try {
       const transcriber = await getPipeline()
-      setPhase('decoding'); setStatusMsg('解碼音頻中…')
-      const audio = await decodeAudio(file)
-      setPhase('transcribing'); setStatusMsg('轉錄中…（長音頻需要耐心）')
-      const opts: any = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe' }
+      setPhase('decoding')
+      const { data: audio, duration } = await decodeAudio(file)
+      setAudioDur(duration)
+      // 估計段數：chunk 30s、每邊 stride 5s → 每段有效前進約 20s
+      const total = Math.max(1, Math.ceil(duration / 20))
+      setChunkTotal(total)
+
+      setPhase('transcribing')
+      // 計時器：顯示已用時
+      const t0 = Date.now()
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500)
+
+      const opts: any = {
+        chunk_length_s: 30,
+        stride_length_s: 5,
+        task: 'transcribe',
+        // 每處理完一段就回呼一次 → 更新進度
+        chunk_callback: () => setChunkDone(n => n + 1),
+      }
       if (lang !== 'auto') opts.language = lang
       const out = await transcriber(audio, opts)
       const result = (Array.isArray(out) ? out.map((o: any) => o.text).join('') : out.text) || ''
@@ -88,9 +114,23 @@ export default function TranscribePage() {
       setPhase('error')
       setStatusMsg(err instanceof Error ? err.message : '轉錄失敗，請換一個檔案或模型再試')
     } finally {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
       if (fileRef.current) fileRef.current.value = ''
     }
   }
+
+  // 依階段組出即時進度文字
+  const liveLabel = (): string => {
+    if (phase === 'loadingModel') return `載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
+    if (phase === 'decoding') return '解碼音頻中…'
+    if (phase === 'transcribing') {
+      const dur = audioDur > 0 ? `音頻 ${fmt(audioDur)} · ` : ''
+      const seg = chunkTotal > 0 ? `第 ${Math.min(chunkDone + 1, chunkTotal)}/${chunkTotal} 段 · ` : ''
+      return `轉錄中… ${dur}${seg}已用 ${elapsed}s`
+    }
+    return ''
+  }
+  const transPct = chunkTotal > 0 ? Math.min(Math.round((chunkDone / chunkTotal) * 100), 99) : 0
 
   const busy = phase === 'loadingModel' || phase === 'decoding' || phase === 'transcribing'
 
@@ -143,10 +183,17 @@ export default function TranscribePage() {
             className="mt-4 w-full py-5 rounded-2xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 flex flex-col items-center gap-1.5 transition-colors"
           >
             {busy ? <Loader2 className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
-            <span className="text-sm font-medium">{busy ? statusMsg : '上傳音頻（MP3 / M4A / WAV / OGG…）'}</span>
+            <span className="text-sm font-medium">{busy ? liveLabel() : '上傳音頻（MP3 / M4A / WAV / OGG…）'}</span>
+            {/* 模型下載進度 */}
             {phase === 'loadingModel' && progress > 0 && (
-              <span className="w-40 h-1.5 bg-indigo-100 rounded-full overflow-hidden mt-1">
+              <span className="w-52 h-1.5 bg-indigo-100 rounded-full overflow-hidden mt-1">
                 <span className="block h-full bg-indigo-500 transition-all" style={{ width: `${progress}%` }} />
+              </span>
+            )}
+            {/* 轉錄進度 */}
+            {phase === 'transcribing' && chunkTotal > 0 && (
+              <span className="w-52 h-1.5 bg-indigo-100 rounded-full overflow-hidden mt-1">
+                <span className="block h-full bg-indigo-500 transition-all duration-300" style={{ width: `${transPct}%` }} />
               </span>
             )}
           </button>
