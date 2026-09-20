@@ -887,6 +887,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
           max_tokens: 300,
+          thinking: { type: 'disabled' },   // 關閉思考模式：直接答，避免推理食晒 token 令 content 變空
         }),
       })
       const data = await res.json()
@@ -948,6 +949,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
           max_tokens: 400,
+          thinking: { type: 'disabled' },   // 關閉思考模式：直接答，避免推理食晒 token 令 content 變空
         }),
       })
       const data = await res.json()

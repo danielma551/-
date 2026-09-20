@@ -296,6 +296,7 @@ export async function analyzeCharactersWithLLM(
       response_format: { type: 'json_object' },
       temperature: 0.2,
       max_tokens: 2048,
+      thinking: { type: 'disabled' },   // 關閉思考模式：直接輸出 JSON，避免推理食晒 token
     }),
   })
 

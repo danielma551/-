@@ -81,6 +81,7 @@ async function callDeepSeek(apiKey: string): Promise<RawArticle> {
       response_format: { type: 'json_object' },
       temperature: 0.85,
       max_tokens: 3200,
+      thinking: { type: 'disabled' },   // 關閉思考模式：直接輸出 JSON，避免推理食晒 token
     }),
   })
   const data = await res.json()
