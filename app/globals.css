@@ -222,19 +222,25 @@ button:active:not(:disabled) {
   }
 }
 
-/* ── 句子過場：向上浮現 ── */
+/* ── 句子過場：由下向上浮起 ── */
 @keyframes sentence-rise {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  0%   { opacity: 0; transform: translateY(34px); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0); }
 }
 .sentence-rise {
-  animation: sentence-rise var(--sentence-anim-speed, 280ms) cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: sentence-rise var(--sentence-anim-speed, 520ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 上一句：由正文位置輕輕升上去（好似字幕捲動） */
+@keyframes prev-float {
+  from { opacity: 0; transform: translateY(26px) scale(1.06); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.prev-float {
+  animation: prev-float 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .prev-float { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sentence-rise {

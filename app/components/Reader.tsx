@@ -1251,35 +1251,48 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPrev, bookId, currentIndex, sentences])
 
-  // 上一句：絕對定位喺當前句上方 → 當前句位置唔會跳；只顯示最多兩行（取句尾）
+  // 上一句：佔一個固定高度嘅格（喺標題同正文之間）→ 唔會疊住標題、正文位置唔會跳
+  // 最多兩行（取句尾）；揭頁時輕輕向上浮起（墨水屏冇動畫冇漸變）
+  const prevSlotActive = showPrev && bookId !== EXTERNAL_BOOK_ID && bookId !== REVIEW_BOOK_ID
   const renderPrevLine = (color: string, maxWidth?: string) => {
-    if (!prevSentence) return null
+    if (!prevSlotActive) return null
+    const fontPx = Math.max(14, Math.round(displaySettings.fontSize * 0.6))
+    const lineH = fontPx * 1.7
     return (
       <div
         aria-hidden
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: '100%',
-          marginBottom: Math.round(displaySettings.fontSize * 0.7),
+          width: '100%',
+          height: Math.round(lineH * 2),
+          marginBottom: Math.round(displaySettings.fontSize * 0.55),
           display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-          maxHeight: `${Math.max(14, Math.round(displaySettings.fontSize * 0.6)) * 1.7 * 2}px`,
           overflow: 'hidden',
           pointerEvents: 'none', userSelect: 'none',
-          // 墨水屏唔用漸變（避免殘影），其他模式頂部淡出
           WebkitMaskImage: isEink ? undefined : 'linear-gradient(to bottom, transparent, #000 45%)',
           maskImage: isEink ? undefined : 'linear-gradient(to bottom, transparent, #000 45%)',
         }}
       >
-        <p style={{
-          margin: '0 auto', maxWidth, textAlign: 'center', whiteSpace: 'pre-wrap',
-          fontFamily: textFontFamily,
-          fontSize: `${Math.max(14, Math.round(displaySettings.fontSize * 0.6))}px`,
-          lineHeight: 1.7,
-          letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
-          color,
-          opacity: isEink ? 1 : 0.42,
-        }}>
-          {prevSentence}
-        </p>
+        {prevSentence && (
+          <p
+            style={{
+              margin: '0 auto', maxWidth, width: '100%', textAlign: 'center', whiteSpace: 'pre-wrap',
+              fontFamily: textFontFamily,
+              fontSize: `${fontPx}px`,
+              lineHeight: 1.7,
+              letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
+              color,
+              opacity: isEink ? 1 : 0.42,
+            }}
+          >
+            <span
+              key={isEink ? undefined : `prev-${currentIndex}`}
+              className={isEink ? undefined : 'prev-float'}
+              style={{ display: 'block' }}
+            >
+              {prevSentence}
+            </span>
+          </p>
+        )}
       </div>
     )
   }
@@ -2780,9 +2793,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <div style={{ position: 'relative' }}>
                   {renderPrevLine(paperTheme.text)}
                   <p
+                    key={(displaySettings.animationStyle ?? 'rise') === 'rise' ? animKey : undefined}
+                    className={(displaySettings.animationStyle ?? 'rise') === 'rise' ? 'sentence-rise' : undefined}
                     onMouseUp={selectionDictLookup}
                     onTouchEnd={selectionDictLookup}
                     style={{
+                    '--sentence-anim-speed': `${({ slow: 750, normal: 520, fast: 300 } as const)[displaySettings.animationSpeed ?? 'normal']}ms`,
                     fontSize: `${displaySettings.fontSize}px`,
                     color: paperTheme.text,
                     textAlign: 'center',
@@ -2791,9 +2807,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     margin: 0,
                     fontFamily: textFontFamily,
                     whiteSpace: 'pre-wrap',
-                    opacity: fadeVisible ? 1 : 0,
-                    transition: fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out',
-                  }}>
+                    opacity: (displaySettings.animationStyle ?? 'rise') === 'rise' ? 1 : (fadeVisible ? 1 : 0),
+                    transition: (displaySettings.animationStyle ?? 'rise') === 'rise' ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
+                  } as React.CSSProperties}>
                     {renderSentenceContent()}
                   </p>
                   {/* 注釋按鈕（紙本模式） */}
@@ -2878,7 +2894,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             >
               {(() => {
                 const animStyle = displaySettings.animationStyle ?? 'rise'
-                const speedMs = { slow: 500, normal: 280, fast: 150 }[displaySettings.animationSpeed ?? 'normal']
+                const speedMs = { slow: 750, normal: 520, fast: 300 }[displaySettings.animationSpeed ?? 'normal']
                 const colMaxWidth = isEink ? undefined : ({
                   narrow: `${displaySettings.fontSize * 15}px`,
                   medium: `${displaySettings.fontSize * 22}px`,
@@ -2899,7 +2915,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <div className="relative w-full flex items-center justify-center">
+                <div className="relative w-full flex flex-col items-center justify-center">
                   {renderPrevLine(isEink ? '#666666' : displaySettings.textColor, extTwoCol ? undefined : colMaxWidth)}
                   <p
                     key={isEink ? undefined : (animStyle === 'rise' ? animKey : undefined)}
