@@ -12,6 +12,22 @@ import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Cop
 import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
+import { REVIEW_BOOK_ID } from '../utils/reviewBook'
+
+// 唔使同步嘅書（每日温習書係本機每日自動重建）
+const SKIP_SYNC = new Set<string>([REVIEW_BOOK_ID])
+const LAST_CLEANUP_KEY = 'msw_last_cloud_cleanup'
+
+// 請伺服器清理雲端孤兒檔（舊版本／冇被引用嘅書同清單）
+async function runCloudCleanup(): Promise<{ deleted: number; freedBytes: number } | null> {
+  try {
+    const r = await fetch('/api/blob/cleanup', { method: 'POST' })
+    const j = await r.json()
+    if (!r.ok) throw new Error(j.error || '清理失敗')
+    localStorage.setItem(LAST_CLEANUP_KEY, String(Date.now()))
+    return j
+  } catch { return null }
+}
 
 const UPLOAD_FP_KEY = 'msw_last_upload_fp'
 const DOWNLOAD_FP_KEY = 'msw_last_download_fp'
@@ -41,11 +57,12 @@ function fastHash(s: string): string {
 
 // 逐書上傳記錄：{ bookId: { hash, url } }，用嚟判斷邊本書要重新上傳、邊本重用舊 URL
 const BOOK_MAP_KEY = 'msw_sync_book_map'
-function getBookMap(): Record<string, { hash: string; url: string }> {
+type BookMapEntry = { hash: string; chash?: string; url: string }
+function getBookMap(): Record<string, BookMapEntry> {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(BOOK_MAP_KEY) || '{}') } catch { return {} }
 }
-function saveBookMap(m: Record<string, { hash: string; url: string }>) {
+function saveBookMap(m: Record<string, BookMapEntry>) {
   try { localStorage.setItem(BOOK_MAP_KEY, JSON.stringify(m)) } catch { /* 配額滿略過 */ }
 }
 
@@ -60,6 +77,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
   const [syncCode, setSyncCode] = useState('')
   const [inputCode, setInputCode] = useState('')
   const [copied, setCopied] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
 
   const handleUpload = async () => {
     setStatus('uploading')
@@ -68,30 +86,42 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       const allBooks = await getAllBooksFromIDB()
       const useGzip = canGzip()
 
-      // ── 逐本書：只上傳有改動嘅，冇變重用上次 URL ──
+      // ── 逐本書：只上傳「內容」有改動嘅（閱讀進度另存清單，揭頁唔會成本書重傳）──
       const prevMap = getBookMap()
-      const newMap: Record<string, { hash: string; url: string }> = {}
+      const newMap: Record<string, BookMapEntry> = {}
       const bookRefs: { id: string; url: string; gz: boolean }[] = []
+      const progress: Record<string, { currentIndex: number; lastReadDate: number }> = {}
+      const toDelete: string[] = []   // 被新版本取代嘅舊檔，清單登記成功後刪
       let uploaded = 0
       for (const book of allBooks) {
-        const str = JSON.stringify(book)
-        const hash = fastHash(str) + '_' + str.length
+        if (SKIP_SYNC.has(book.id)) continue
+        progress[book.id] = { currentIndex: book.currentIndex, lastReadDate: book.lastReadDate }
+        const fullStr = JSON.stringify(book)
+        const fullHash = fastHash(fullStr) + '_' + fullStr.length
+        // 內容 hash：撇除閱讀進度
+        const str = JSON.stringify({ ...book, currentIndex: 0, lastReadDate: 0 })
+        const chash = fastHash(str) + '_' + str.length
         const prev = prevMap[book.id]
+        const unchanged = !!prev?.url && (prev.chash === chash || (!prev.chash && prev.hash === fullHash))
         let url: string
-        if (prev && prev.hash === hash && prev.url) {
-          url = prev.url   // 內容未變 → 重用，跳過上傳
+        if (unchanged) {
+          url = prev!.url   // 內容未變 → 重用，跳過上傳
         } else {
           uploaded++
           setMessage(`上傳有改動的書籍中…（第 ${uploaded} 本）`)
           const bBody: Blob | string = useGzip ? await gzipString(str) : str
-          const bBlob = await upload(`book-${book.id}-${hash}.json${useGzip ? '.gz' : ''}`, bBody, {
+          const bBlob = await upload(`book-${book.id}-${chash}.json${useGzip ? '.gz' : ''}`, bBody, {
             access: 'public', handleUploadUrl: '/api/blob', contentType: useGzip ? 'application/gzip' : 'application/json',
           })
           url = bBlob.url
+          if (prev?.url && prev.url !== url) toDelete.push(prev.url)
         }
-        newMap[book.id] = { hash, url }
+        newMap[book.id] = { hash: fullHash, chash, url }
         bookRefs.push({ id: book.id, url, gz: useGzip })
-        saveBookMap(newMap)   // 每本存一次：中途失敗都保住進度，下次唔使重傳
+      }
+      // 本機已刪除／唔再同步嘅書：舊檔都要清
+      for (const [id, p] of Object.entries(prevMap)) {
+        if (!newMap[id] && p?.url) toDelete.push(p.url)
       }
 
       // ── 清單（指向各書 blob）＋ 字體/閱讀記錄/温習卡（體積細，每次都傳）──
@@ -104,6 +134,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         reviewSession: reviewStorage.getSession(),   // 今日温習進度（跨裝置：知道今日已温習）
         reviewHeat: reviewStorage.getHeat(),         // 温習熱圖（每日張數）
         bookReadDays: bookReadingStorage.getAll(),   // 每本書閱讀日
+        progress,                                    // 各書閱讀進度（同書本內容分開存）
       }
       const manifestStr = JSON.stringify(manifest)
       const fp = fastHash(manifestStr)
@@ -135,14 +166,18 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       setStatus('success')
       setMessage(uploaded > 0 ? `上傳成功！本次只更新 ${uploaded} 本書，請記下同步碼` : '上傳成功！請記下同步碼')
 
-      // 刪除上一次的舊「清單」blob（各書 blob 保留供重用）
-      if (oldBlobUrl) {
+      // 清單登記成功先刪：上一次嘅舊清單 + 被取代嘅舊書檔
+      const urls = [...toDelete, ...(oldBlobUrl ? [oldBlobUrl] : [])]
+      if (urls.length > 0) {
         fetch('/api/blob', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: oldBlobUrl })
+          body: JSON.stringify({ urls })
         }).catch(() => {})
       }
+      // 每 7 日自動清一次雲端積壓嘅孤兒檔
+      const lastClean = Number(localStorage.getItem(LAST_CLEANUP_KEY) || 0)
+      if (Date.now() - lastClean > 7 * 86400000) runCloudCleanup()
     } catch (e: unknown) {
       setStatus('error')
       setMessage(e instanceof Error ? e.message : '上傳失敗')
@@ -184,7 +219,10 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
           if (!br.ok) continue
           const refGz = ref.gz || (typeof ref.url === 'string' && ref.url.includes('.json.gz'))
           const bookStr = refGz ? await gunzipToString(await br.arrayBuffer()) : await br.text()
-          await saveBookToIDB(JSON.parse(bookStr))
+          const bk = JSON.parse(bookStr)
+          const pr = data.progress?.[ref.id]
+          if (pr) { bk.currentIndex = pr.currentIndex; bk.lastReadDate = pr.lastReadDate }
+          await saveBookToIDB(bk)
         }
       } else if (Array.isArray(data.books)) {
         // 舊版快照：向後相容
@@ -276,6 +314,19 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
                   <Cloud className="w-5 h-5 text-indigo-600" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-800">雲端同步</h3>
+                <button
+                  onClick={async () => {
+                    setCleaning(true); setMessage('清理雲端舊檔中…')
+                    const r = await runCloudCleanup()
+                    setCleaning(false)
+                    setMessage(r ? `🧹 已清理 ${r.deleted} 個舊檔，釋放 ${(r.freedBytes / 1048576).toFixed(1)} MB` : '清理失敗（雲端可能暫時被限制，稍後再試）')
+                  }}
+                  disabled={cleaning || status === 'uploading' || status === 'downloading'}
+                  className="ml-auto text-xs px-2.5 py-1.5 rounded-lg text-gray-500 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                  title="刪走雲端冇再用到嘅舊版本書檔，釋放容量"
+                >
+                  {cleaning ? '清理中…' : '🧹 清理舊檔'}
+                </button>
               </div>
             </div>
 

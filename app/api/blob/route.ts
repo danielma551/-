@@ -7,15 +7,24 @@ import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { del } from '@vercel/blob'
 import { NextRequest, NextResponse } from 'next/server'
 
-// 刪除指定的 blob（上傳新版本後清理舊版本用）
+// 只准刪同步用嘅檔（book-* / sync-*），避免誤刪其他檔案
+function isSyncBlobUrl(u: unknown): u is string {
+  if (typeof u !== 'string' || !u.startsWith('https://')) return false
+  try {
+    const path = new URL(u).pathname.replace(/^\//, '')
+    return path.startsWith('book-') || path.startsWith('sync-')
+  } catch { return false }
+}
+
+// 刪除指定的 blob（上傳新版本後清理舊版本用）；支援 { url } 或 { urls: [] }
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
   try {
-    const { url } = await request.json()
-    if (!url || typeof url !== 'string' || !url.startsWith('https://')) {
-      return NextResponse.json({ error: '無效的 URL' }, { status: 400 })
-    }
-    await del(url)
-    return NextResponse.json({ success: true })
+    const body = await request.json()
+    const list: unknown[] = Array.isArray(body?.urls) ? body.urls : [body?.url]
+    const urls = list.filter(isSyncBlobUrl)
+    if (urls.length === 0) return NextResponse.json({ error: '無效的 URL' }, { status: 400 })
+    for (let i = 0; i < urls.length; i += 100) await del(urls.slice(i, i + 100))
+    return NextResponse.json({ success: true, deleted: urls.length })
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 400 })
   }
