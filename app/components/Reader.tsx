@@ -103,7 +103,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const lastFlipRef = useRef(0)
   const ghostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const RAPID_FLIP_MS = 230   // 兩次揭頁相隔少過呢個時間 = 快揭，唔播動畫
-  const animSpeedMs = ({ slow: 420, normal: 280, fast: 180 } as const)[displaySettings.animationSpeed ?? 'normal']
+  const animSpeedMs = ({ slow: 480, normal: 340, fast: 220 } as const)[displaySettings.animationSpeed ?? 'normal']
   // 新句入場 class（按方向）；快揭／墨水屏／fade 模式唔加
   const sentenceInClass = (isEinkNow: boolean) =>
     (displaySettings.animationStyle ?? 'rise') === 'rise' && !isEinkNow && animDir !== 'none' ? `sentence-in-${animDir}` : ''
