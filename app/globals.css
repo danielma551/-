@@ -222,7 +222,23 @@ button:active:not(:disabled) {
   }
 }
 
-/* ── 句子過場：由下向上浮起 ── */
+/* ── 揭頁過場（分方向 + 舊句接力離場）── */
+/* 向前：新句由下浮上，舊句向上淡出 */
+@keyframes sentence-in-up   { from { opacity: 0; transform: translateY(22px); }  to { opacity: 1; transform: translateY(0); } }
+@keyframes sentence-out-up  { from { opacity: 1; transform: translateY(0); }     to { opacity: 0; transform: translateY(-22px); } }
+/* 返轉頭：新句由上落，舊句向下淡出 */
+@keyframes sentence-in-down { from { opacity: 0; transform: translateY(-22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sentence-out-down{ from { opacity: 1; transform: translateY(0); }     to { opacity: 0; transform: translateY(22px); } }
+.sentence-in-up   { animation: sentence-in-up   var(--sentence-anim-speed, 280ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sentence-in-down { animation: sentence-in-down var(--sentence-anim-speed, 280ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sentence-out-up   { animation: sentence-out-up   var(--sentence-anim-speed, 280ms) cubic-bezier(0.4, 0, 1, 1) both; }
+.sentence-out-down { animation: sentence-out-down var(--sentence-anim-speed, 280ms) cubic-bezier(0.4, 0, 1, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .sentence-in-up, .sentence-in-down { animation: none; }
+  .sentence-out-up, .sentence-out-down { animation: none; opacity: 0; }
+}
+
+/* ── 句子過場：由下向上浮起（舊版，保留相容）── */
 @keyframes sentence-rise {
   0%   { opacity: 0; transform: translateY(34px); }
   60%  { opacity: 1; }

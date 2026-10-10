@@ -97,6 +97,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showSidebar, setShowSidebar] = useState(false)  // 預設收起：入閱讀唔主動彈出，需要時自己展開
   const [fadeVisible, setFadeVisible] = useState(true)
   const [animKey, setAnimKey] = useState(0)  // rise 模式：key 變化觸發 CSS 動畫
+  // 揭頁過場：方向 + 舊句離場影子 + 快揭偵測
+  const [animDir, setAnimDir] = useState<'up' | 'down' | 'none'>('up')
+  const [exitGhost, setExitGhost] = useState<{ key: number; node: React.ReactNode; dir: 'up' | 'down' } | null>(null)
+  const lastFlipRef = useRef(0)
+  const ghostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const RAPID_FLIP_MS = 230   // 兩次揭頁相隔少過呢個時間 = 快揭，唔播動畫
+  const animSpeedMs = ({ slow: 420, normal: 280, fast: 180 } as const)[displaySettings.animationSpeed ?? 'normal']
+  // 新句入場 class（按方向）；快揭／墨水屏／fade 模式唔加
+  const sentenceInClass = (isEinkNow: boolean) =>
+    (displaySettings.animationStyle ?? 'rise') === 'rise' && !isEinkNow && animDir !== 'none' ? `sentence-in-${animDir}` : ''
+  // 舊句離場影子（疊喺新句位置，向上／下淡出）
+  const renderExitGhost = (isEinkNow: boolean, pStyle: React.CSSProperties) => {
+    if (isEinkNow || !exitGhost) return null
+    return (
+      <div aria-hidden style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', userSelect: 'none' }}>
+        <p key={exitGhost.key} className={`sentence-out-${exitGhost.dir}`} style={{ ...pStyle, margin: 0, '--sentence-anim-speed': `${animSpeedMs}ms` } as React.CSSProperties}>
+          {exitGhost.node}
+        </p>
+      </div>
+    )
+  }
   // 閱讀模式：'default'（現有樣式）或 'paper'（紙本質感）
   const [readerMode, setReaderMode] = useState<'default' | 'paper'>(() => {
     if (typeof window !== 'undefined') {
@@ -684,12 +705,35 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     navigator.vibrate(preset.pattern)
   }
 
-  const triggerFade = (action: () => void) => {
+  // dir：'up' = 向前（新句由下浮上、舊句向上離場）；'down' = 返轉頭（新句由上落、舊句向下離場）
+  const triggerFade = (action: () => void, dir: 'up' | 'down' = 'up') => {
     // 墨水屏模式：跳過動畫，直接切換（避免殘影）
     if (einkMode) { action(); return }
     const style = displaySettings.animationStyle ?? 'rise'
     if (style === 'rise') {
-      // rise 模式：直接更新內容，key 變化觸發 CSS entrance 動畫
+      const now = Date.now()
+      const rapid = now - lastFlipRef.current < RAPID_FLIP_MS
+      lastFlipRef.current = now
+      if (rapid) {
+        // 連續快揭：唔播動畫，直接出字，唔阻跳讀
+        if (ghostTimerRef.current) clearTimeout(ghostTimerRef.current)
+        setExitGhost(null)
+        setAnimDir('none')
+        action()
+        setAnimKey(k => k + 1)
+        return
+      }
+      // 舊句影子：同新句交疊離場（圖片頁唔做）
+      const cur = sentences[currentIndex]
+      if (cur && !cur.startsWith('data:image/')) {
+        const key = now
+        setExitGhost({ key, node: renderSentenceContent(), dir })
+        if (ghostTimerRef.current) clearTimeout(ghostTimerRef.current)
+        ghostTimerRef.current = setTimeout(() => setExitGhost(g => (g && g.key === key ? null : g)), animSpeedMs + 60)
+      } else {
+        setExitGhost(null)
+      }
+      setAnimDir(dir)
       action()
       setAnimKey(k => k + 1)
       return
@@ -1080,7 +1124,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const prev = prevTextIndex(currentIndex)
     if (prev !== -1) {
       vibrate(displaySettings.vibrationIntensity)
-      triggerFade(() => setCurrentIndex(prev))
+      triggerFade(() => setCurrentIndex(prev), 'down')
     }
   }
 
@@ -2713,13 +2757,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 />
               ) : (
                 <div style={{ position: 'relative' }}>
+                  {renderExitGhost(false, {
+                    fontSize: `${displaySettings.fontSize}px`, color: paperTheme.text, textAlign: 'center',
+                    lineHeight: displaySettings.lineHeight ?? 1.8, letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
+                    fontFamily: textFontFamily, whiteSpace: 'pre-wrap', width: '100%',
+                  })}
                   <p
                     key={(displaySettings.animationStyle ?? 'rise') === 'rise' ? animKey : undefined}
-                    className={(displaySettings.animationStyle ?? 'rise') === 'rise' ? 'sentence-rise' : undefined}
+                    className={sentenceInClass(false) || undefined}
                     onMouseUp={selectionDictLookup}
                     onTouchEnd={selectionDictLookup}
                     style={{
-                    '--sentence-anim-speed': `${({ slow: 750, normal: 520, fast: 300 } as const)[displaySettings.animationSpeed ?? 'normal']}ms`,
+                    '--sentence-anim-speed': `${animSpeedMs}ms`,
                     fontSize: `${displaySettings.fontSize}px`,
                     color: paperTheme.text,
                     textAlign: 'center',
@@ -2815,7 +2864,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             >
               {(() => {
                 const animStyle = displaySettings.animationStyle ?? 'rise'
-                const speedMs = { slow: 750, normal: 520, fast: 300 }[displaySettings.animationSpeed ?? 'normal']
+                const speedMs = animSpeedMs
                 const colMaxWidth = isEink ? undefined : ({
                   narrow: `${displaySettings.fontSize * 15}px`,
                   medium: `${displaySettings.fontSize * 22}px`,
@@ -2837,9 +2886,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 />
               ) : (
                 <div className="relative w-full flex items-center justify-center">
+                  {renderExitGhost(isEink, {
+                    fontFamily: textFontFamily, fontSize: `${displaySettings.fontSize}px`,
+                    color: displaySettings.textColor, whiteSpace: 'pre-wrap', textAlign: extTwoCol ? 'left' : 'center',
+                    letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`, lineHeight: displaySettings.lineHeight ?? 1.8,
+                    maxWidth: extTwoCol ? 'min(1080px, 92vw)' : colMaxWidth, width: extTwoCol ? '100%' : undefined,
+                  })}
                   <p
                     key={isEink ? undefined : (animStyle === 'rise' ? animKey : undefined)}
-                    className={`leading-relaxed text-center${!isEink && animStyle === 'rise' ? ' sentence-rise' : ''}`}
+                    className={`leading-relaxed text-center${sentenceInClass(isEink) ? ' ' + sentenceInClass(isEink) : ''}`}
                     {...einkPressHandlers}
                     onMouseUp={!isEink ? selectionDictLookup : undefined}
                     onTouchEnd={!isEink ? selectionDictLookup : undefined}
