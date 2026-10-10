@@ -1228,75 +1228,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return cur + tail
   }, [currentIndex, sentences])
 
-  // ── 上一句提示：淡淡顯示喺當前句上面，唔使記住上文 ──
-  const [showPrev, setShowPrev] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true
-    return localStorage.getItem('reader-show-prev') !== 'false'   // 預設開
-  })
-  const toggleShowPrev = () => setShowPrev(v => {
-    const nv = !v
-    try { localStorage.setItem('reader-show-prev', String(nv)) } catch {}
-    return nv
-  })
-  const prevSentence = useMemo(() => {
-    if (!showPrev) return ''
-    if (bookId === EXTERNAL_BOOK_ID || bookId === REVIEW_BOOK_ID) return ''   // 外刊雙欄、温習卡唔適用
-    const cur = sentences[currentIndex]
-    if (!cur || cur.startsWith('data:')) return ''
-    const i = prevTextIndex(currentIndex)
-    if (i < 0) return ''
-    const s = sentences[i] || ''
-    if (s.startsWith('data:')) return ''
-    return s.trim()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPrev, bookId, currentIndex, sentences])
-
-  // 上一句：佔一個固定高度嘅格（喺標題同正文之間）→ 唔會疊住標題、正文位置唔會跳
-  // 最多兩行（取句尾）；揭頁時輕輕向上浮起（墨水屏冇動畫冇漸變）
-  const prevSlotActive = showPrev && bookId !== EXTERNAL_BOOK_ID && bookId !== REVIEW_BOOK_ID
-  const renderPrevLine = (color: string, maxWidth?: string) => {
-    if (!prevSlotActive) return null
-    const fontPx = Math.max(14, Math.round(displaySettings.fontSize * 0.6))
-    const lineH = fontPx * 1.7
-    return (
-      <div
-        aria-hidden
-        style={{
-          width: '100%',
-          height: Math.round(lineH * 2),
-          marginBottom: Math.round(displaySettings.fontSize * 0.55),
-          display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-          overflow: 'hidden',
-          pointerEvents: 'none', userSelect: 'none',
-          WebkitMaskImage: isEink ? undefined : 'linear-gradient(to bottom, transparent, #000 45%)',
-          maskImage: isEink ? undefined : 'linear-gradient(to bottom, transparent, #000 45%)',
-        }}
-      >
-        {prevSentence && (
-          <p
-            style={{
-              margin: '0 auto', maxWidth, width: '100%', textAlign: 'center', whiteSpace: 'pre-wrap',
-              fontFamily: textFontFamily,
-              fontSize: `${fontPx}px`,
-              lineHeight: 1.7,
-              letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
-              color,
-              opacity: isEink ? 1 : 0.42,
-            }}
-          >
-            <span
-              key={isEink ? undefined : `prev-${currentIndex}`}
-              className={isEink ? undefined : 'prev-float'}
-              style={{ display: 'block' }}
-            >
-              {prevSentence}
-            </span>
-          </p>
-        )}
-      </div>
-    )
-  }
-
   // 外刊詞彙表（有解釋的字，會在正文加虛線底提示）
   const glossaryMap = useMemo(
     () => (bookId === EXTERNAL_BOOK_ID ? getGlossary() : {}),
@@ -2105,15 +2036,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 )
               })()}
               <button
-                onClick={toggleShowPrev}
-                className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg flex-shrink-0 transition-colors"
-                style={{ color: showPrev ? '#4f46e5' : '#9ca3af', background: showPrev ? '#eef2ff' : 'transparent' }}
-                title={showPrev ? '隱藏上一句提示' : '顯示上一句提示'}
-              >
-                <span className="text-sm">↑</span>
-                <span className="hidden sm:inline text-sm">上一句</span>
-              </button>
-              <button
                 onClick={toggleEinkMode}
                 className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg flex-shrink-0"
                 style={{ color: '#6b7280' }}
@@ -2791,7 +2713,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 />
               ) : (
                 <div style={{ position: 'relative' }}>
-                  {renderPrevLine(paperTheme.text)}
                   <p
                     key={(displaySettings.animationStyle ?? 'rise') === 'rise' ? animKey : undefined}
                     className={(displaySettings.animationStyle ?? 'rise') === 'rise' ? 'sentence-rise' : undefined}
@@ -2915,8 +2836,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <div className="relative w-full flex flex-col items-center justify-center">
-                  {renderPrevLine(isEink ? '#666666' : displaySettings.textColor, extTwoCol ? undefined : colMaxWidth)}
+                <div className="relative w-full flex items-center justify-center">
                   <p
                     key={isEink ? undefined : (animStyle === 'rise' ? animKey : undefined)}
                     className={`leading-relaxed text-center${!isEink && animStyle === 'rise' ? ' sentence-rise' : ''}`}
