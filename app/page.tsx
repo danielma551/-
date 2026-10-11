@@ -31,6 +31,7 @@ import CharacterGraph from './components/CharacterGraph'
 import NotesPanel from './components/NotesPanel'
 import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
 import { openReviewBook } from './utils/reviewBook'
+import { deleteBookAudio } from './utils/bookAudioDB'
 import { Newspaper } from 'lucide-react'
 
 // ── Vision OCR 設定型別 ──
@@ -288,7 +289,16 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    getAllBooksFromIDB().then(setSavedBooks)
+    getAllBooksFromIDB().then(books => {
+      setSavedBooks(books)
+      // ?open=<書本 id>：例如由「音頻轉文字」撳「去閱讀」過嚟，直接打開嗰本書
+      const openId = new URLSearchParams(window.location.search).get('open')
+      if (openId) {
+        window.history.replaceState(null, '', window.location.pathname)
+        const b = books.find(x => x.id === openId)
+        if (b) handleOpenBookAtSentence(b, b.currentIndex || 0)
+      }
+    })
     listTracks().then(setTracks)
     setSelectedTrackId(localStorage.getItem('reader-music-track-id'))
     setReviewDue(reviewStorage.stats().due)
@@ -418,6 +428,7 @@ export default function Home() {
     e.stopPropagation()
     if (confirm('確定要刪除這本書嗎？')) {
       deleteBookFromIDB(id).then(() => getAllBooksFromIDB().then(setSavedBooks))
+      deleteBookAudio(id)   // 有錄音嘅書：連錄音一齊刪
       if (bookId === id) {
         setSentences([])
         setBookTitle('')

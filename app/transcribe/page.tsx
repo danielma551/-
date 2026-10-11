@@ -5,8 +5,49 @@
 // 首次要下載模型（有快取），長音頻會慢啲。
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Upload, Loader2, Copy, Download, FileAudio, Plus } from 'lucide-react'
-import { reviewStorage } from '../utils/storage'
+import { ArrowLeft, Upload, Loader2, Copy, Download, FileAudio, Plus, BookOpen } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { reviewStorage, generateBookId, BookData } from '../utils/storage'
+import { saveBookToIDB } from '../utils/bookDB'
+import { splitIntoSentences } from '../utils/epubParser'
+import { saveBookAudio } from '../utils/bookAudioDB'
+
+// 由 Whisper 時間戳段落 → 按閱讀規則分句，並估計每句開始秒數（段內按字數比例）
+function buildSentencesWithTimes(
+  chunks: { text: string; timestamp: [number, number | null] }[] | undefined,
+  fullText: string,
+  duration: number,
+): { sentences: string[]; times: number[] } {
+  const sentences: string[] = []
+  const times: number[] = []
+  if (Array.isArray(chunks) && chunks.length > 0) {
+    chunks.forEach((c, ci) => {
+      const parts = splitIntoSentences(c.text || '')
+      if (parts.length === 0) return
+      const start = Number(c.timestamp?.[0] ?? 0)
+      const nextStart = chunks[ci + 1]?.timestamp?.[0]
+      const end = Number(c.timestamp?.[1] ?? nextStart ?? duration ?? start)
+      const total = parts.reduce((n, x) => n + x.length, 0) || 1
+      let acc = 0
+      for (const part of parts) {
+        sentences.push(part)
+        times.push(+(start + (Math.max(end - start, 0) * acc) / total).toFixed(2))
+        acc += part.length
+      }
+    })
+  }
+  if (sentences.length === 0) {
+    const parts = splitIntoSentences(fullText)
+    const total = parts.reduce((n, x) => n + x.length, 0) || 1
+    let acc = 0
+    for (const part of parts) {
+      sentences.push(part)
+      times.push(+((duration * acc) / total).toFixed(2))
+      acc += part.length
+    }
+  }
+  return { sentences, times }
+}
 
 type Phase = 'idle' | 'loadingModel' | 'decoding' | 'transcribing' | 'done' | 'error'
 
@@ -25,6 +66,7 @@ const LANGS = [
 const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/+esm'
 
 export default function TranscribePage() {
+  const router = useRouter()
   const [model, setModel] = useState(MODELS[0].id)
   const [lang, setLang] = useState('auto')
   const [phase, setPhase] = useState<Phase>('idle')
@@ -83,6 +125,34 @@ export default function TranscribePage() {
     return { data, duration: data.length / 16000 }
   }
 
+  // 轉錄完 → 自動變成書架上一本書（按閱讀規則分句）+ 連 mp3 一齊存
+  const fileObjRef = useRef<File | null>(null)
+  const durationRef = useRef(0)
+  const [createdBookId, setCreatedBookId] = useState<string | null>(null)
+  const [bookMsg, setBookMsg] = useState('')
+  const createBookFromTranscript = async (fullText: string, chunks: any[]) => {
+    const file = fileObjRef.current
+    if (!file || !fullText?.trim()) return
+    try {
+      const { sentences, times } = buildSentencesWithTimes(chunks, fullText, durationRef.current)
+      if (sentences.length === 0) return
+      const now = Date.now()
+      const title = file.name.replace(/\.[^.]+$/, '') || '錄音'
+      const id = generateBookId(title)
+      const book: BookData = {
+        id, title: `🎧 ${title}`, sentences, currentIndex: 0,
+        uploadDate: now, lastReadDate: now, coverColor: '#4f46e5',
+      }
+      await saveBookToIDB(book)
+      await saveBookAudio({ bookId: id, blob: file, name: file.name, times, savedAt: now })
+      setCreatedBookId(id)
+      setBookMsg(`已加入書架：${sentences.length} 句，閱讀時會自動播放錄音 🎧`)
+    } catch (err) {
+      console.error(err)
+      setBookMsg('加入書架失敗（可能係瀏覽器空間不足）')
+    }
+  }
+
   // 建立 Worker（背景線程行 transformers.js 推理）
   const ensureWorker = (): Worker => {
     if (workerRef.current) return workerRef.current
@@ -101,11 +171,13 @@ export default function TranscribePage() {
             curModel = model;
           }
           self.postMessage({ type: 'phase', phase: 'transcribing' });
-          const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', chunk_callback: () => self.postMessage({ type: 'chunk' }) };
+          const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', return_timestamps: true, chunk_callback: () => self.postMessage({ type: 'chunk' }) };
           if (lang !== 'auto') opts.language = lang;
           const out = await transcriber(audio, opts);
-          const txt = Array.isArray(out) ? out.map(o => o.text).join('') : out.text;
-          self.postMessage({ type: 'done', text: (txt || '').trim() });
+          const o = Array.isArray(out) ? out[0] : out;
+          const txt = Array.isArray(out) ? out.map(x => x.text).join('') : out.text;
+          const chunks = (o && Array.isArray(o.chunks)) ? o.chunks.map(c => ({ text: c.text, timestamp: c.timestamp })) : [];
+          self.postMessage({ type: 'done', text: (txt || '').trim(), chunks });
         } catch (err) {
           self.postMessage({ type: 'error', message: String((err && err.message) || err) });
         }
@@ -130,6 +202,7 @@ export default function TranscribePage() {
         stopTimer()
         setText(d.text)
         setPhase('done')
+        createBookFromTranscript(d.text, d.chunks)
       } else if (d.type === 'error') {
         stopTimer()
         setPhase('error')
@@ -144,11 +217,13 @@ export default function TranscribePage() {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name); setText(''); setSaved(false); setStatusMsg('')
+    fileObjRef.current = file; setCreatedBookId(null); setBookMsg('')
     setAudioDur(0); setChunkDone(0); setChunkTotal(0); setElapsed(0)
     try {
       setPhase('decoding')
       const { data: audio, duration } = await decodeAudio(file)
       setAudioDur(duration)
+      durationRef.current = duration
       setChunkTotal(Math.max(1, Math.ceil(duration / 20)))   // 每段有效前進約 20s
       const worker = ensureWorker()
       // 傳走 audio.buffer（轉移擁有權，零複製）
@@ -252,6 +327,21 @@ export default function TranscribePage() {
         )}
 
         {/* 結果 */}
+        {/* 已同步到閱讀 */}
+        {bookMsg && (
+          <div className={`mb-4 px-4 py-3 rounded-xl border text-sm flex items-center justify-between gap-3 ${createdBookId ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-red-50 border-red-200 text-red-600'}`}>
+            <span>{bookMsg}</span>
+            {createdBookId && (
+              <button
+                onClick={() => router.push(`/?open=${encodeURIComponent(createdBookId)}`)}
+                className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                <BookOpen className="w-4 h-4" /> 去閱讀
+              </button>
+            )}
+          </div>
+        )}
+
         {(text || phase === 'done') && (
           <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between mb-2">

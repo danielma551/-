@@ -16,6 +16,7 @@ import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, 
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, bookReadingStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { listTracks, getTrackObjectURL } from '../utils/musicDB'
+import { getBookAudio } from '../utils/bookAudioDB'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
@@ -198,6 +199,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const ytPlayerRef = useRef<any>(null)              // YouTube IFrame 播放器
   const currentKindRef = useRef<'file' | 'youtube'>('file')
   const musicVolumeRef = useRef(0.4)
+  // 🎧 書本錄音（由 mp3 轉錄嘅書）：入閱讀自動播放
+  const bookAudioRef = useRef<HTMLAudioElement | null>(null)
+  const bookAudioActiveRef = useRef(false)
+  const [hasBookAudio, setHasBookAudio] = useState(false)
+  const [bookAudioPlaying, setBookAudioPlaying] = useState(false)
+  const [bookAudioTime, setBookAudioTime] = useState(0)
+  const [bookAudioDur, setBookAudioDur] = useState(0)
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -528,7 +536,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       const enabled = localStorage.getItem('reader-music-enabled')
       const savedId = localStorage.getItem('reader-music-track-id')
       const startIdx = Math.max(0, list.findIndex(t => t.id === savedId))
-      loadTrack(startIdx, enabled === null || enabled === 'true')
+      loadTrack(startIdx, (enabled === null || enabled === 'true') && !bookAudioActiveRef.current)   // 有書本錄音就唔自動播背景音樂
     })
     return () => {
       cancelled = true
@@ -540,6 +548,51 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 🎧 載入書本錄音並自動播放（同時暫停背景音樂）
+  useEffect(() => {
+    let cancelled = false
+    let url: string | null = null
+    getBookAudio(bookId).then(a => {
+      if (cancelled || !a) return
+      bookAudioActiveRef.current = true
+      try { audioRef.current?.pause() } catch {}
+      try { ytPlayerRef.current?.pauseVideo?.() } catch {}
+      url = URL.createObjectURL(a.blob)
+      const au = new Audio(url)
+      au.preload = 'auto'
+      bookAudioRef.current = au
+      au.addEventListener('timeupdate', () => setBookAudioTime(au.currentTime))
+      au.addEventListener('loadedmetadata', () => setBookAudioDur(au.duration || 0))
+      au.addEventListener('play', () => setBookAudioPlaying(true))
+      au.addEventListener('pause', () => setBookAudioPlaying(false))
+      au.addEventListener('ended', () => setBookAudioPlaying(false))
+      setHasBookAudio(true)
+      au.play().catch(() => { /* 瀏覽器擋自動播：顯示播放掣等用戶撳 */ })
+    })
+    return () => {
+      cancelled = true
+      bookAudioActiveRef.current = false
+      if (bookAudioRef.current) { bookAudioRef.current.pause(); bookAudioRef.current = null }
+      if (url) URL.revokeObjectURL(url)
+      setHasBookAudio(false); setBookAudioPlaying(false); setBookAudioTime(0); setBookAudioDur(0)
+    }
+  }, [bookId])
+
+  const toggleBookAudio = () => {
+    const au = bookAudioRef.current
+    if (!au) return
+    if (au.paused) {
+      try { audioRef.current?.pause() } catch {}
+      try { ytPlayerRef.current?.pauseVideo?.() } catch {}
+      au.play().catch(() => {})
+    } else au.pause()
+  }
+  const seekBookAudio = (d: number) => {
+    const au = bookAudioRef.current
+    if (!au) return
+    au.currentTime = Math.max(0, Math.min((au.duration || 0), au.currentTime + d))
+  }
 
   // 切歌（上一首/下一首）供 UI 呼叫
   const loadTrackRef = useRef<((i: number, autoplay: boolean) => void) | null>(null)
@@ -2436,6 +2489,47 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
         </div>
       )}
+
+      {/* 🎧 書本錄音播放器（左下角） */}
+      {hasBookAudio && (() => {
+        const fmtT = (t: number) => { if (!isFinite(t)) return '--:--'; const m = Math.floor(t / 60); return `${m}:${String(Math.floor(t % 60)).padStart(2, '0')}` }
+        const pct = bookAudioDur > 0 ? (bookAudioTime / bookAudioDur) * 100 : 0
+        return (
+          <div
+            className="fixed bottom-6 left-4 z-40 flex items-center gap-2 select-none"
+            onClick={e => e.stopPropagation()}
+            style={isEink ? {
+              background: '#fff', border: '2px solid #000', borderRadius: 0, padding: '6px 10px',
+            } : {
+              background: 'rgba(255,255,255,0.95)', border: '1px solid #e0e7ff', borderRadius: 999,
+              padding: '6px 12px 6px 6px', boxShadow: '0 6px 20px rgba(79,70,229,0.15)',
+            }}
+          >
+            <button
+              onClick={toggleBookAudio}
+              className="flex items-center justify-center flex-shrink-0"
+              style={isEink
+                ? { width: 34, height: 34, background: '#000', color: '#fff', fontSize: 14, fontWeight: 700 }
+                : { width: 34, height: 34, borderRadius: 999, background: '#4f46e5', color: '#fff', fontSize: 13 }}
+              title={bookAudioPlaying ? '暫停錄音' : '播放錄音'}
+            >
+              {bookAudioPlaying ? '❚❚' : '▶'}
+            </button>
+            <button onClick={() => seekBookAudio(-10)} title="倒退 10 秒"
+              style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>−10</button>
+            <div className="flex flex-col" style={{ minWidth: 92 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: isEink ? '#000' : '#4338ca', fontVariantNumeric: 'tabular-nums' }}>
+                🎧 {fmtT(bookAudioTime)} / {fmtT(bookAudioDur)}
+              </span>
+              <div style={{ height: 3, marginTop: 3, background: isEink ? '#ddd' : '#e0e7ff', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: isEink ? '#000' : '#6366f1' }} />
+              </div>
+            </div>
+            <button onClick={() => seekBookAudio(10)} title="快進 10 秒"
+              style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>+10</button>
+          </div>
+        )
+      })()}
 
       {/* ✓ 温習咗打卡動畫（非墨水屏；每次觸發重播） */}
       {!isEink && reviewDoneFlash > 0 && (

@@ -30,7 +30,7 @@ function resolvePath(fromPath: string, href: string): string {
 export const PARA_SEP = ' '
 
 // ── 句子切分（與 server 端一致）──
-function splitIntoSentences(text: string): string[] {
+export function splitIntoSentences(text: string): string[] {
   const cleaned = text
     .replace(/\r\n/g, '\n')
     .replace(/\n+/g, ' ')
