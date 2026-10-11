@@ -55,10 +55,12 @@ const MODELS = [
   { id: 'Xenova/whisper-base', label: 'base（快 · ~150MB）' },
   { id: 'Xenova/whisper-small', label: 'small（準 · ~250MB）' },
 ]
+// 中英混合：指定中文模式 → Whisper 會保留夾雜嘅英文字（自動偵測只睇頭 30 秒，易判錯成英文、成篇變英文）
 const LANGS = [
-  { id: 'auto', label: '自動偵測' },
+  { id: 'mixed', label: '中英混合（推薦）' },
   { id: 'chinese', label: '中文' },
   { id: 'english', label: 'English' },
+  { id: 'auto', label: '自動偵測' },
 ]
 
 // 用變數避免 webpack 靜態分析，直接由 CDN 動態載入 transformers.js
@@ -67,8 +69,17 @@ const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17
 
 export default function TranscribePage() {
   const router = useRouter()
-  const [model, setModel] = useState(MODELS[0].id)
-  const [lang, setLang] = useState('auto')
+  // 記住上次揀嘅模型同語言（掛載後先讀，避免 SSR hydration 唔一致）
+  const [model, setModelState] = useState(MODELS[0].id)
+  const [lang, setLangState] = useState('mixed')
+  useEffect(() => {
+    const m = localStorage.getItem('transcribe-model')
+    if (m && MODELS.some(x => x.id === m)) setModelState(m)
+    const l = localStorage.getItem('transcribe-lang')
+    if (l && LANGS.some(x => x.id === l)) setLangState(l)
+  }, [])
+  const setModel = (v: string) => { setModelState(v); try { localStorage.setItem('transcribe-model', v) } catch {} }
+  const setLang = (v: string) => { setLangState(v); try { localStorage.setItem('transcribe-lang', v) } catch {} }
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
   const [statusMsg, setStatusMsg] = useState('')
@@ -172,7 +183,8 @@ export default function TranscribePage() {
           }
           self.postMessage({ type: 'phase', phase: 'transcribing' });
           const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', return_timestamps: true, chunk_callback: () => self.postMessage({ type: 'chunk' }) };
-          if (lang !== 'auto') opts.language = lang;
+          if (lang === 'mixed' || lang === 'chinese') opts.language = 'chinese';
+          else if (lang === 'english') opts.language = 'english';
           const out = await transcriber(audio, opts);
           const o = Array.isArray(out) ? out[0] : out;
           const txt = Array.isArray(out) ? out.map(x => x.text).join('') : out.text;

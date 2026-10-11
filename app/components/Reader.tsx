@@ -562,18 +562,43 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       const au = new Audio(url)
       au.preload = 'auto'
       bookAudioRef.current = au
-      au.addEventListener('timeupdate', () => setBookAudioTime(au.currentTime))
-      au.addEventListener('loadedmetadata', () => setBookAudioDur(au.duration || 0))
+      // 續播位置：上次播到邊就由邊度開始；冇記錄就由當前句嘅時間戳開始
+      const posKey = 'book-audio-pos:' + bookId
+      const saved = parseFloat(localStorage.getItem(posKey) || '')
+      const startAt = isFinite(saved) && saved > 0
+        ? saved
+        : (Array.isArray(a.times) && a.times[currentIndexRef.current] ? a.times[currentIndexRef.current] : 0)
+      let lastSave = 0
+      const savePos = (force = false) => {
+        const now = Date.now()
+        if (!force && now - lastSave < 2000) return
+        lastSave = now
+        try { localStorage.setItem(posKey, String(au.currentTime || 0)) } catch {}
+      }
+      au.addEventListener('timeupdate', () => { setBookAudioTime(au.currentTime); savePos() })
       au.addEventListener('play', () => setBookAudioPlaying(true))
-      au.addEventListener('pause', () => setBookAudioPlaying(false))
-      au.addEventListener('ended', () => setBookAudioPlaying(false))
+      au.addEventListener('pause', () => { setBookAudioPlaying(false); savePos(true) })
+      au.addEventListener('ended', () => {
+        setBookAudioPlaying(false)
+        try { localStorage.removeItem(posKey) } catch {}   // 播完：下次由頭開始
+      })
+      au.addEventListener('loadedmetadata', () => {
+        setBookAudioDur(au.duration || 0)
+        if (startAt > 0 && startAt < (au.duration || Infinity) - 1) {
+          au.currentTime = startAt
+          setBookAudioTime(startAt)
+        }
+        if (!cancelled) au.play().catch(() => { /* 瀏覽器擋自動播：顯示播放掣等用戶撳 */ })
+      }, { once: true })
       setHasBookAudio(true)
-      au.play().catch(() => { /* 瀏覽器擋自動播：顯示播放掣等用戶撳 */ })
     })
     return () => {
       cancelled = true
       bookAudioActiveRef.current = false
-      if (bookAudioRef.current) { bookAudioRef.current.pause(); bookAudioRef.current = null }
+      if (bookAudioRef.current) {
+        try { if (!bookAudioRef.current.ended) localStorage.setItem('book-audio-pos:' + bookId, String(bookAudioRef.current.currentTime || 0)) } catch {}
+        bookAudioRef.current.pause(); bookAudioRef.current = null
+      }
       if (url) URL.revokeObjectURL(url)
       setHasBookAudio(false); setBookAudioPlaying(false); setBookAudioTime(0); setBookAudioDur(0)
     }
