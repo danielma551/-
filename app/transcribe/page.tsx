@@ -57,9 +57,9 @@ type Phase = 'idle' | 'loadingModel' | 'decoding' | 'transcribing' | 'done' | 'e
 
 // transformers.js v3：支援 WebGPU（用顯示卡計，快好多）；冇 WebGPU 自動退返 CPU
 const MODELS = [
-  { id: 'base', repo: 'onnx-community/whisper-base', label: 'base（快 · ~80MB）' },
-  { id: 'small', repo: 'onnx-community/whisper-small', label: 'small（準 · ~250MB）' },
-  { id: 'turbo', repo: 'onnx-community/whisper-large-v3-turbo', label: 'large-v3-turbo（最準 · ~560MB · 需 WebGPU）' },
+  { id: 'base', repo: 'onnx-community/whisper-base', label: 'base（快 · 約 140MB）' },
+  { id: 'small', repo: 'onnx-community/whisper-small', label: 'small（準 · 約 390MB）' },
+  { id: 'turbo', repo: 'onnx-community/whisper-large-v3-turbo', label: 'large-v3-turbo（最準 · 約 540MB · 需 WebGPU）' },
 ]
 // 中英混合：指定中文模式 → Whisper 會保留夾雜嘅英文字（自動偵測只睇頭 30 秒，易判錯成英文、成篇變英文）
 const LANGS = [
@@ -79,7 +79,11 @@ export default function TranscribePage() {
   const [model, setModelState] = useState('small')
   const [device, setDevice] = useState<'webgpu' | 'wasm' | ''>('')
   const [hasGPU, setHasGPU] = useState<boolean | null>(null)
+  const [dlInfo, setDlInfo] = useState<{ done: number; total: number; speed: number } | null>(null)
+  const [retryNote, setRetryNote] = useState('')
   useEffect(() => {
+    // 請瀏覽器長期保留模型快取（避免幾百 MB 模型被自動清走）
+    try { (navigator as any).storage?.persist?.() } catch {}
     const g = (navigator as any).gpu
     if (!g) { setHasGPU(false); return }
     g.requestAdapter().then((a: any) => setHasGPU(!!a)).catch(() => setHasGPU(false))
@@ -198,11 +202,100 @@ export default function TranscribePage() {
       }
       function dtypeFor(model, dev) {
         if (dev.device !== 'webgpu') return 'q8';
-        if (model === 'base') return { encoder_model: 'fp32', decoder_model_merged: 'q4' };
+        if (model === 'base') return dev.f16 ? { encoder_model: 'fp16', decoder_model_merged: 'fp16' } : { encoder_model: 'fp32', decoder_model_merged: 'q4' };
         if (model === 'small') return { encoder_model: dev.f16 ? 'fp16' : 'fp32', decoder_model_merged: 'q4' };
         return { encoder_model: dev.f16 ? 'q4f16' : 'q4', decoder_model_merged: dev.f16 ? 'q4f16' : 'q4' };
       }
+      // ── 斷點續傳下載：大模型檔切 8MB 一塊，斷線自動重試，閂咗頁再開都接得返 ──
+      const SUFFIX = { fp32: '', fp16: '_fp16', q4: '_q4', q4f16: '_q4f16', q8: '_quantized' };
+      function bigFiles(dt) {
+        const e = typeof dt === 'string' ? dt : dt.encoder_model;
+        const d = typeof dt === 'string' ? dt : dt.decoder_model_merged;
+        return ['onnx/encoder_model' + SUFFIX[e] + '.onnx', 'onnx/decoder_model_merged' + SUFFIX[d] + '.onnx'];
+      }
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      async function fetchPart(url, start, end, onBytes) {
+        const ctrl = new AbortController();
+        let last = Date.now();
+        const dog = setInterval(() => { if (Date.now() - last > 30000) ctrl.abort(); }, 3000);   // 30 秒冇數據 = 卡住，重試
+        try {
+          const r = await fetch(url, { headers: { Range: 'bytes=' + start + '-' + end }, signal: ctrl.signal });
+          if (r.status !== 206) throw new Error('HTTP ' + r.status);
+          const reader = r.body.getReader();
+          const chunks = []; let got = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value); got += value.length; last = Date.now(); onBytes(value.length);
+          }
+          if (got !== end - start + 1) { onBytes(-got); throw new Error('size mismatch'); }
+          return new Blob(chunks);
+        } finally { clearInterval(dog); }
+      }
+      async function prefetch(repo, dt) {
+        const cache = await caches.open('transformers-cache');
+        const base = 'https://huggingface.co/' + repo + '/resolve/main/';
+        const files = bigFiles(dt);
+        const need = [];
+        for (const f of files) if (!(await cache.match(base + f))) need.push(f);
+        if (need.length === 0) return;
+        let tree = null;
+        for (let a = 0; a < 5 && !tree; a++) {
+          try { tree = await (await fetch('https://huggingface.co/api/models/' + repo + '/tree/main/onnx')).json(); }
+          catch (e) { await sleep(2000 * (a + 1)); }
+        }
+        if (!tree) return;   // 攞唔到大小 → 交返 transformers.js 自己下載
+        const PART = 8 * 1024 * 1024;
+        const items = [];
+        for (const f of need) {
+          const meta = tree.find(x => x.path === f);
+          if (meta && meta.size) items.push({ url: base + f, size: meta.size, parts: Math.ceil(meta.size / PART) });
+        }
+        const total = items.reduce((n, it) => n + it.size, 0);
+        let done = 0;
+        for (const it of items) for (let i = 0; i < it.parts; i++) {
+          if (await cache.match(it.url + '?part=' + i)) done += Math.min(PART, it.size - i * PART);
+        }
+        let speed = 0, lastT = Date.now(), lastDone = done;
+        const report = () => {
+          const now = Date.now();
+          if (now - lastT >= 1000) {
+            const inst = (done - lastDone) / ((now - lastT) / 1000);
+            speed = speed ? speed * 0.7 + inst * 0.3 : inst;
+            lastT = now; lastDone = done;
+          }
+          self.postMessage({ type: 'dl2', done: done, total: total, speed: speed });
+        };
+        report();
+        for (const it of items) {
+          for (let i = 0; i < it.parts; i++) {
+            const key = it.url + '?part=' + i;
+            if (await cache.match(key)) continue;
+            const start = i * PART, end = Math.min(it.size, start + PART) - 1;
+            let ok = false;
+            for (let attempt = 0; attempt < 10 && !ok; attempt++) {
+              try {
+                const b = await fetchPart(it.url, start, end, (n) => { done += n; report(); });
+                await cache.put(key, new Response(b));
+                ok = true;
+              } catch (e) {
+                self.postMessage({ type: 'retry', attempt: attempt + 1 });
+                await sleep(Math.min(30000, 1500 * Math.pow(2, attempt)));
+              }
+            }
+            if (!ok) throw new Error('網絡唔穩，下載多次失敗。已下載嘅部分會保留，再撳上傳就會接住落去');
+          }
+          // 砌返成個檔，放入 transformers.js 用嘅快取
+          const blobs = [];
+          for (let i = 0; i < it.parts; i++) blobs.push(await (await cache.match(it.url + '?part=' + i)).blob());
+          const full = new Blob(blobs);
+          await cache.put(it.url, new Response(full, { headers: { 'Content-Length': String(full.size), 'Content-Type': 'application/octet-stream' } }));
+          for (let i = 0; i < it.parts; i++) await cache.delete(it.url + '?part=' + i);
+        }
+      }
+
       async function load(model, repo, dev) {
+        await prefetch(repo, dtypeFor(model, dev));   // 大檔先用續傳下載器攞齊
         const files = {};
         return pipeline('automatic-speech-recognition', repo, {
           device: dev.device,
@@ -270,6 +363,11 @@ export default function TranscribePage() {
           stopTimer()
           timerRef.current = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500)
         }
+      } else if (d.type === 'dl2') {
+        setDlInfo({ done: d.done, total: d.total, speed: d.speed })
+        setRetryNote('')
+      } else if (d.type === 'retry') {
+        setRetryNote(`網絡唔穩，自動重試中（第 ${d.attempt} 次）…`)
       } else if (d.type === 'dl') {
         setProgress(d.progress)
       } else if (d.type === 'chunk') {
@@ -299,7 +397,7 @@ export default function TranscribePage() {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name); setText(''); setSaved(false); setStatusMsg('')
-    fileObjRef.current = file; setCreatedBookId(null); setBookMsg('')
+    fileObjRef.current = file; setCreatedBookId(null); setBookMsg(''); setDlInfo(null); setRetryNote('')
     setAudioDur(0); setChunkDone(0); setChunkTotal(0); setElapsed(0)
     try {
       setPhase('decoding')
@@ -322,7 +420,15 @@ export default function TranscribePage() {
   // 依階段組出即時進度文字
   const deviceTag = device === 'webgpu' ? '⚡ GPU 加速 · ' : device === 'wasm' ? '🐢 CPU · ' : ''
   const liveLabel = (): string => {
-    if (phase === 'loadingModel') return `${deviceTag}載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
+    if (phase === 'loadingModel') {
+      if (retryNote) return retryNote
+      if (dlInfo && dlInfo.total > 0 && dlInfo.done < dlInfo.total) {
+        const mb = (n: number) => (n / 1048576).toFixed(0)
+        const left = dlInfo.speed > 0 ? Math.ceil((dlInfo.total - dlInfo.done) / dlInfo.speed / 60) : 0
+        return `${deviceTag}下載模型 ${mb(dlInfo.done)} / ${mb(dlInfo.total)} MB${dlInfo.speed > 0 ? ` · ${(dlInfo.speed / 1048576).toFixed(2)} MB/秒 · 約剩 ${left} 分鐘` : ''}（斷線會自動續傳）`
+      }
+      return `${deviceTag}載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
+    }
     if (phase === 'decoding') return '解碼音頻中…'
     if (phase === 'transcribing') {
       const dur = audioDur > 0 ? `音頻 ${fmt(audioDur)} · ` : ''
@@ -391,7 +497,12 @@ export default function TranscribePage() {
             {busy ? <Loader2 className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
             <span className="text-sm font-medium">{busy ? liveLabel() : '上傳音頻（MP3 / M4A / WAV / OGG…）'}</span>
             {/* 模型下載進度 */}
-            {phase === 'loadingModel' && progress > 0 && (
+            {phase === 'loadingModel' && dlInfo && dlInfo.total > 0 && dlInfo.done < dlInfo.total && (
+              <span className="w-52 h-1.5 bg-indigo-100 rounded-full overflow-hidden mt-1">
+                <span className="block h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(dlInfo.done / dlInfo.total * 100)}%` }} />
+              </span>
+            )}
+            {phase === 'loadingModel' && !(dlInfo && dlInfo.total > 0 && dlInfo.done < dlInfo.total) && progress > 0 && (
               <span className="w-52 h-1.5 bg-indigo-100 rounded-full overflow-hidden mt-1">
                 <span className="block h-full bg-indigo-500 transition-all" style={{ width: `${progress}%` }} />
               </span>
