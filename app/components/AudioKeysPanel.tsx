@@ -29,6 +29,7 @@ export default function AudioKeysPanel({ config, onChange, onClose, reservedKeys
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      e.stopImmediatePropagation()   // 確保閱讀器唔會同時當佢係翻頁／返回
       if (e.key === 'Escape') { setCapturing(null); setNote(''); return }
       const combo = comboOf(e)
       if (!combo) return   // 淨係撳咗 Shift 等修飾鍵，繼續等
