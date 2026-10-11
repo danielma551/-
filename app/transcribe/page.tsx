@@ -55,9 +55,11 @@ function buildSentencesWithTimes(
 
 type Phase = 'idle' | 'loadingModel' | 'decoding' | 'transcribing' | 'done' | 'error'
 
+// transformers.js v3：支援 WebGPU（用顯示卡計，快好多）；冇 WebGPU 自動退返 CPU
 const MODELS = [
-  { id: 'Xenova/whisper-base', label: 'base（快 · ~150MB）' },
-  { id: 'Xenova/whisper-small', label: 'small（準 · ~250MB）' },
+  { id: 'base', repo: 'onnx-community/whisper-base', label: 'base（快 · ~80MB）' },
+  { id: 'small', repo: 'onnx-community/whisper-small', label: 'small（準 · ~250MB）' },
+  { id: 'turbo', repo: 'onnx-community/whisper-large-v3-turbo', label: 'large-v3-turbo（最準 · ~560MB · 需 WebGPU）' },
 ]
 // 中英混合：指定中文模式 → Whisper 會保留夾雜嘅英文字（自動偵測只睇頭 30 秒，易判錯成英文、成篇變英文）
 const LANGS = [
@@ -69,12 +71,19 @@ const LANGS = [
 
 // 用變數避免 webpack 靜態分析，直接由 CDN 動態載入 transformers.js
 // 用 /+esm 端點：正式 ESM 打包，模型類型（whisper 等）先會齊全註冊
-const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/+esm'
+const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js'
 
 export default function TranscribePage() {
   const router = useRouter()
   // 記住上次揀嘅模型同語言（掛載後先讀，避免 SSR hydration 唔一致）
-  const [model, setModelState] = useState(MODELS[0].id)
+  const [model, setModelState] = useState('small')
+  const [device, setDevice] = useState<'webgpu' | 'wasm' | ''>('')
+  const [hasGPU, setHasGPU] = useState<boolean | null>(null)
+  useEffect(() => {
+    const g = (navigator as any).gpu
+    if (!g) { setHasGPU(false); return }
+    g.requestAdapter().then((a: any) => setHasGPU(!!a)).catch(() => setHasGPU(false))
+  }, [])
   const [lang, setLangState] = useState('mixed')
   useEffect(() => {
     const m = localStorage.getItem('transcribe-model')
@@ -176,19 +185,67 @@ export default function TranscribePage() {
     const code = `
       import { pipeline, env } from '${TRANSFORMERS_URL}';
       env.allowLocalModels = false; env.useBrowserCache = true;
-      let transcriber = null, curModel = null;
-      self.onmessage = async (e) => {
-        const { model, audio, lang } = e.data;
+      let transcriber = null, curKey = null;
+
+      // 偵測 WebGPU（有就用顯示卡；仲睇吓支唔支援 fp16）
+      async function detect() {
         try {
-          if (!transcriber || curModel !== model) {
-            self.postMessage({ type: 'phase', phase: 'loadingModel' });
-            transcriber = await pipeline('automatic-speech-recognition', model, {
-              progress_callback: (p) => { if (p.status === 'progress' && typeof p.progress === 'number') self.postMessage({ type: 'dl', progress: Math.round(p.progress) }); }
-            });
-            curModel = model;
+          if (!self.navigator || !self.navigator.gpu) return { device: 'wasm', f16: false };
+          const adapter = await self.navigator.gpu.requestAdapter();
+          if (!adapter) return { device: 'wasm', f16: false };
+          return { device: 'webgpu', f16: adapter.features.has('shader-f16') };
+        } catch (e) { return { device: 'wasm', f16: false }; }
+      }
+      function dtypeFor(model, dev) {
+        if (dev.device !== 'webgpu') return 'q8';
+        if (model === 'base') return { encoder_model: 'fp32', decoder_model_merged: 'q4' };
+        if (model === 'small') return { encoder_model: dev.f16 ? 'fp16' : 'fp32', decoder_model_merged: 'q4' };
+        return { encoder_model: dev.f16 ? 'q4f16' : 'q4', decoder_model_merged: dev.f16 ? 'q4f16' : 'q4' };
+      }
+      async function load(model, repo, dev) {
+        const files = {};
+        return pipeline('automatic-speech-recognition', repo, {
+          device: dev.device,
+          dtype: dtypeFor(model, dev),
+          progress_callback: (p) => {
+            if (p.status === 'progress' && p.file) {
+              files[p.file] = { l: p.loaded || 0, t: p.total || 0 };
+              let L = 0, T = 0;
+              for (const k in files) { L += files[k].l; T += files[k].t; }
+              if (T > 0) self.postMessage({ type: 'dl', progress: Math.round((L / T) * 100) });
+            }
+          },
+        });
+      }
+
+      self.onmessage = async (e) => {
+        const { model, repo, audio, lang } = e.data;
+        try {
+          let dev = await detect();
+          if (model === 'turbo' && dev.device !== 'webgpu') {
+            throw new Error('large-v3-turbo 需要 WebGPU，呢個瀏覽器唔支援，請改用 base 或 small');
           }
-          self.postMessage({ type: 'phase', phase: 'transcribing' });
-          const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', return_timestamps: true, chunk_callback: () => self.postMessage({ type: 'chunk' }) };
+          const key = model + '|' + dev.device;
+          if (!transcriber || curKey !== key) {
+            self.postMessage({ type: 'phase', phase: 'loadingModel', device: dev.device });
+            try {
+              transcriber = await load(model, repo, dev);
+            } catch (gpuErr) {
+              // WebGPU 開唔到（驅動／顯示卡唔支援）→ 自動退返 CPU
+              if (dev.device === 'webgpu' && model !== 'turbo') {
+                dev = { device: 'wasm', f16: false };
+                self.postMessage({ type: 'phase', phase: 'loadingModel', device: 'wasm', fallback: true });
+                transcriber = await load(model, repo, dev);
+              } else throw gpuErr;
+            }
+            curKey = model + '|' + dev.device;
+          }
+          self.postMessage({ type: 'phase', phase: 'transcribing', device: dev.device });
+          const opts = {
+            chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', return_timestamps: true,
+            // 每計完一段（一次 generate）就回報進度
+            streamer: { put() {}, end() { self.postMessage({ type: 'chunk' }); } },
+          };
           if (lang === 'mixed' || lang === 'chinese') opts.language = 'chinese';
           else if (lang === 'english') opts.language = 'english';
           const out = await transcriber(audio, opts);
@@ -207,6 +264,7 @@ export default function TranscribePage() {
       const d = e.data
       if (d.type === 'phase') {
         setPhase(d.phase)
+        if (d.device) setDevice(d.device)
         if (d.phase === 'transcribing') {
           const t0 = Date.now()
           stopTimer()
@@ -251,7 +309,7 @@ export default function TranscribePage() {
       setChunkTotal(Math.max(1, Math.ceil(duration / 20)))   // 每段有效前進約 20s
       const worker = ensureWorker()
       // 傳走 audio.buffer（轉移擁有權，零複製）
-      worker.postMessage({ model, audio, lang }, [audio.buffer])
+      worker.postMessage({ model, repo: MODELS.find(m => m.id === model)?.repo || MODELS[1].repo, audio, lang }, [audio.buffer])
     } catch (err) {
       console.error(err)
       setPhase('error')
@@ -262,13 +320,14 @@ export default function TranscribePage() {
   }
 
   // 依階段組出即時進度文字
+  const deviceTag = device === 'webgpu' ? '⚡ GPU 加速 · ' : device === 'wasm' ? '🐢 CPU · ' : ''
   const liveLabel = (): string => {
-    if (phase === 'loadingModel') return `載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
+    if (phase === 'loadingModel') return `${deviceTag}載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
     if (phase === 'decoding') return '解碼音頻中…'
     if (phase === 'transcribing') {
       const dur = audioDur > 0 ? `音頻 ${fmt(audioDur)} · ` : ''
       const seg = chunkTotal > 0 ? `第 ${Math.min(chunkDone + 1, chunkTotal)}/${chunkTotal} 段 · ` : ''
-      return `轉錄中… ${dur}${seg}已用 ${elapsed}s`
+      return `${deviceTag}轉錄中… ${dur}${seg}已用 ${elapsed}s`
     }
     return ''
   }
@@ -306,7 +365,7 @@ export default function TranscribePage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">模型</label>
               <select value={model} onChange={e => setModel(e.target.value)} disabled={busy}
                 className="w-full h-10 px-2 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:border-indigo-400 disabled:opacity-50">
-                {MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.id === 'turbo' && hasGPU === false}>{m.label}</option>)}
               </select>
             </div>
             <div>
@@ -318,6 +377,11 @@ export default function TranscribePage() {
             </div>
           </div>
 
+          {hasGPU !== null && (
+            <p className={`mt-2 text-[11px] ${hasGPU ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {hasGPU ? '⚡ 呢個瀏覽器支援 WebGPU：會用顯示卡加速轉錄' : '🐢 呢個瀏覽器冇 WebGPU：會用 CPU 轉錄（較慢），建議用電腦版 Chrome／Edge'}
+            </p>
+          )}
           {/* 上傳 */}
           <button
             onClick={() => fileRef.current?.click()}

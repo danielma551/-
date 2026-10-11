@@ -19,6 +19,8 @@ import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { getBookAudio } from '../utils/bookAudioDB'
 import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
 import PdfPanel from './PdfPanel'
+import AudioKeysPanel from './AudioKeysPanel'
+import { loadAudioKeys, comboOf, actionForCombo, prettyCombo, AudioKeyConfig } from '../utils/audioKeys'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
@@ -212,6 +214,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const AUDIO_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
   const [bookAudioRate, setBookAudioRate] = useState(1)
   const [showAudioKeys, setShowAudioKeys] = useState(false)
+  const [audioKeys, setAudioKeys] = useState<AudioKeyConfig>(() => loadAudioKeys())
   // 📄 參考 PDF（每本書可附一份，喺側邊睇）
   const [pdfDoc, setPdfDoc] = useState<{ blob: Blob; name: string } | null>(null)
   const [showPdf, setShowPdf] = useState(false)
@@ -790,16 +793,25 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         return
       }
 
-      // 🎧 錄音快捷鍵（只喺有錄音嘅書生效）
-      if (bookAudioRef.current && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const k = e.key.toLowerCase()
-        if (e.key === ' ' || k === 'k') { e.preventDefault(); toggleBookAudio(); return }
-        if (k === 'j') { e.preventDefault(); seekBookAudio(e.shiftKey ? -30 : -5); return }
-        if (k === 'l') { e.preventDefault(); seekBookAudio(e.shiftKey ? 30 : 5); return }
-        if (e.key === '[') { e.preventDefault(); changeBookAudioRate(-1); return }
-        if (e.key === ']') { e.preventDefault(); changeBookAudioRate(1); return }
-        if (k === 'r') { e.preventDefault(); playFromCurrentSentence(); return }
-        if (e.key === '?') { e.preventDefault(); setShowAudioKeys(v => !v); return }
+      // 🎧 錄音快捷鍵（只喺有錄音嘅書生效；鍵位可自訂）
+      if (bookAudioRef.current) {
+        const combo = comboOf(e)
+        const act = combo ? actionForCombo(audioKeys, combo) : null
+        if (act) {
+          e.preventDefault()
+          switch (act) {
+            case 'playPause': toggleBookAudio(); break
+            case 'back': seekBookAudio(-audioKeys.shortJump); break
+            case 'fwd': seekBookAudio(audioKeys.shortJump); break
+            case 'backLong': seekBookAudio(-audioKeys.longJump); break
+            case 'fwdLong': seekBookAudio(audioKeys.longJump); break
+            case 'slower': changeBookAudioRate(-1); break
+            case 'faster': changeBookAudioRate(1); break
+            case 'fromSentence': playFromCurrentSentence(); break
+            case 'help': setShowAudioKeys(v => !v); break
+          }
+          return
+        }
       }
 
       if (e.key === shortcuts.nextSentence) {
@@ -817,7 +829,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, sentences, shortcuts, onReset, bookId])
+  }, [currentIndex, sentences, shortcuts, onReset, bookId, audioKeys])
 
   // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
   // 過濾掉點按鈕、輸入框等互動元素的情況，反饋改用振動（無視覺閃光）
@@ -2624,6 +2636,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         />
       )}
 
+      {showAudioKeys && hasBookAudio && (
+        <AudioKeysPanel
+          config={audioKeys}
+          onChange={setAudioKeys}
+          onClose={() => setShowAudioKeys(false)}
+          reservedKeys={[shortcuts.nextSentence, shortcuts.previousSentence, shortcuts.returnHome].map(k => (k === ' ' ? 'Space' : k.length === 1 ? k.toUpperCase() : k))}
+          isEink={isEink}
+        />
+      )}
+
       {/* 🎧 書本錄音播放器（左下角） */}
       {hasBookAudio && (() => {
         const fmtT = (t: number) => { if (!isFinite(t)) return '--:--'; const m = Math.floor(t / 60); return `${m}:${String(Math.floor(t % 60)).padStart(2, '0')}` }
@@ -2649,12 +2671,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               style={isEink
                 ? { width: 34, height: 34, background: '#000', color: '#fff', fontSize: 14, fontWeight: 700 }
                 : { width: 34, height: 34, borderRadius: 999, background: '#4f46e5', color: '#fff', fontSize: 13 }}
-              title={bookAudioPlaying ? '暫停錄音（空白鍵／K）' : '播放錄音（空白鍵／K）'}
+              title={`${bookAudioPlaying ? '暫停錄音' : '播放錄音'}（${(audioKeys.keys.playPause || []).map(prettyCombo).join(' / ') || '未設快捷鍵'}）`}
             >
               {bookAudioPlaying ? '❚❚' : '▶'}
             </button>
-            <button onClick={() => seekBookAudio(-5)} title="倒退 5 秒（J）"
-              style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>−5</button>
+            <button onClick={() => seekBookAudio(-audioKeys.shortJump)} title={`倒退 ${audioKeys.shortJump} 秒（${(audioKeys.keys.back || []).map(prettyCombo).join(' / ') || '未設快捷鍵'}）`}
+              style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>−{audioKeys.shortJump}</button>
             <div className="flex flex-col" style={{ minWidth: 92 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: isEink ? '#000' : '#4338ca', fontVariantNumeric: 'tabular-nums' }}>
                 🎧 {fmtT(bookAudioTime)} / {fmtT(bookAudioDur)}
@@ -2663,8 +2685,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <div style={{ height: '100%', width: `${pct}%`, background: isEink ? '#000' : '#6366f1' }} />
               </div>
             </div>
-            <button onClick={() => seekBookAudio(5)} title="快進 5 秒（L）"
-              style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>+5</button>
+            <button onClick={() => seekBookAudio(audioKeys.shortJump)} title={`快進 ${audioKeys.shortJump} 秒（${(audioKeys.keys.fwd || []).map(prettyCombo).join(' / ') || '未設快捷鍵'}）`}
+              style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>+{audioKeys.shortJump}</button>
             <button onClick={cycleBookAudioRate} title="播放速度（[ 慢、] 快）"
               style={{ fontSize: 11, fontWeight: 700, color: isEink ? '#000' : '#4338ca', padding: '2px 6px', borderRadius: isEink ? 0 : 6,
                 border: isEink ? '1px solid #000' : '1px solid #c7d2fe', fontVariantNumeric: 'tabular-nums' }}>
@@ -2681,33 +2703,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             >
               📄 {pdfDoc ? 'PDF' : '加 PDF'}
             </button>
-            <button onClick={() => setShowAudioKeys(v => !v)} title="快捷鍵（?）"
+            <button onClick={() => setShowAudioKeys(v => !v)} title="快捷鍵（可自訂）"
               style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#9ca3af', padding: '0 4px' }}>⌨</button>
-            {showAudioKeys && (
-              <div
-                style={{
-                  position: 'absolute', left: 0, bottom: 'calc(100% + 10px)', minWidth: 230,
-                  background: isEink ? '#fff' : '#fff', border: isEink ? '2px solid #000' : '1px solid #e0e7ff',
-                  borderRadius: isEink ? 0 : 12, boxShadow: isEink ? 'none' : '0 8px 24px rgba(0,0,0,0.12)',
-                  padding: '10px 12px', fontSize: 12, color: isEink ? '#000' : '#374151', lineHeight: 1.9,
-                }}
-              >
-                {[
-                  ['空白鍵 / K', '播放 / 暫停'],
-                  ['J / L', '倒退 / 快進 5 秒'],
-                  ['Shift + J / L', '倒退 / 快進 30 秒'],
-                  ['[ / ]', '慢啲 / 快啲'],
-                  ['R', '由呢句開始播'],
-                  ['← / →', '上一句 / 下一句'],
-                  ['?', '顯示 / 收起呢個表'],
-                ].map(([k, d]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}>
-                    <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: isEink ? '#000' : '#4f46e5' }}>{k}</span>
-                    <span>{d}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )
       })()}
