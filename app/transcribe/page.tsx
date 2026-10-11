@@ -11,6 +11,10 @@ import { reviewStorage, generateBookId, BookData } from '../utils/storage'
 import { saveBookToIDB } from '../utils/bookDB'
 import { splitIntoSentences } from '../utils/epubParser'
 import { saveBookAudio } from '../utils/bookAudioDB'
+import { Converter } from 'opencc-js/t2cn'
+
+// 繁 → 簡（Whisper 中文常出繁體或繁簡夾雜，統一轉做簡體）
+const toSimplified = Converter({ from: 't', to: 'cn' })
 
 // 由 Whisper 時間戳段落 → 按閱讀規則分句，並估計每句開始秒數（段內按字數比例）
 function buildSentencesWithTimes(
@@ -80,6 +84,8 @@ export default function TranscribePage() {
   }, [])
   const setModel = (v: string) => { setModelState(v); try { localStorage.setItem('transcribe-model', v) } catch {} }
   const setLang = (v: string) => { setLangState(v); try { localStorage.setItem('transcribe-lang', v) } catch {} }
+  const langRef = useRef(lang)
+  useEffect(() => { langRef.current = lang }, [lang])
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
   const [statusMsg, setStatusMsg] = useState('')
@@ -212,9 +218,15 @@ export default function TranscribePage() {
         setChunkDone(n => n + 1)
       } else if (d.type === 'done') {
         stopTimer()
-        setText(d.text)
+        // 中文模式：統一轉簡體（英文字唔受影響）
+        const zh = langRef.current !== 'english'
+        const outText: string = zh ? toSimplified(d.text || '') : d.text
+        const outChunks = zh && Array.isArray(d.chunks)
+          ? d.chunks.map((c: any) => ({ ...c, text: toSimplified(c.text || '') }))
+          : d.chunks
+        setText(outText)
         setPhase('done')
-        createBookFromTranscript(d.text, d.chunks)
+        createBookFromTranscript(outText, outChunks)
       } else if (d.type === 'error') {
         stopTimer()
         setPhase('error')

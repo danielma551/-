@@ -32,6 +32,7 @@ import NotesPanel from './components/NotesPanel'
 import { generateTodayArticle, getExternalBook, alreadyGeneratedToday } from './utils/externalReading'
 import { openReviewBook } from './utils/reviewBook'
 import { deleteBookAudio } from './utils/bookAudioDB'
+import { deleteBookPdf } from './utils/bookAttachDB'
 import { Newspaper } from 'lucide-react'
 
 // ── Vision OCR 設定型別 ──
@@ -429,6 +430,7 @@ export default function Home() {
     if (confirm('確定要刪除這本書嗎？')) {
       deleteBookFromIDB(id).then(() => getAllBooksFromIDB().then(setSavedBooks))
       deleteBookAudio(id)   // 有錄音嘅書：連錄音一齊刪
+      deleteBookPdf(id)     // 連參考 PDF 一齊刪
       if (bookId === id) {
         setSentences([])
         setBookTitle('')

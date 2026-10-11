@@ -17,6 +17,8 @@ import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completi
 import { updateBookProgressInIDB } from '../utils/bookDB'
 import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { getBookAudio } from '../utils/bookAudioDB'
+import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
+import PdfPanel from './PdfPanel'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
 import FontSelector from './FontSelector'
 import KeyboardSettings from './KeyboardSettings'
@@ -206,6 +208,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [bookAudioPlaying, setBookAudioPlaying] = useState(false)
   const [bookAudioTime, setBookAudioTime] = useState(0)
   const [bookAudioDur, setBookAudioDur] = useState(0)
+  // 📄 參考 PDF（每本書可附一份，喺側邊睇）
+  const [pdfDoc, setPdfDoc] = useState<{ blob: Blob; name: string } | null>(null)
+  const [showPdf, setShowPdf] = useState(false)
+  const pdfInputRef = useRef<HTMLInputElement | null>(null)
+  const [winW, setWinW] = useState(1200)
+  useEffect(() => {
+    const on = () => setWinW(window.innerWidth)
+    on(); window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
 
   useEffect(() => {
     setCurrentIndex(initialIndex)
@@ -603,6 +615,41 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       setHasBookAudio(false); setBookAudioPlaying(false); setBookAudioTime(0); setBookAudioDur(0)
     }
   }, [bookId])
+
+  // 載入呢本書嘅參考 PDF（上次開住就自動再開）
+  useEffect(() => {
+    let cancelled = false
+    setPdfDoc(null); setShowPdf(false)
+    getBookPdf(bookId).then(p => {
+      if (cancelled || !p) return
+      setPdfDoc({ blob: p.blob, name: p.name })
+      if (localStorage.getItem('pdf-open:' + bookId) === 'true') setShowPdf(true)
+    })
+    return () => { cancelled = true }
+  }, [bookId])
+  const setPdfOpen = (v: boolean) => {
+    setShowPdf(v)
+    try { localStorage.setItem('pdf-open:' + bookId, String(v)) } catch {}
+  }
+  const handlePdfPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { alert('請揀 PDF 檔案'); return }
+    await saveBookPdf({ bookId, blob: f, name: f.name, savedAt: Date.now() })
+    try { localStorage.removeItem('pdf-scroll:' + bookId) } catch {}
+    setPdfDoc({ blob: f, name: f.name })
+    setPdfOpen(true)
+  }
+  const removePdf = async () => {
+    if (!confirm('移除呢本書嘅參考 PDF？')) return
+    await deleteBookPdf(bookId)
+    try { localStorage.removeItem('pdf-scroll:' + bookId) } catch {}
+    setPdfDoc(null); setPdfOpen(false)
+  }
+  const pdfWide = winW >= 900
+  const pdfPanelW = pdfWide ? Math.min(Math.round(winW * 0.46), 760) : winW
+  const pdfOffset = showPdf && pdfDoc && pdfWide ? pdfPanelW : 0   // 正文同左下控件要讓位
 
   const toggleBookAudio = () => {
     const au = bookAudioRef.current
@@ -1739,6 +1786,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       style={{
         backgroundColor: isEink ? einkTheme.bg : isPaper ? paperTheme.bg : displaySettings.backgroundColor,
         paddingRight: (!isEink && showSidebar) ? SIDEBAR_WIDTH : 0,
+        paddingLeft: pdfOffset,
         animation: isEink ? undefined : 'reader-in 340ms cubic-bezier(0.23,1,0.32,1) both',
       }}
     >
@@ -2515,17 +2563,34 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         </div>
       )}
 
+      {/* 📄 參考 PDF 面板（左側；窄螢幕全屏） */}
+      <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={handlePdfPicked} />
+      {showPdf && pdfDoc && (
+        <PdfPanel
+          bookId={bookId}
+          blob={pdfDoc.blob}
+          name={pdfDoc.name}
+          isEink={isEink}
+          width={pdfWide ? pdfPanelW : '100%'}
+          onClose={() => setPdfOpen(false)}
+          onReplace={() => pdfInputRef.current?.click()}
+          onRemove={removePdf}
+        />
+      )}
+
       {/* 🎧 書本錄音播放器（左下角） */}
       {hasBookAudio && (() => {
         const fmtT = (t: number) => { if (!isFinite(t)) return '--:--'; const m = Math.floor(t / 60); return `${m}:${String(Math.floor(t % 60)).padStart(2, '0')}` }
         const pct = bookAudioDur > 0 ? (bookAudioTime / bookAudioDur) * 100 : 0
         return (
           <div
-            className="fixed bottom-6 left-4 z-40 flex items-center gap-2 select-none"
+            className="fixed bottom-6 z-40 flex items-center gap-2 select-none"
             onClick={e => e.stopPropagation()}
             style={isEink ? {
+              left: pdfOffset + 16,
               background: '#fff', border: '2px solid #000', borderRadius: 0, padding: '6px 10px',
             } : {
+              left: pdfOffset + 16,
               background: 'rgba(255,255,255,0.95)', border: '1px solid #e0e7ff', borderRadius: 999,
               padding: '6px 12px 6px 6px', boxShadow: '0 6px 20px rgba(79,70,229,0.15)',
             }}
@@ -2552,6 +2617,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
             <button onClick={() => seekBookAudio(10)} title="快進 10 秒"
               style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>+10</button>
+            {/* 📄 參考 PDF */}
+            <button
+              onClick={() => (pdfDoc ? setPdfOpen(!showPdf) : pdfInputRef.current?.click())}
+              title={pdfDoc ? (showPdf ? '收起參考 PDF' : '打開參考 PDF') : '加一份參考 PDF'}
+              style={isEink
+                ? { marginLeft: 2, padding: '4px 8px', border: '2px solid #000', background: showPdf ? '#000' : '#fff', color: showPdf ? '#fff' : '#000', fontSize: 12, fontWeight: 700 }
+                : { marginLeft: 2, padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                    background: showPdf ? '#4f46e5' : '#eef2ff', color: showPdf ? '#fff' : '#4f46e5' }}
+            >
+              📄 {pdfDoc ? 'PDF' : '加 PDF'}
+            </button>
           </div>
         )
       })()}
@@ -2940,7 +3016,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 左右半屏翻句：常駐掣移除，改 hover 顯示淡 chevron（點擊翻頁 + 鍵盤沿用）*/}
             <div
               className="group hidden md:block"
-              style={{ position: 'fixed', left: 0, top: 120, bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
+              style={{ position: 'fixed', left: pdfOffset, top: 120, bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
               onClick={(e) => { e.stopPropagation(); goToPrevious() }}
               title="上一句"
             >
