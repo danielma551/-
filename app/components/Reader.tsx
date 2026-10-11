@@ -2584,12 +2584,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         const pct = bookAudioDur > 0 ? (bookAudioTime / bookAudioDur) * 100 : 0
         return (
           <div
-            className="fixed bottom-6 z-40 flex items-center gap-2 select-none"
+            className="fixed bottom-6 flex items-center gap-2 select-none"
             onClick={e => e.stopPropagation()}
             style={isEink ? {
+              zIndex: 42,   // 要高過紙本模式底部嘅隱形感應區（z 40），否則右半邊撳唔到
               left: pdfOffset + 16,
               background: '#fff', border: '2px solid #000', borderRadius: 0, padding: '6px 10px',
             } : {
+              zIndex: 42,
               left: pdfOffset + 16,
               background: 'rgba(255,255,255,0.95)', border: '1px solid #e0e7ff', borderRadius: 999,
               padding: '6px 12px 6px 6px', boxShadow: '0 6px 20px rgba(79,70,229,0.15)',
