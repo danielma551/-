@@ -22,6 +22,12 @@ export interface BookData {
   coverColor?: string
   coverImage?: string
   chapters?: ChapterMark[]   // EPUB 章節目錄（非 EPUB 書本為 undefined）
+  kind?: 'audio'             // 由錄音轉錄而成嘅書（放入「🎧 錄音」文件夾）
+}
+
+// 判斷係咪錄音書（新書有 kind；舊書靠「🎧 」開頭書名）
+export function isAudioBook(b: { kind?: string; title: string }): boolean {
+  return b.kind === 'audio' || b.title.startsWith('🎧 ')
 }
 
 const STORAGE_KEY = 'reading_website_books'

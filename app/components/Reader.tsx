@@ -211,6 +211,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [bookAudioTime, setBookAudioTime] = useState(0)
   const [bookAudioDur, setBookAudioDur] = useState(0)
   const bookAudioTimesRef = useRef<number[]>([])
+  // 🔗 跟讀模式：文字跟住錄音自動揭；手動揭頁時錄音跳去嗰句
+  const [followAudio, setFollowAudio] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    return localStorage.getItem('book-audio-follow') !== 'false'
+  })
+  const followAudioRef = useRef(followAudio)
+  useEffect(() => { followAudioRef.current = followAudio; try { localStorage.setItem('book-audio-follow', String(followAudio)) } catch {} }, [followAudio])
+  const followTickRef = useRef<((t: number) => void) | null>(null)
+  const autoNavRef = useRef(false)          // 呢次換句係跟讀自動做嘅（唔好反過嚟 seek 錄音）
+  const manualSeekUntilRef = useRef(0)      // 手動揭頁後短時間內唔好自動揭（避免彈來彈去）
   const AUDIO_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
   const [bookAudioRate, setBookAudioRate] = useState(1)
   const [showAudioKeys, setShowAudioKeys] = useState(false)
@@ -597,7 +607,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         lastSave = now
         try { localStorage.setItem(posKey, String(au.currentTime || 0)) } catch {}
       }
-      au.addEventListener('timeupdate', () => { setBookAudioTime(au.currentTime); savePos() })
+      au.addEventListener('timeupdate', () => { setBookAudioTime(au.currentTime); savePos(); followTickRef.current?.(au.currentTime) })
       au.addEventListener('play', () => setBookAudioPlaying(true))
       au.addEventListener('pause', () => { setBookAudioPlaying(false); savePos(true) })
       au.addEventListener('ended', () => {
@@ -660,6 +670,33 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const pdfWide = winW >= 900
   const pdfPanelW = pdfWide ? Math.min(Math.round(winW * 0.46), 760) : winW
   const pdfOffset = showPdf && pdfDoc && pdfWide ? pdfPanelW : 0   // 正文同左下控件要讓位
+
+  // 跟讀：錄音播到邊句，畫面就揭到邊句
+  followTickRef.current = (t: number) => {
+    if (!followAudioRef.current || Date.now() < manualSeekUntilRef.current) return
+    const times = bookAudioTimesRef.current
+    if (!times.length) return
+    let lo = 0, hi = Math.min(times.length, sentences.length) - 1, ans = 0
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (times[m] <= t + 0.15) { ans = m; lo = m + 1 } else hi = m - 1 }
+    const cur = currentIndexRef.current
+    if (ans === cur) return
+    autoNavRef.current = true
+    triggerFade(() => setCurrentIndex(ans), ans > cur ? 'up' : 'down')
+    if (ans > cur) { historyStorage.recordRead(ans - cur); bookReadingStorage.recordRead(bookId, ans - cur) }
+  }
+  // 手動揭頁（← → 或撳屏幕）→ 錄音跳去嗰句
+  useEffect(() => {
+    if (autoNavRef.current) { autoNavRef.current = false; return }
+    const au = bookAudioRef.current
+    if (!au || !followAudioRef.current) return
+    const t = bookAudioTimesRef.current[currentIndex]
+    if (typeof t === 'number' && Math.abs(au.currentTime - t) > 0.6) {
+      manualSeekUntilRef.current = Date.now() + 900
+      au.currentTime = Math.max(0, t)
+      setBookAudioTime(t)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex])
 
   const toggleBookAudio = () => {
     const au = bookAudioRef.current
@@ -2687,6 +2724,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
             <button onClick={() => seekBookAudio(audioKeys.shortJump)} title={`快進 ${audioKeys.shortJump} 秒（${(audioKeys.keys.fwd || []).map(prettyCombo).join(' / ') || '未設快捷鍵'}）`}
               style={{ fontSize: 12, fontWeight: 600, color: isEink ? '#000' : '#6366f1', padding: '0 2px' }}>+{audioKeys.shortJump}</button>
+            <button onClick={() => setFollowAudio(v => !v)} title={followAudio ? '跟讀開緊：文字跟住錄音自動揭（撳一下關）' : '跟讀已關：撳一下開'}
+              style={isEink
+                ? { fontSize: 11, fontWeight: 700, padding: '2px 6px', border: '1px solid #000', background: followAudio ? '#000' : '#fff', color: followAudio ? '#fff' : '#000' }
+                : { fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 6, background: followAudio ? '#4f46e5' : 'transparent', color: followAudio ? '#fff' : '#6366f1', border: '1px solid ' + (followAudio ? '#4f46e5' : '#c7d2fe') }}>
+              🔗 跟讀
+            </button>
             <button onClick={cycleBookAudioRate} title="播放速度（[ 慢、] 快）"
               style={{ fontSize: 11, fontWeight: 700, color: isEink ? '#000' : '#4338ca', padding: '2px 6px', borderRadius: isEink ? 0 : 6,
                 border: isEink ? '1px solid #000' : '1px solid #c7d2fe', fontVariantNumeric: 'tabular-nums' }}>

@@ -23,7 +23,7 @@ import FeedPanel from './components/FeedPanel'
 import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
-import { generateBookId, BookData, reviewStorage } from './utils/storage'
+import { generateBookId, BookData, reviewStorage, isAudioBook } from './utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
 import { parseEpubClientSide } from './utils/epubParser'
 import { addTrack, addYouTubeTrack, listTracks, deleteTrack, MusicTrack } from './utils/musicDB'
@@ -253,6 +253,10 @@ export default function Home() {
   const [graphBook, setGraphBook] = useState<BookData | null>(null)
   // 單本書閱讀日曆
   const [calendarBook, setCalendarBook] = useState<{ id: string; title: string } | null>(null)
+  // 🎧 錄音文件夾
+  const [openFolder, setOpenFolder] = useState<'audio' | null>(null)
+  const audioBooks = savedBooks.filter(isAudioBook)
+  const shelfBooks = savedBooks.filter(b => !isAudioBook(b))
   // 每日温習
   const [showReview, setShowReview] = useState(false)
   const [reviewDue, setReviewDue] = useState(0)
@@ -293,6 +297,11 @@ export default function Home() {
     getAllBooksFromIDB().then(books => {
       setSavedBooks(books)
       // ?open=<書本 id>：例如由「音頻轉文字」撳「去閱讀」過嚟，直接打開嗰本書
+      // ?folder=audio：直接打開「🎧 錄音」文件夾
+      if (new URLSearchParams(window.location.search).get('folder') === 'audio') {
+        setOpenFolder('audio')
+        window.history.replaceState(null, '', window.location.pathname)
+      }
       const openId = new URLSearchParams(window.location.search).get('open')
       if (openId) {
         window.history.replaceState(null, '', window.location.pathname)
@@ -441,6 +450,8 @@ export default function Home() {
   }
 
   const handleReset = () => {
+    // 由錄音書退出 → 返去「🎧 錄音」文件夾；其他書 → 返書架主頁
+    setOpenFolder(isAudioBook({ title: bookTitle, kind: savedBooks.find(b => b.id === bookId)?.kind }) ? 'audio' : null)
     setSentences([])
     setBookTitle('')
     setBookId('')
@@ -989,8 +1000,45 @@ export default function Home() {
               <p className="text-sm mt-1">點擊「添加書籍」上傳您的第一本書</p>
             </div>
           ) : (
+            <>
+            {/* 文件夾內：頂欄 */}
+            {openFolder === 'audio' && (
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setOpenFolder(null)} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+                    ← 返回書架
+                  </button>
+                  <span className="text-lg font-bold text-gray-800">🎧 錄音</span>
+                  <span className="text-sm text-gray-400">{audioBooks.length} 本</span>
+                </div>
+                <a href="/transcribe" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100">
+                  🎙️ 轉錄新錄音
+                </a>
+              </div>
+            )}
+            {openFolder === 'audio' && audioBooks.length === 0 && (
+              <p className="text-sm text-gray-400 py-16 text-center">文件夾仲係空嘅，去「🎙️ 音頻轉文字」轉一段錄音啦</p>
+            )}
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-5 gap-y-8">
-              {savedBooks.map((book, bookIndex) => {
+              {/* 🎧 錄音文件夾卡（書架主頁先顯示） */}
+              {!openFolder && audioBooks.length > 0 && (
+                <div className="group cursor-pointer book-card-animate" onClick={() => setOpenFolder('audio')}>
+                  <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow duration-200"
+                    style={{ background: 'linear-gradient(160deg,#818cf8,#4f46e5)' }}>
+                    {/* 文件夾耳仔 */}
+                    <div className="absolute top-3 left-3 w-1/3 h-3 rounded-t-md" style={{ background: 'rgba(255,255,255,0.35)' }} />
+                    <div className="absolute inset-x-3 top-6 bottom-3 rounded-md flex flex-col items-center justify-center gap-2"
+                      style={{ background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)' }}>
+                      <span className="text-4xl">🎧</span>
+                      <span className="text-white font-semibold text-sm">錄音</span>
+                      <span className="text-white/80 text-xs">{audioBooks.length} 本</span>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-700 font-medium">🎧 錄音文件夾</p>
+                  <p className="text-xs text-gray-400 mt-0.5">mp3 轉文字</p>
+                </div>
+              )}
+              {(openFolder === 'audio' ? audioBooks : shelfBooks).map((book, bookIndex) => {
                 const progress = book.sentences.length > 0
                   ? Math.round(((book.currentIndex + 1) / book.sentences.length) * 100)
                   : 0
@@ -1137,6 +1185,7 @@ export default function Home() {
                 )
               })}
             </div>
+            </>
           )}
         </div>
       ) : (

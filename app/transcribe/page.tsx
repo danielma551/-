@@ -160,26 +160,28 @@ export default function TranscribePage() {
   const durationRef = useRef(0)
   const [createdBookId, setCreatedBookId] = useState<string | null>(null)
   const [bookMsg, setBookMsg] = useState('')
-  const createBookFromTranscript = async (fullText: string, chunks: any[]) => {
+  const createBookFromTranscript = async (fullText: string, chunks: any[]): Promise<{ id: string; n: number } | null> => {
     const file = fileObjRef.current
-    if (!file || !fullText?.trim()) return
+    if (!file || !fullText?.trim()) return null
     try {
       const { sentences, times } = buildSentencesWithTimes(chunks, fullText, durationRef.current)
-      if (sentences.length === 0) return
+      if (sentences.length === 0) return null
       const now = Date.now()
       const title = file.name.replace(/\.[^.]+$/, '') || '錄音'
       const id = generateBookId(title)
       const book: BookData = {
         id, title: `🎧 ${title}`, sentences, currentIndex: 0,
-        uploadDate: now, lastReadDate: now, coverColor: '#4f46e5',
+        uploadDate: now, lastReadDate: now, coverColor: '#4f46e5', kind: 'audio',
       }
       await saveBookToIDB(book)
       await saveBookAudio({ bookId: id, blob: file, name: file.name, times, savedAt: now })
       setCreatedBookId(id)
-      setBookMsg(`已加入書架：${sentences.length} 句，閱讀時會自動播放錄音 🎧`)
+      setBookMsg(`已加入「🎧 錄音」文件夾：${sentences.length} 句，閱讀時會自動播放錄音`)
+      return { id, n: sentences.length }
     } catch (err) {
       console.error(err)
       setBookMsg('加入書架失敗（可能係瀏覽器空間不足）')
+      return null
     }
   }
 
@@ -448,22 +450,37 @@ export default function TranscribePage() {
           : d.chunks
         setText(outText)
         setPhase('done')
-        createBookFromTranscript(outText, outChunks)
+        createBookFromTranscript(outText, outChunks).then(res => {
+          finishItemRef.current?.(res ? 'done' : 'error', res ? { bookId: res.id, info: `${res.n} 句` } : { info: outText.trim() ? '建書失敗' : '冇轉到文字' })
+        })
       } else if (d.type === 'error') {
         stopTimer()
+        const wasLoading = phaseRef.current === 'loadingModel'
         setPhase('error')
         setStatusMsg(d.message || '轉錄失敗，請換一個檔案或模型再試')
+        finishItemRef.current?.('error', { info: d.message || '轉錄失敗' }, wasLoading)
       }
     }
     workerRef.current = w
     return w
   }
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // ── 批量轉錄：排隊逐個轉（模型只載一次），每個完成就變成一本書 ──
+  type QItem = { id: string; file: File; status: 'waiting' | 'working' | 'done' | 'error'; bookId?: string; info?: string }
+  const [queue, setQueue] = useState<QItem[]>([])
+  const queueRef = useRef<QItem[]>([])
+  const setQ = (fn: (q: QItem[]) => QItem[]) => { queueRef.current = fn(queueRef.current); setQueue(queueRef.current) }
+  const curItemRef = useRef<string | null>(null)
+  const phaseRef = useRef<Phase>('idle')
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  const finishItemRef = useRef<((status: 'done' | 'error', extra: { bookId?: string; info?: string }, abortAll?: boolean) => void) | null>(null)
+
+  const startItem = async (item: QItem) => {
+    curItemRef.current = item.id
+    setQ(q => q.map(x => x.id === item.id ? { ...x, status: 'working' } : x))
+    const file = item.file
     setFileName(file.name); setText(''); setSaved(false); setStatusMsg('')
-    fileObjRef.current = file; setCreatedBookId(null); setBookMsg(''); setDlInfo(null); setRetryNote('')
+    fileObjRef.current = file; setCreatedBookId(null); setBookMsg(''); setRetryNote('')
     setAudioDur(0); setChunkDone(0); setChunkTotal(0); setElapsed(0)
     try {
       setPhase('decoding')
@@ -477,11 +494,41 @@ export default function TranscribePage() {
     } catch (err) {
       console.error(err)
       setPhase('error')
-      setStatusMsg(err instanceof Error ? `解碼失敗：${err.message}` : '解碼失敗，請換一個音頻檔再試')
-    } finally {
-      if (fileRef.current) fileRef.current.value = ''
+      const msg = err instanceof Error ? `解碼失敗：${err.message}` : '解碼失敗，請換一個音頻檔再試'
+      setStatusMsg(msg)
+      finishItemRef.current?.('error', { info: '解碼失敗' })
     }
   }
+  const processNext = () => {
+    const next = queueRef.current.find(x => x.status === 'waiting')
+    if (!next) { curItemRef.current = null; return }
+    startItem(next)
+  }
+  finishItemRef.current = (status, extra, abortAll) => {
+    const id = curItemRef.current
+    setQ(q => q.map(x => {
+      if (x.id === id) return { ...x, status, ...extra }
+      if (abortAll && x.status === 'waiting') return { ...x, status: 'error', info: '模型載入失敗，未轉' }
+      return x
+    }))
+    curItemRef.current = null
+    setTimeout(processNext, 300)
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (fileRef.current) fileRef.current.value = ''
+    if (files.length === 0) return
+    const items: QItem[] = files.map((f, i) => ({ id: `${Date.now()}-${i}-${f.name}`, file: f, status: 'waiting' }))
+    setQ(q => [...q, ...items])
+    if (!curItemRef.current) processNext()   // 冇嘢做緊就即刻開始；做緊就排隊
+  }
+  const clearFinished = () => setQ(q => q.filter(x => x.status === 'waiting' || x.status === 'working'))
+  const queueBusy = queue.some(x => x.status === 'working' || x.status === 'waiting')
+  const queuePos = (() => {
+    const idx = queue.findIndex(x => x.status === 'working')
+    return queue.length > 1 && idx >= 0 ? `（第 ${idx + 1}/${queue.length} 個）` : ''
+  })()
 
   // 依階段組出即時進度文字
   const deviceTag = device === 'webgpu' ? '⚡ GPU 加速 · ' : device === 'wasm' ? '🐢 CPU · ' : ''
@@ -495,11 +542,11 @@ export default function TranscribePage() {
       }
       return `${deviceTag}載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
     }
-    if (phase === 'decoding') return '解碼音頻中…'
+    if (phase === 'decoding') return `${queuePos}解碼音頻中…`
     if (phase === 'transcribing') {
       const dur = audioDur > 0 ? `音頻 ${fmt(audioDur)} · ` : ''
       const seg = chunkTotal > 0 ? `第 ${Math.min(chunkDone + 1, chunkTotal)}/${chunkTotal} 段 · ` : ''
-      return `${deviceTag}轉錄中… ${dur}${seg}已用 ${elapsed}s`
+      return `${queuePos}${deviceTag}轉錄中… ${dur}${seg}已用 ${elapsed}s`
     }
     return ''
   }
@@ -535,14 +582,14 @@ export default function TranscribePage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">模型</label>
-              <select value={model} onChange={e => setModel(e.target.value)} disabled={busy}
+              <select value={model} onChange={e => setModel(e.target.value)} disabled={busy || queueBusy}
                 className="w-full h-10 px-2 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:border-indigo-400 disabled:opacity-50">
                 {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.id === 'turbo' && hasGPU === false}>{m.label}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">語言</label>
-              <select value={lang} onChange={e => setLang(e.target.value)} disabled={busy}
+              <select value={lang} onChange={e => setLang(e.target.value)} disabled={busy || queueBusy}
                 className="w-full h-10 px-2 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:border-indigo-400 disabled:opacity-50">
                 {LANGS.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
               </select>
@@ -557,11 +604,12 @@ export default function TranscribePage() {
           {/* 上傳 */}
           <button
             onClick={() => fileRef.current?.click()}
-            disabled={busy}
-            className="mt-4 w-full py-5 rounded-2xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 flex flex-col items-center gap-1.5 transition-colors"
+            title={busy ? '轉緊都可以再加檔案，會排隊逐個轉' : '可以一次揀多個檔案批量轉錄'}
+            className="mt-4 w-full py-5 rounded-2xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 flex flex-col items-center gap-1.5 transition-colors"
           >
             {busy ? <Loader2 className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
-            <span className="text-sm font-medium">{busy ? liveLabel() : '上傳音頻（MP3 / M4A / WAV / OGG…）'}</span>
+            <span className="text-sm font-medium">{busy ? liveLabel() : '上傳音頻（可一次揀多個，批量轉錄）'}</span>
+            {busy && <span className="text-[11px] text-indigo-400">轉緊都可以撳呢度再加檔案排隊</span>}
             {/* 模型下載進度 */}
             {phase === 'loadingModel' && dlInfo && dlInfo.total > 0 && dlInfo.done < dlInfo.total && (
               <span className="w-52 h-1.5 bg-indigo-100 rounded-full overflow-hidden mt-1">
@@ -580,12 +628,45 @@ export default function TranscribePage() {
               </span>
             )}
           </button>
-          <input ref={fileRef} type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" className="hidden" onChange={handleFile} />
+          <input ref={fileRef} type="file" multiple accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" className="hidden" onChange={handleFile} />
           {fileName && !busy && <p className="mt-2 text-xs text-gray-400 flex items-center gap-1.5"><FileAudio className="w-3.5 h-3.5" /> {fileName}</p>}
           <p className="mt-3 text-[11px] text-gray-400 leading-relaxed">
             🔒 完全喺你瀏覽器本機處理，唔會上傳。首次要下載模型（之後有快取）；長音頻需要啲時間，過程中唔好閂頁。
           </p>
         </div>
+
+        {/* 📋 批量轉錄隊列 */}
+        {queue.length > 0 && (
+          <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-gray-600">
+                批量轉錄 · 完成 {queue.filter(x => x.status === 'done').length} / {queue.length}
+              </span>
+              <div className="flex items-center gap-2">
+                {queue.some(x => x.status === 'done' || x.status === 'error') && (
+                  <button onClick={clearFinished} className="text-xs text-gray-400 hover:text-gray-700">清除已完成</button>
+                )}
+                <button onClick={() => router.push('/?folder=audio')} className="text-xs font-medium px-2.5 py-1 rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100">📂 打開錄音文件夾</button>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {queue.map(x => (
+                <div key={x.id} className="flex items-center gap-2 py-2 text-sm">
+                  <span className="w-5 text-center flex-shrink-0">
+                    {x.status === 'waiting' ? '⏳' : x.status === 'working' ? <Loader2 className="w-4 h-4 animate-spin text-indigo-500 inline" /> : x.status === 'done' ? '✅' : '⚠️'}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate text-gray-700" title={x.file.name}>{x.file.name}</span>
+                  <span className={`text-xs flex-shrink-0 ${x.status === 'error' ? 'text-red-500' : 'text-gray-400'}`}>
+                    {x.status === 'waiting' ? '排緊隊' : x.status === 'working' ? '轉緊' : x.info || ''}
+                  </span>
+                  {x.status === 'done' && x.bookId && (
+                    <button onClick={() => router.push(`/?open=${encodeURIComponent(x.bookId!)}`)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex-shrink-0">去閱讀</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {phase === 'error' && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">⚠️ {statusMsg}</div>
