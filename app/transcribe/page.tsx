@@ -232,12 +232,40 @@ export default function TranscribePage() {
           return new Blob(chunks);
         } finally { clearInterval(dog); }
       }
+      // 兩條線路：Hugging Face（美國 CDN）＋ ModelScope 魔搭（國內 CDN），內容逐 byte 一樣
+      function srcUrl(src, repo, f) {
+        return src === 0
+          ? 'https://huggingface.co/' + repo + '/resolve/main/' + f
+          : 'https://modelscope.cn/models/' + repo + '/resolve/master/' + f;
+      }
+      const SMALL_FILES = ['config.json', 'generation_config.json', 'preprocessor_config.json', 'tokenizer.json', 'tokenizer_config.json'];
       async function prefetch(repo, dt) {
         const cache = await caches.open('transformers-cache');
-        const base = 'https://huggingface.co/' + repo + '/resolve/main/';
+        const keyOf = (f) => 'https://huggingface.co/' + repo + '/resolve/main/' + f;   // transformers.js 用嘅快取鍵
+
+        // 1) 細檔：邊條線路得就用邊條
+        for (const f of SMALL_FILES) {
+          if (await cache.match(keyOf(f))) continue;
+          let ok = false;
+          for (let attempt = 0; attempt < 4 && !ok; attempt++) {
+            for (const src of [1, 0]) {
+              try {
+                const r = await fetch(srcUrl(src, repo, f));
+                if (r.status === 404) { ok = true; break; }   // 呢個 repo 冇呢個檔 → 交返 transformers.js
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const b = await r.blob();
+                await cache.put(keyOf(f), new Response(b, { headers: { 'Content-Length': String(b.size), 'Content-Type': 'application/json' } }));
+                ok = true; break;
+              } catch (e) { /* 試另一條線路 */ }
+            }
+            if (!ok) await sleep(1500 * (attempt + 1));
+          }
+        }
+
+        // 2) 大模型檔：分塊、6 條連線並行、兩條線路輪流用
         const files = bigFiles(dt);
         const need = [];
-        for (const f of files) if (!(await cache.match(base + f))) need.push(f);
+        for (const f of files) if (!(await cache.match(keyOf(f)))) need.push(f);
         if (need.length === 0) return;
         let tree = null;
         for (let a = 0; a < 5 && !tree; a++) {
@@ -245,16 +273,20 @@ export default function TranscribePage() {
           catch (e) { await sleep(2000 * (a + 1)); }
         }
         if (!tree) return;   // 攞唔到大小 → 交返 transformers.js 自己下載
-        const PART = 8 * 1024 * 1024;
+        const PART = 4 * 1024 * 1024;
         const items = [];
         for (const f of need) {
           const meta = tree.find(x => x.path === f);
-          if (meta && meta.size) items.push({ url: base + f, size: meta.size, parts: Math.ceil(meta.size / PART) });
+          if (meta && meta.size) items.push({ f: f, key: keyOf(f), size: meta.size, parts: Math.ceil(meta.size / PART) });
         }
+        // 清走舊版（8MB 一塊）留低嘅碎片
+        for (const it of items) for (let i = 0; i < Math.ceil(it.size / (8 * 1024 * 1024)); i++) await cache.delete(it.key + '?part=' + i);
         const total = items.reduce((n, it) => n + it.size, 0);
         let done = 0;
+        const tasks = [];
         for (const it of items) for (let i = 0; i < it.parts; i++) {
-          if (await cache.match(it.url + '?part=' + i)) done += Math.min(PART, it.size - i * PART);
+          if (await cache.match(it.key + '?c4=' + i)) done += Math.min(PART, it.size - i * PART);
+          else tasks.push({ it: it, i: i });
         }
         let speed = 0, lastT = Date.now(), lastDone = done;
         const report = () => {
@@ -267,30 +299,37 @@ export default function TranscribePage() {
           self.postMessage({ type: 'dl2', done: done, total: total, speed: speed });
         };
         report();
-        for (const it of items) {
-          for (let i = 0; i < it.parts; i++) {
-            const key = it.url + '?part=' + i;
-            if (await cache.match(key)) continue;
-            const start = i * PART, end = Math.min(it.size, start + PART) - 1;
+        let failed = null;
+        const worker = async (w) => {
+          while (tasks.length && !failed) {
+            const t = tasks.shift();
+            const start = t.i * PART, end = Math.min(t.it.size, start + PART) - 1;
             let ok = false;
             for (let attempt = 0; attempt < 10 && !ok; attempt++) {
+              const src = (t.i + attempt) % 2;   // 輪流用兩條線路；失敗就轉另一條
               try {
-                const b = await fetchPart(it.url, start, end, (n) => { done += n; report(); });
-                await cache.put(key, new Response(b));
+                const b = await fetchPart(srcUrl(src, repo, t.it.f), start, end, (n) => { done += n; report(); });
+                await cache.put(t.it.key + '?c4=' + t.i, new Response(b));
                 ok = true;
               } catch (e) {
-                self.postMessage({ type: 'retry', attempt: attempt + 1 });
-                await sleep(Math.min(30000, 1500 * Math.pow(2, attempt)));
+                if (attempt >= 1) self.postMessage({ type: 'retry', attempt: attempt });
+                await sleep(Math.min(20000, 1000 * Math.pow(2, attempt)));
               }
             }
-            if (!ok) throw new Error('網絡唔穩，下載多次失敗。已下載嘅部分會保留，再撳上傳就會接住落去');
+            if (!ok) failed = new Error('網絡唔穩，下載多次失敗。已下載嘅部分會保留，再撳上傳就會接住落去');
           }
-          // 砌返成個檔，放入 transformers.js 用嘅快取
+        };
+        await Promise.all([0, 1, 2, 3, 4, 5].map(worker));
+        if (failed) throw failed;
+
+        // 3) 砌返成個檔，放入 transformers.js 用嘅快取
+        for (const it of items) {
           const blobs = [];
-          for (let i = 0; i < it.parts; i++) blobs.push(await (await cache.match(it.url + '?part=' + i)).blob());
+          for (let i = 0; i < it.parts; i++) blobs.push(await (await cache.match(it.key + '?c4=' + i)).blob());
           const full = new Blob(blobs);
-          await cache.put(it.url, new Response(full, { headers: { 'Content-Length': String(full.size), 'Content-Type': 'application/octet-stream' } }));
-          for (let i = 0; i < it.parts; i++) await cache.delete(it.url + '?part=' + i);
+          if (full.size !== it.size) throw new Error('模型檔大小唔啱，請再試一次');
+          await cache.put(it.key, new Response(full, { headers: { 'Content-Length': String(full.size), 'Content-Type': 'application/octet-stream' } }));
+          for (let i = 0; i < it.parts; i++) await cache.delete(it.key + '?c4=' + i);
         }
       }
 
@@ -425,7 +464,7 @@ export default function TranscribePage() {
       if (dlInfo && dlInfo.total > 0 && dlInfo.done < dlInfo.total) {
         const mb = (n: number) => (n / 1048576).toFixed(0)
         const left = dlInfo.speed > 0 ? Math.ceil((dlInfo.total - dlInfo.done) / dlInfo.speed / 60) : 0
-        return `${deviceTag}下載模型 ${mb(dlInfo.done)} / ${mb(dlInfo.total)} MB${dlInfo.speed > 0 ? ` · ${(dlInfo.speed / 1048576).toFixed(2)} MB/秒 · 約剩 ${left} 分鐘` : ''}（斷線會自動續傳）`
+        return `${deviceTag}下載模型 ${mb(dlInfo.done)} / ${mb(dlInfo.total)} MB${dlInfo.speed > 0 ? ` · ${(dlInfo.speed / 1048576).toFixed(2)} MB/秒 · 約剩 ${left} 分鐘` : ''}（雙線路並行 · 斷線自動續傳）`
       }
       return `${deviceTag}載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
     }
