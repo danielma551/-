@@ -217,10 +217,10 @@ export default function TranscribePage() {
       async function fetchPart(url, start, end, onBytes) {
         const ctrl = new AbortController();
         let last = Date.now();
-        const dog = setInterval(() => { if (Date.now() - last > 30000) ctrl.abort(); }, 3000);   // 30 秒冇數據 = 卡住，重試
+        const dog = setInterval(() => { if (Date.now() - last > 15000) ctrl.abort(); }, 2000);   // 15 秒冇數據 = 卡住，轉線重試
         try {
           const r = await fetch(url, { headers: { Range: 'bytes=' + start + '-' + end }, signal: ctrl.signal });
-          if (r.status !== 206) throw new Error('HTTP ' + r.status);
+          if (r.status !== 206) { const err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
           const reader = r.body.getReader();
           const chunks = []; let got = 0;
           while (true) {
@@ -237,6 +237,29 @@ export default function TranscribePage() {
         return src === 0
           ? 'https://huggingface.co/' + repo + '/resolve/main/' + f
           : 'https://modelscope.cn/models/' + repo + '/resolve/master/' + f;
+      }
+      // 自適應揀線路：邊條快就多用邊條；卡住／被限速嘅線路冷卻一陣
+      const SRC = [
+        { speed: 0, cool: 0, fails: 0 },   // 0 = Hugging Face
+        { speed: 0, cool: 0, fails: 0 },   // 1 = ModelScope
+      ];
+      function pickSrc(avoid) {
+        const now = Date.now();
+        const ok = [0, 1].filter(i => i !== avoid && SRC[i].cool <= now);
+        if (ok.length === 0) return avoid === 0 ? 1 : 0;
+        if (ok.length === 1) return ok[0];
+        if (Math.random() < 0.15) return ok[Math.floor(Math.random() * 2)];   // 偶爾試吓另一條，睇佢有冇變快
+        return SRC[1].speed >= SRC[0].speed ? 1 : 0;
+      }
+      function srcGood(i, bytes, ms) {
+        const sp = bytes / Math.max(ms, 1) * 1000;
+        SRC[i].speed = SRC[i].speed ? SRC[i].speed * 0.6 + sp * 0.4 : sp;
+        SRC[i].fails = 0;
+      }
+      function srcBad(i) {
+        SRC[i].fails++;
+        SRC[i].speed *= 0.5;
+        SRC[i].cool = Date.now() + Math.min(120000, 15000 * Math.pow(2, SRC[i].fails - 1));
       }
       const SMALL_FILES = ['config.json', 'generation_config.json', 'preprocessor_config.json', 'tokenizer.json', 'tokenizer_config.json'];
       async function prefetch(repo, dt) {
@@ -304,16 +327,19 @@ export default function TranscribePage() {
           while (tasks.length && !failed) {
             const t = tasks.shift();
             const start = t.i * PART, end = Math.min(t.it.size, start + PART) - 1;
-            let ok = false;
-            for (let attempt = 0; attempt < 10 && !ok; attempt++) {
-              const src = (t.i + attempt) % 2;   // 輪流用兩條線路；失敗就轉另一條
+            let ok = false, lastSrc = -1;
+            for (let attempt = 0; attempt < 12 && !ok; attempt++) {
+              const src = pickSrc(lastSrc);   // 揀而家最快嘅線路；上次失敗嗰條避開
+              const t0 = Date.now();
               try {
                 const b = await fetchPart(srcUrl(src, repo, t.it.f), start, end, (n) => { done += n; report(); });
                 await cache.put(t.it.key + '?c4=' + t.i, new Response(b));
+                srcGood(src, b.size, Date.now() - t0);
                 ok = true;
               } catch (e) {
-                if (attempt >= 1) self.postMessage({ type: 'retry', attempt: attempt });
-                await sleep(Math.min(20000, 1000 * Math.pow(2, attempt)));
+                srcBad(src); lastSrc = src;
+                if (attempt >= 2) self.postMessage({ type: 'retry', attempt: attempt });
+                await sleep(Math.min(8000, 500 * Math.pow(2, attempt)));
               }
             }
             if (!ok) failed = new Error('網絡唔穩，下載多次失敗。已下載嘅部分會保留，再撳上傳就會接住落去');
