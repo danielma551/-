@@ -57,9 +57,9 @@ type Phase = 'idle' | 'loadingModel' | 'decoding' | 'transcribing' | 'done' | 'e
 
 // transformers.js v3：支援 WebGPU（用顯示卡計，快好多）；冇 WebGPU 自動退返 CPU
 const MODELS = [
-  { id: 'base', repo: 'onnx-community/whisper-base', label: 'base（快 · 約 140MB）' },
-  { id: 'small', repo: 'onnx-community/whisper-small', label: 'small（準 · 約 390MB）' },
-  { id: 'turbo', repo: 'onnx-community/whisper-large-v3-turbo', label: 'large-v3-turbo（最準 · 約 540MB · 需 WebGPU）' },
+  { id: 'base', repo: 'onnx-community/whisper-base', label: 'base（快 · 約 200MB）' },
+  { id: 'small', repo: 'onnx-community/whisper-small', label: 'small（準 · 約 290MB）' },
+  { id: 'turbo', repo: 'onnx-community/whisper-large-v3-turbo', label: 'large-v3-turbo（最準 · 約 720MB · 需 WebGPU）' },
 ]
 // 中英混合：指定中文模式 → Whisper 會保留夾雜嘅英文字（自動偵測只睇頭 30 秒，易判錯成英文、成篇變英文）
 const LANGS = [
@@ -200,11 +200,12 @@ export default function TranscribePage() {
           return { device: 'webgpu', f16: adapter.features.has('shader-f16') };
         } catch (e) { return { device: 'wasm', f16: false }; }
       }
+      // ⚠️ 實測：WebGPU 用 fp16 會出亂碼（">> >> >>"）→ 一律唔用 fp16
+      // base：fp32 encoder + q4 decoder（實測正確）；small／turbo：q4 + q4（實測正確，體積細好多）
       function dtypeFor(model, dev) {
         if (dev.device !== 'webgpu') return 'q8';
-        if (model === 'base') return dev.f16 ? { encoder_model: 'fp16', decoder_model_merged: 'fp16' } : { encoder_model: 'fp32', decoder_model_merged: 'q4' };
-        if (model === 'small') return { encoder_model: dev.f16 ? 'fp16' : 'fp32', decoder_model_merged: 'q4' };
-        return { encoder_model: dev.f16 ? 'q4f16' : 'q4', decoder_model_merged: dev.f16 ? 'q4f16' : 'q4' };
+        if (model === 'base') return { encoder_model: 'fp32', decoder_model_merged: 'q4' };
+        return { encoder_model: 'q4', decoder_model_merged: 'q4' };
       }
       // ── 斷點續傳下載：大模型檔切 8MB 一塊，斷線自動重試，閂咗頁再開都接得返 ──
       const SUFFIX = { fp32: '', fp16: '_fp16', q4: '_q4', q4f16: '_q4f16', q8: '_quantized' };
