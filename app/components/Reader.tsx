@@ -1776,11 +1776,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (cycleToastTimer.current) clearTimeout(cycleToastTimer.current)
       cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
       // 每看完 6 個循環（進入第 6、12、18… 個循環）→ 呼吸休息動畫
-      if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0) {
+      // 跟讀模式（錄音書 + 跟讀開住）唔出：錄音照播緊，彈出嚟會打斷聽
+      if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0 && !(hasBookAudio && followAudio)) {
         setShowBreathing(true)
       }
     }
-  }, [currentCycleIdx, cycleData.sizes])
+  }, [currentCycleIdx, cycleData.sizes, hasBookAudio, followAudio])
 
   const cycleStart  = cycleData.boundaries[currentCycleIdx]
   const cycleSize   = cycleData.sizes[currentCycleIdx]
@@ -3736,7 +3737,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       <ImagePopup />
 
       {/* 呼吸休息動畫（每看完 4 個循環）*/}
-      {showBreathing && <BreathingOverlay eink={einkMode} onClose={() => setShowBreathing(false)} />}
+      {showBreathing && !(hasBookAudio && followAudio) && <BreathingOverlay eink={einkMode} onClose={() => setShowBreathing(false)} />}
 
       {/* 外刊詞解卡（選中有解釋的字時，向外延伸）*/}
       {glossaryCard && (
