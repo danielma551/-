@@ -1,7 +1,8 @@
 'use client'
 
-// 【參考 PDF 面板】喺閱讀介面側邊睇 PDF（用 pdf.js 畫成圖，Android／墨水屏都睇得到）。
-// 只渲染捲到附近嘅頁，大 PDF 都唔會卡；記住每本書捲到邊。
+// 【參考檔面板】喺閱讀介面側邊睇 PDF 或 Word（.docx）。
+// PDF：用 pdf.js 畫成圖（Android／墨水屏都睇得到），只渲染捲到附近嘅頁。
+// Word：用 mammoth 轉成網頁格式（保留標題、粗體、表格、圖片）。記住每本書捲到邊。
 
 import { useEffect, useRef, useState } from 'react'
 import { X, ZoomIn, ZoomOut, RefreshCw, Trash2, FileText } from 'lucide-react'
@@ -27,12 +28,30 @@ export default function PdfPanel({ bookId, blob, name, isEink, width, onClose, o
   const [curPage, setCurPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
+  const [html, setHtml] = useState('')   // Word 轉出嚟嘅 HTML
   const scrollKey = 'pdf-scroll:' + bookId
+  const isDocx = /\.docx$/i.test(name) || blob.type.includes('wordprocessingml')
 
-  // 載入 PDF
+  // 載入 PDF／Word
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      if (isDocx) {
+        try {
+          setLoading(true); setErr(''); setHtml(''); setNumPages(0)
+          // @ts-ignore 用 mammoth 預先打包好嘅瀏覽器版（冇型別定義）
+          const mod: any = await import('mammoth/mammoth.browser')
+          const mammoth = mod.default ?? mod
+          const r = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() })
+          if (cancelled) return
+          setHtml(r.value || '<p>（呢份 Word 冇文字內容）</p>')
+          setLoading(false)
+        } catch (e) {
+          console.error(e)
+          if (!cancelled) { setErr('打唔開呢份 Word（只支援 .docx）'); setLoading(false) }
+        }
+        return
+      }
       try {
         setLoading(true); setErr(''); setNumPages(0)
         const pdfjsLib: any = await import('pdfjs-dist')
@@ -109,13 +128,13 @@ export default function PdfPanel({ bookId, blob, name, isEink, width, onClose, o
 
   // 還原上次捲動位置
   useEffect(() => {
-    if (!numPages) return
+    if (!numPages && !html) return
     const saved = parseFloat(localStorage.getItem(scrollKey) || '')
     if (isFinite(saved) && saved > 0) {
       requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = saved })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numPages])
+  }, [numPages, html])
 
   // 捲動：記位置 + 計當前頁
   const lastSave = useRef(0)
@@ -156,16 +175,45 @@ export default function PdfPanel({ bookId, blob, name, isEink, width, onClose, o
         {numPages > 0 && <span className="text-xs tabular-nums flex-shrink-0 mr-1" style={{ color: isEink ? '#000' : '#9ca3af' }}>{curPage} / {numPages}</span>}
         <button className={btn} onClick={() => setZoom(z => Math.max(0.6, +(z - 0.2).toFixed(1)))} title="縮細"><ZoomOut className="w-4 h-4" /></button>
         <button className={btn} onClick={() => setZoom(z => Math.min(3, +(z + 0.2).toFixed(1)))} title="放大"><ZoomIn className="w-4 h-4" /></button>
-        <button className={btn} onClick={onReplace} title="換另一份 PDF"><RefreshCw className="w-4 h-4" /></button>
-        <button className={btn} onClick={onRemove} title="移除呢份 PDF"><Trash2 className="w-4 h-4" /></button>
+        <button className={btn} onClick={onReplace} title="換另一份參考檔（PDF／Word）"><RefreshCw className="w-4 h-4" /></button>
+        <button className={btn} onClick={onRemove} title="移除呢份參考檔"><Trash2 className="w-4 h-4" /></button>
         <button className={btn} onClick={onClose} title="收起"><X className="w-4 h-4" /></button>
       </div>
 
       {/* 內容 */}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-auto">
-        {loading && <p className="text-sm text-center py-10" style={{ color: isEink ? '#000' : '#9ca3af' }}>載入 PDF 中…</p>}
+        {loading && <p className="text-sm text-center py-10" style={{ color: isEink ? '#000' : '#9ca3af' }}>{isDocx ? '載入 Word 中…' : '載入 PDF 中…'}</p>}
         {err && <p className="text-sm text-center py-10 text-red-500">{err}</p>}
-        <div style={{ width: `${zoom * 100}%`, padding: 12, boxSizing: 'border-box' }}>
+        {/* Word 內容 */}
+        {isDocx && html && (
+          <div style={{ padding: 12 }}>
+            <style>{`
+              .docx-view { line-height: 1.85; word-break: break-word; }
+              .docx-view h1 { font-size: 1.5em; font-weight: 700; margin: 0.8em 0 0.5em; }
+              .docx-view h2 { font-size: 1.3em; font-weight: 700; margin: 0.8em 0 0.4em; }
+              .docx-view h3, .docx-view h4 { font-size: 1.12em; font-weight: 700; margin: 0.7em 0 0.3em; }
+              .docx-view p { margin: 0 0 0.75em; }
+              .docx-view ul, .docx-view ol { padding-left: 1.4em; margin: 0 0 0.75em; }
+              .docx-view ul { list-style: disc; } .docx-view ol { list-style: decimal; }
+              .docx-view table { border-collapse: collapse; margin: 0.6em 0 1em; width: 100%; }
+              .docx-view td, .docx-view th { border: 1px solid ${isEink ? '#000' : '#d1d5db'}; padding: 4px 8px; vertical-align: top; }
+              .docx-view td p, .docx-view th p { margin: 0; }
+              .docx-view img { max-width: 100%; height: auto; }
+              .docx-view a { color: ${isEink ? '#000' : '#4f46e5'}; text-decoration: underline; }
+            `}</style>
+            <div
+              className="docx-view"
+              style={{
+                background: '#fff', color: isEink ? '#000' : '#1f2937',
+                padding: '20px 22px', fontSize: `${zoom * 15}px`,
+                boxShadow: isEink ? 'none' : '0 1px 4px rgba(0,0,0,0.1)',
+                border: isEink ? '1px solid #000' : 'none',
+              }}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </div>
+        )}
+        <div style={{ width: `${zoom * 100}%`, padding: 12, boxSizing: 'border-box', display: isDocx ? 'none' : undefined }}>
           {Array.from({ length: numPages }, (_, i) => (
             <div
               key={`${i + 1}-${zoom}`}

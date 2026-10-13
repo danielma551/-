@@ -655,14 +655,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
-    if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { alert('請揀 PDF 檔案'); return }
+    if (/\.doc$/i.test(f.name)) { alert('舊版 Word（.doc）唔支援，請喺 Word「另存新檔」做 .docx 再試'); return }
+    const okType = /\.(pdf|docx)$/i.test(f.name) || f.type === 'application/pdf' || f.type.includes('wordprocessingml')
+    if (!okType) { alert('請揀 PDF 或 Word（.docx）檔案'); return }
     await saveBookPdf({ bookId, blob: f, name: f.name, savedAt: Date.now() })
     try { localStorage.removeItem('pdf-scroll:' + bookId) } catch {}
     setPdfDoc({ blob: f, name: f.name })
     setPdfOpen(true)
   }
   const removePdf = async () => {
-    if (!confirm('移除呢本書嘅參考 PDF？')) return
+    if (!confirm('移除呢本書嘅參考檔？')) return
     await deleteBookPdf(bookId)
     try { localStorage.removeItem('pdf-scroll:' + bookId) } catch {}
     setPdfDoc(null); setPdfOpen(false)
@@ -2660,7 +2662,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       )}
 
       {/* 📄 參考 PDF 面板（左側；窄螢幕全屏） */}
-      <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={handlePdfPicked} />
+      <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handlePdfPicked} />
       {showPdf && pdfDoc && (
         <PdfPanel
           bookId={bookId}
@@ -2739,13 +2741,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 📄 參考 PDF */}
             <button
               onClick={() => (pdfDoc ? setPdfOpen(!showPdf) : pdfInputRef.current?.click())}
-              title={pdfDoc ? (showPdf ? '收起參考 PDF' : '打開參考 PDF') : '加一份參考 PDF'}
+              title={pdfDoc ? (showPdf ? '收起參考檔' : '打開參考檔') : '加一份參考檔（PDF／Word）'}
               style={isEink
                 ? { marginLeft: 2, padding: '4px 8px', border: '2px solid #000', background: showPdf ? '#000' : '#fff', color: showPdf ? '#fff' : '#000', fontSize: 12, fontWeight: 700 }
                 : { marginLeft: 2, padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
                     background: showPdf ? '#4f46e5' : '#eef2ff', color: showPdf ? '#fff' : '#4f46e5' }}
             >
-              📄 {pdfDoc ? 'PDF' : '加 PDF'}
+              📄 {pdfDoc ? (/\.docx$/i.test(pdfDoc.name) ? 'Word' : 'PDF') : '加參考檔'}
             </button>
             <button onClick={() => setShowAudioKeys(v => !v)} title="快捷鍵（可自訂）"
               style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#9ca3af', padding: '0 4px' }}>⌨</button>
