@@ -2615,47 +2615,69 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
       {/* 💎 幸運加成：墨水屏靜態版（黑框、無動畫） */}
       {isEink && luckyReward && (
-        <div className="fixed inset-0 z-50 pointer-events-none flex items-start justify-center" style={{ paddingTop: '22vh' }}>
-          <div style={{ background: '#fff', border: '3px solid #000', padding: '20px 40px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40, lineHeight: 1 }}>{luckyReward.emoji}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#000', marginTop: 8 }}>{luckyReward.label}</div>
-            <div style={{ fontSize: 32, fontWeight: 900, color: '#000', marginTop: 4 }}>+{luckyReward.xp} XP</div>
+        <div className="fixed left-0 right-0 z-50 pointer-events-none flex justify-center" style={{ top: 12 }}>
+          <div style={{ background: '#fff', border: '2px solid #000', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#000', fontSize: 15 }}>
+            <span style={{ fontSize: 18 }}>{luckyReward.emoji}</span>
+            <span>{luckyReward.label}</span>
+            <span>+{luckyReward.xp} XP</span>
           </div>
         </div>
       )}
 
-      {/* 💎 幸運加成：炫目爆裂卡片（非墨水屏） */}
+      {/* 💎 幸運加成：真實特效（只喺畫面上方發生，唔遮正文）＋ 細細粒 XP 膠囊 */}
       {!isEink && luckyReward && (
-        <div className="fixed inset-0 z-50 pointer-events-none flex items-start justify-center" style={{ paddingTop: '18vh' }}>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            {/* 星火四濺 */}
-            {LUCKY_SPARKS.map((s, i) => (
-              <div key={i} style={{
-                position: 'absolute', width: 10, height: 10, borderRadius: '50%',
-                background: s.color, top: '50%', left: '50%', marginTop: -5, marginLeft: -5,
-                animation: 'gamify-lucky-spark 600ms ease 150ms both',
-                ['--spark-dx' as string]: s.dx,
-                ['--spark-dy' as string]: s.dy,
-              }} />
-            ))}
-            {/* 主卡片 */}
+        <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden" aria-hidden>
+          {/* ⭐ 流星：由右上劃過去左邊 */}
+          {luckyReward.emoji === '⭐' && (
+            <div className="lucky-fx" style={{ position: 'absolute', top: 0, left: 0, animation: 'lucky-meteor 1300ms cubic-bezier(0.3,0.1,0.6,1) both' }}>
+              <div style={{ position: 'relative', transform: 'rotate(-18deg)', transformOrigin: 'left center' }}>
+                <div style={{ position: 'absolute', left: 6, top: -2, width: 180, height: 4, borderRadius: 4, background: 'linear-gradient(90deg, rgba(255,255,255,0.95), rgba(253,224,71,0.6) 30%, rgba(244,114,182,0.25) 65%, transparent)' }} />
+                <div style={{ position: 'absolute', left: -9, top: -9, width: 18, height: 18, borderRadius: 999, background: 'radial-gradient(circle, #fff 30%, #fde047 60%, transparent 72%)', boxShadow: '0 0 18px 6px rgba(253,224,71,0.7)' }} />
+              </div>
+            </div>
+          )}
+          {/* ⚡ 閃電：上方劈一下＋畫面邊緣閃白 */}
+          {luckyReward.emoji === '⚡' && (
+            <>
+              <div className="lucky-fx" style={{ position: 'absolute', inset: 0, boxShadow: 'inset 0 0 80px 10px rgba(199,210,254,0.9)', animation: 'lucky-flash 700ms ease both' }} />
+              <svg className="lucky-fx" viewBox="0 0 60 120" style={{ position: 'absolute', top: '3vh', left: '50%', width: 56, height: 112, marginLeft: -28, filter: 'drop-shadow(0 0 10px rgba(129,140,248,0.9)) drop-shadow(0 0 22px rgba(255,255,255,0.8))', animation: 'lucky-bolt 900ms ease both' }}>
+                <polygon points="34,0 8,66 28,66 18,120 54,46 33,46 46,0" fill="#fef9c3" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+            </>
+          )}
+          {/* 🍀 幸運草：由頂飄落 */}
+          {luckyReward.emoji === '🍀' && [8, 22, 37, 50, 63, 78, 91].map((x, i) => (
+            <span key={i} className="lucky-fx" style={{
+              position: 'absolute', top: -40, left: `${x}%`, fontSize: 22 + (i % 3) * 5,
+              animation: `lucky-leaf ${1500 + (i % 3) * 250}ms ease-in ${i * 90}ms both`,
+              ['--drift' as string]: `${(i % 2 ? 1 : -1) * (18 + i * 4)}px`,
+            }}>🍀</span>
+          ))}
+          {/* 💎 寶石：跌落嚟閃一閃，再四濺星火 */}
+          {luckyReward.emoji === '💎' && (
+            <div style={{ position: 'absolute', top: '4vh', left: '50%' }}>
+              <span className="lucky-fx" style={{ position: 'absolute', left: -20, fontSize: 40, lineHeight: 1, animation: 'lucky-gem-drop 1400ms cubic-bezier(0.34,1.56,0.64,1) both', filter: 'drop-shadow(0 0 12px rgba(56,189,248,0.8))' }}>💎</span>
+              {LUCKY_SPARKS.map((sp, i) => (
+                <div key={i} className="lucky-fx" style={{
+                  position: 'absolute', width: 8, height: 8, borderRadius: '50%', top: 60, left: -4,
+                  background: sp.color, animation: 'gamify-lucky-spark 650ms ease 500ms both',
+                  ['--spark-dx' as string]: sp.dx, ['--spark-dy' as string]: sp.dy,
+                }} />
+              ))}
+            </div>
+          )}
+          {/* 細細粒 XP 膠囊（頂部，唔遮正文） */}
+          <div style={{ position: 'absolute', top: 'max(12px, 2.5vh)', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
             <div style={{
-              background: luckyReward.color,
-              borderRadius: 20, padding: '24px 48px', textAlign: 'center',
-              boxShadow: `0 0 0 6px ${luckyReward.shadow.replace('0.35','0.2')}, 0 24px 60px ${luckyReward.shadow}`,
-              animation: luckyFading
-                ? 'gamify-lucky-out 420ms ease forwards'
-                : 'gamify-lucky-burst 420ms cubic-bezier(0.34,1.56,0.64,1) both',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: luckyReward.color, color: '#fff', borderRadius: 999,
+              padding: '6px 14px', fontSize: 14, fontWeight: 800,
+              boxShadow: `0 6px 18px ${luckyReward.shadow}`,
+              animation: luckyFading ? 'lucky-pill-out 420ms ease forwards' : 'lucky-pill-in 420ms cubic-bezier(0.34,1.56,0.64,1) 250ms both',
             }}>
-              <div style={{ fontSize: 52, lineHeight: 1, display: 'inline-block', animation: 'gamify-lucky-gem 500ms cubic-bezier(0.34,1.56,0.64,1) 200ms both' }}>
-                {luckyReward.emoji}
-              </div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.88)', fontWeight: 600, marginTop: 8, letterSpacing: '0.5px' }}>
-                {luckyReward.label}
-              </div>
-              <div style={{ fontSize: 38, fontWeight: 900, color: '#fff', marginTop: 4, textShadow: '0 2px 8px rgba(0,0,0,0.18)', animation: 'gamify-lucky-xp 350ms ease 300ms both' }}>
-                +{luckyReward.xp} XP
-              </div>
+              <span style={{ fontSize: 16 }}>{luckyReward.emoji}</span>
+              <span style={{ fontWeight: 600, opacity: 0.9 }}>{luckyReward.label}</span>
+              <span>+{luckyReward.xp} XP</span>
             </div>
           </div>
         </div>

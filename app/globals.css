@@ -267,3 +267,46 @@ button:active:not(:disabled) {
     transform: none;
   }
 }
+
+/* ── 💎 幸運加成：真實特效（只喺畫面上方，唔遮正文）── */
+@keyframes lucky-meteor {
+  0%   { transform: translate(108vw, 3vh); opacity: 0; }
+  8%   { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translate(-28vw, 24vh); opacity: 0; }
+}
+@keyframes lucky-flash {
+  0% { opacity: 0; } 12% { opacity: 1; } 24% { opacity: 0.2; } 36% { opacity: 0.9; } 100% { opacity: 0; }
+}
+@keyframes lucky-bolt {
+  0% { opacity: 0; transform: scaleY(0.3); transform-origin: top; }
+  10% { opacity: 1; transform: scaleY(1); }
+  22% { opacity: 0.25; } 34% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes lucky-leaf {
+  0%   { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  15%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--drift, 20px), 32vh) rotate(220deg); }
+}
+@keyframes lucky-gem-drop {
+  0%   { opacity: 0; transform: translateY(-60px) scale(0.6); }
+  35%  { opacity: 1; transform: translateY(16px) scale(1.1); }
+  50%  { transform: translateY(10px) scale(1); }
+  60%  { transform: translateY(10px) scale(1.25); filter: brightness(1.6); }
+  75%  { transform: translateY(10px) scale(1); opacity: 1; }
+  100% { transform: translateY(0) scale(0.9); opacity: 0; }
+}
+@keyframes lucky-pill-in {
+  0%   { opacity: 0; transform: translateY(-14px) scale(0.85); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes lucky-pill-out {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-16px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lucky-fx { display: none; }
+}
