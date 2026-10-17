@@ -11,6 +11,7 @@ import { reviewStorage, generateBookId, BookData } from '../utils/storage'
 import { saveBookToIDB } from '../utils/bookDB'
 import { splitIntoSentences } from '../utils/epubParser'
 import { saveBookAudio } from '../utils/bookAudioDB'
+import { proofreadLines } from '../utils/proofread'
 import { Converter } from 'opencc-js/t2cn'
 
 // 繁 → 簡（Whisper 中文常出繁體或繁簡夾雜，統一轉做簡體）
@@ -53,7 +54,7 @@ function buildSentencesWithTimes(
   return { sentences, times }
 }
 
-type Phase = 'idle' | 'loadingModel' | 'decoding' | 'transcribing' | 'done' | 'error'
+type Phase = 'idle' | 'loadingModel' | 'decoding' | 'transcribing' | 'proofreading' | 'done' | 'error'
 
 // transformers.js v3：支援 WebGPU（用顯示卡計，快好多）；冇 WebGPU 自動退返 CPU
 const MODELS = [
@@ -97,6 +98,17 @@ export default function TranscribePage() {
   }, [])
   const setModel = (v: string) => { setModelState(v); try { localStorage.setItem('transcribe-model', v) } catch {} }
   const setLang = (v: string) => { setLangState(v); try { localStorage.setItem('transcribe-lang', v) } catch {} }
+  // 🪄 AI 校對開關（預設開，記住）
+  const [proofread, setProofreadState] = useState(true)
+  const proofreadRef = useRef(true)
+  const [hasDeepseek, setHasDeepseek] = useState(false)
+  const [proofProg, setProofProg] = useState({ done: 0, total: 0 })
+  useEffect(() => {
+    const v = localStorage.getItem('transcribe-proofread') !== 'false'
+    setProofreadState(v); proofreadRef.current = v
+    setHasDeepseek(!!localStorage.getItem('deepseek-api-key'))
+  }, [])
+  const setProofread = (v: boolean) => { setProofreadState(v); proofreadRef.current = v; try { localStorage.setItem('transcribe-proofread', String(v)) } catch {} }
   const langRef = useRef(lang)
   useEffect(() => { langRef.current = lang }, [lang])
   const [phase, setPhase] = useState<Phase>('idle')
@@ -160,12 +172,10 @@ export default function TranscribePage() {
   const durationRef = useRef(0)
   const [createdBookId, setCreatedBookId] = useState<string | null>(null)
   const [bookMsg, setBookMsg] = useState('')
-  const createBookFromTranscript = async (fullText: string, chunks: any[]): Promise<{ id: string; n: number } | null> => {
+  const createBookFromTranscript = async (sentences: string[], times: number[]): Promise<{ id: string; n: number } | null> => {
     const file = fileObjRef.current
-    if (!file || !fullText?.trim()) return null
+    if (!file || sentences.length === 0) return null
     try {
-      const { sentences, times } = buildSentencesWithTimes(chunks, fullText, durationRef.current)
-      if (sentences.length === 0) return null
       const now = Date.now()
       const title = file.name.replace(/\.[^.]+$/, '') || '錄音'
       const id = generateBookId(title)
@@ -448,11 +458,23 @@ export default function TranscribePage() {
         const outChunks = zh && Array.isArray(d.chunks)
           ? d.chunks.map((c: any) => ({ ...c, text: toSimplified(c.text || '') }))
           : d.chunks
-        setText(outText)
-        setPhase('done')
-        createBookFromTranscript(outText, outChunks).then(res => {
-          finishItemRef.current?.(res ? 'done' : 'error', res ? { bookId: res.id, info: `${res.n} 句` } : { info: outText.trim() ? '建書失敗' : '冇轉到文字' })
-        })
+        ;(async () => {
+          let { sentences, times } = buildSentencesWithTimes(outChunks, outText, durationRef.current)
+          let proofNote = ''
+          // 🪄 DeepSeek 校對錯別字（有 key 兼開咗先做）
+          const key = typeof window !== 'undefined' ? (localStorage.getItem('deepseek-api-key') || '') : ''
+          if (proofreadRef.current && key && sentences.length > 0) {
+            setPhase('proofreading'); setProofProg({ done: 0, total: 1 })
+            const r = await proofreadLines(sentences, key, (done, total) => setProofProg({ done, total }))
+            sentences = zh ? r.lines.map(l => toSimplified(l)) : r.lines
+            proofNote = r.failedBatches ? ` · AI 改咗 ${r.changed} 句（${r.failedBatches} 批校對失敗，保留原文）` : ` · AI 改咗 ${r.changed} 句`
+          }
+          const finalText = sentences.join('')
+          setText(finalText || outText)
+          setPhase('done')
+          const res = await createBookFromTranscript(sentences, times)
+          finishItemRef.current?.(res ? 'done' : 'error', res ? { bookId: res.id, info: `${res.n} 句${proofNote}` } : { info: outText.trim() ? '建書失敗' : '冇轉到文字' })
+        })()
       } else if (d.type === 'error') {
         stopTimer()
         const wasLoading = phaseRef.current === 'loadingModel'
@@ -543,6 +565,7 @@ export default function TranscribePage() {
       return `${deviceTag}載入模型中…${progress > 0 ? ` ${progress}%` : ''}`
     }
     if (phase === 'decoding') return `${queuePos}解碼音頻中…`
+    if (phase === 'proofreading') return `${queuePos}🪄 AI 校對錯別字中… 第 ${Math.min(proofProg.done + 1, proofProg.total)}/${proofProg.total} 批`
     if (phase === 'transcribing') {
       const dur = audioDur > 0 ? `音頻 ${fmt(audioDur)} · ` : ''
       const seg = chunkTotal > 0 ? `第 ${Math.min(chunkDone + 1, chunkTotal)}/${chunkTotal} 段 · ` : ''
@@ -552,7 +575,7 @@ export default function TranscribePage() {
   }
   const transPct = chunkTotal > 0 ? Math.min(Math.round((chunkDone / chunkTotal) * 100), 99) : 0
 
-  const busy = phase === 'loadingModel' || phase === 'decoding' || phase === 'transcribing'
+  const busy = phase === 'loadingModel' || phase === 'decoding' || phase === 'transcribing' || phase === 'proofreading'
 
   const copy = () => { navigator.clipboard?.writeText(text) }
   const downloadTxt = () => {
@@ -596,6 +619,12 @@ export default function TranscribePage() {
             </div>
           </div>
 
+          <label className={`mt-3 flex items-center gap-2 text-sm ${hasDeepseek ? 'text-gray-700' : 'text-gray-400'}`}>
+            <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={proofread && hasDeepseek} disabled={!hasDeepseek || busy || queueBusy}
+              onChange={e => setProofread(e.target.checked)} />
+            <span>🪄 用 DeepSeek AI 校對錯別字</span>
+            <span className="text-[11px] text-gray-400">{hasDeepseek ? '（只改錯字同聽錯嘅詞，唔改寫）' : '（未設定 DeepSeek key：去書架右上角「Vision OCR」設定）'}</span>
+          </label>
           {hasGPU !== null && (
             <p className={`mt-2 text-[11px] ${hasGPU ? 'text-emerald-600' : 'text-amber-600'}`}>
               {hasGPU ? '⚡ 呢個瀏覽器支援 WebGPU：會用顯示卡加速轉錄' : '🐢 呢個瀏覽器冇 WebGPU：會用 CPU 轉錄（較慢），建議用電腦版 Chrome／Edge'}

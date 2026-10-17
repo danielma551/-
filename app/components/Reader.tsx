@@ -14,7 +14,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network, SkipBack, SkipForward } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, bookReadingStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
-import { updateBookProgressInIDB } from '../utils/bookDB'
+import { updateBookProgressInIDB, getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
+import { proofreadLines } from '../utils/proofread'
 import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { getBookAudio } from '../utils/bookAudioDB'
 import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
@@ -224,6 +225,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const AUDIO_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
   const [bookAudioRate, setBookAudioRate] = useState(1)
   const [showAudioKeys, setShowAudioKeys] = useState(false)
+  // 🪄 DeepSeek 校對（已轉錄嘅錄音書）
+  const [proofing, setProofing] = useState<{ done: number; total: number } | null>(null)
+  const [proofMsg, setProofMsg] = useState('')
   const [audioKeys, setAudioKeys] = useState<AudioKeyConfig>(() => loadAudioKeys())
   // 📄 參考 PDF（每本書可附一份，喺側邊睇）
   const [pdfDoc, setPdfDoc] = useState<{ blob: Blob; name: string } | null>(null)
@@ -699,6 +703,30 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex])
+
+  const proofreadThisBook = async () => {
+    if (proofing) return
+    const key = localStorage.getItem('deepseek-api-key') || ''
+    if (!key) { alert('未設定 DeepSeek key：請到書架右上角「Vision OCR」設定'); return }
+    if (!confirm('用 DeepSeek AI 校對成本書嘅錯別字？\n只會改錯字同聽錯嘅詞，唔會改寫，句數唔變（錄音對應照舊）。')) return
+    try {
+      const books = await getAllBooksFromIDB()
+      const book = books.find(b => b.id === bookId)
+      if (!book) return
+      setProofing({ done: 0, total: 1 })
+      const r = await proofreadLines(book.sentences, key, (done, total) => setProofing({ done, total }))
+      const updated = { ...book, sentences: r.lines, currentIndex: currentIndexRef.current }
+      await saveBookToIDB(updated)
+      onOpenBook?.(updated, currentIndexRef.current)   // 即時換上校對後嘅文字，停喺同一句
+      setProofMsg(r.failedBatches ? `🪄 校對完成：改咗 ${r.changed} 句（${r.failedBatches} 批失敗，保留原文）` : `🪄 校對完成：改咗 ${r.changed} 句`)
+    } catch (e) {
+      console.error(e)
+      setProofMsg('校對失敗，請稍後再試')
+    } finally {
+      setProofing(null)
+      setTimeout(() => setProofMsg(''), 5000)
+    }
+  }
 
   const toggleBookAudio = () => {
     const au = bookAudioRef.current
@@ -2727,6 +2755,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               padding: '6px 12px 6px 6px', boxShadow: '0 6px 20px rgba(79,70,229,0.15)',
             }}
           >
+            {proofMsg && (
+              <div style={{ position: 'absolute', left: 0, bottom: 'calc(100% + 8px)', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600,
+                padding: '6px 12px', borderRadius: isEink ? 0 : 999, background: isEink ? '#fff' : '#7c3aed', color: isEink ? '#000' : '#fff',
+                border: isEink ? '2px solid #000' : 'none', boxShadow: isEink ? 'none' : '0 6px 18px rgba(124,58,237,0.3)' }}>
+                {proofMsg}
+              </div>
+            )}
             <button
               onClick={toggleBookAudio}
               className="flex items-center justify-center flex-shrink-0"
@@ -2770,6 +2805,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     background: showPdf ? '#4f46e5' : '#eef2ff', color: showPdf ? '#fff' : '#4f46e5' }}
             >
               📄 {pdfDoc ? (/\.docx$/i.test(pdfDoc.name) ? 'Word' : 'PDF') : '加參考檔'}
+            </button>
+            <button onClick={proofreadThisBook} disabled={!!proofing} title="用 DeepSeek AI 校對成本書嘅錯別字"
+              style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#7c3aed', padding: '0 3px', whiteSpace: 'nowrap' }}>
+              {proofing ? `🪄 ${Math.min(proofing.done + 1, proofing.total)}/${proofing.total}` : '🪄'}
             </button>
             <button onClick={() => setShowAudioKeys(v => !v)} title="快捷鍵（可自訂）"
               style={{ fontSize: 12, fontWeight: 700, color: isEink ? '#000' : '#9ca3af', padding: '0 4px' }}>⌨</button>
