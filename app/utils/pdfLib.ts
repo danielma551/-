@@ -10,6 +10,62 @@ export interface PdfDoc {
   noText: boolean      // 掃描檔（冇文字層）→ 搜唔到
   addedAt: number
   lastPage?: number
+  kind?: 'pdf' | 'docx'  // 冇 = pdf
+  bookId?: string        // 由錄音書參考檔同步過嚟
+  bookTitle?: string
+  srcSavedAt?: number    // 參考檔嘅 savedAt（判斷使唔使更新）
+}
+
+export const docKind = (d: { kind?: string }) => (d.kind === 'docx' ? 'docx' : 'pdf')
+export const isDocxFile = (f: { name: string }) => /\.docx$/i.test(f.name)
+
+// Word → 純文字（搜尋用；成份當一「頁」）
+export async function extractDocxText(blob: Blob): Promise<string> {
+  // @ts-ignore mammoth 瀏覽器版冇型別
+  const mod: any = await import('mammoth/mammoth.browser')
+  const mammoth = mod.default ?? mod
+  const r = await mammoth.extractRawText({ arrayBuffer: await blob.arrayBuffer() })
+  return r.value || ''
+}
+
+// 一個檔 → 講稿庫條目
+export async function buildLibDoc(blob: Blob, fileName: string, extra: Partial<PdfDoc> = {}, onProgress?: (done: number, total: number) => void): Promise<PdfDoc> {
+  const docx = isDocxFile({ name: fileName })
+  let pages = 1, texts: string[]
+  if (docx) texts = [await extractDocxText(blob)]
+  else ({ pages, texts } = await extractPdfTexts(blob, onProgress))
+  const chars = texts.reduce((n, t) => n + t.replace(/\s+/g, '').length, 0)
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: fileName.replace(/\.(pdf|docx)$/i, ''), blob, size: blob.size, pages, texts,
+    noText: chars < pages * 10, addedAt: Date.now(), kind: docx ? 'docx' : 'pdf',
+    ...extra,
+  }
+}
+
+// 將錄音書嘅參考檔（PDF／Word）收入講稿庫：新嘅加入、換咗嘅更新；書刪咗都保留
+export async function syncAttachmentsToLibrary(titles: Record<string, string>): Promise<number> {
+  const { getAllBookPdfs } = await import('./bookAttachDB')
+  const atts = await getAllBookPdfs()
+  if (!atts.length) return 0
+  const existing = new Map((await getAllPdfDocs()).map(d => [d.id, d]))
+  let n = 0
+  for (const a of atts) {
+    const id = `att-${a.bookId}`
+    const old = existing.get(id)
+    const title = titles[a.bookId] || old?.bookTitle
+    if (old && old.srcSavedAt === a.savedAt) {
+      if (title && old.bookTitle !== title) await savePdfDoc({ ...old, bookTitle: title })
+      continue
+    }
+    try {
+      const d = await buildLibDoc(a.blob, a.name, { id, bookId: a.bookId, bookTitle: title, srcSavedAt: a.savedAt, addedAt: a.savedAt || Date.now() })
+      if (old?.lastPage) d.lastPage = old.lastPage
+      await savePdfDoc(d)
+      n++
+    } catch (e) { console.warn('sync attachment failed', a.name, e) }
+  }
+  return n
 }
 export type PdfMeta = Omit<PdfDoc, 'blob' | 'texts'>
 

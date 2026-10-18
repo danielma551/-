@@ -44,6 +44,17 @@ export async function getBookPdf(bookId: string): Promise<BookPdf | null> {
   } catch { return null }
 }
 
+export async function getAllBookPdfs(): Promise<BookPdf[]> {
+  try {
+    const db = await openDB()
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll()
+      req.onsuccess = () => resolve((req.result as BookPdf[]) || [])
+      req.onerror = () => reject(req.error)
+    })
+  } catch { return [] }
+}
+
 export async function deleteBookPdf(bookId: string): Promise<void> {
   try {
     const db = await openDB()

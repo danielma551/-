@@ -710,14 +710,14 @@ export default function Home() {
                 <span>💰</span>
                 <span className="hidden sm:inline">打電話賺錢</span>
               </a>
-              {/* PDF 庫 */}
+              {/* 講稿庫 */}
               <a
                 href="/pdfs"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 text-sm font-medium transition-colors"
-                title="PDF 庫：儲存 PDF，全庫搜尋＋高光"
+                title="講稿庫：PDF／Word 儲存，全庫搜尋＋高光"
               >
                 <span>📚</span>
-                <span className="hidden sm:inline">PDF 庫</span>
+                <span className="hidden sm:inline">講稿庫</span>
               </a>
               {/* 音頻轉文字 */}
               <a
@@ -1020,9 +1020,14 @@ export default function Home() {
                   <span className="text-lg font-bold text-gray-800">🎧 錄音</span>
                   <span className="text-sm text-gray-400">{audioBooks.length} 本</span>
                 </div>
-                <a href="/transcribe" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100">
-                  🎙️ 轉錄新錄音
-                </a>
+                <div className="flex items-center gap-2">
+                  <a href="/pdfs" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100" title="所有參考檔（PDF／Word），可搜尋＋高光">
+                    📚 講稿庫
+                  </a>
+                  <a href="/transcribe" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100">
+                    🎙️ 轉錄新錄音
+                  </a>
+                </div>
               </div>
             )}
             {openFolder === 'audio' && audioBooks.length === 0 && (

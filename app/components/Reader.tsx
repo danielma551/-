@@ -19,7 +19,7 @@ import { proofreadLines } from '../utils/proofread'
 import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { getBookAudio } from '../utils/bookAudioDB'
 import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
-import PdfPanel from './PdfPanel'
+import DocViewer from './DocViewer'
 import AudioKeysPanel from './AudioKeysPanel'
 import { loadAudioKeys, comboOf, actionForCombo, prettyCombo, AudioKeyConfig } from '../utils/audioKeys'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
@@ -666,6 +666,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     try { localStorage.removeItem('pdf-scroll:' + bookId) } catch {}
     setPdfDoc({ blob: f, name: f.name })
     setPdfOpen(true)
+    // 同步收入講稿庫（背景做，唔阻住閱讀）
+    import('../utils/pdfLib').then(m => m.syncAttachmentsToLibrary({ [bookId]: bookTitle })).catch(() => {})
   }
   const removePdf = async () => {
     if (!confirm('移除呢本書嘅參考檔？')) return
@@ -2714,15 +2716,20 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       {/* 📄 參考 PDF 面板（左側；窄螢幕全屏） */}
       <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handlePdfPicked} />
       {showPdf && pdfDoc && (
-        <PdfPanel
-          bookId={bookId}
+        <DocViewer
+          key={pdfDoc.name + pdfDoc.blob.size}
+          layout="panel"
           blob={pdfDoc.blob}
           name={pdfDoc.name}
+          kind={/\.docx$/i.test(pdfDoc.name) || pdfDoc.blob.type.includes('wordprocessingml') ? 'docx' : 'pdf'}
           isEink={isEink}
-          width={pdfWide ? pdfPanelW : '100%'}
+          panelWidth={pdfWide ? pdfPanelW : '100%'}
+          scrollKey={'pdf-scroll:' + bookId}
           onClose={() => setPdfOpen(false)}
-          onReplace={() => pdfInputRef.current?.click()}
-          onRemove={removePdf}
+          extraActions={<>
+            <button className={isEink ? 'px-1.5 py-1 text-xs text-black border border-black' : 'px-1.5 py-1 rounded-lg text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100'} onClick={() => pdfInputRef.current?.click()} title="換另一份參考檔">換檔</button>
+            <button className={isEink ? 'px-1.5 py-1 text-xs text-black border border-black' : 'px-1.5 py-1 rounded-lg text-xs text-gray-400 hover:text-red-500 hover:bg-red-50'} onClick={removePdf} title="由呢本書移除（講稿庫仍保留）">移除</button>
+          </>}
         />
       )}
 
