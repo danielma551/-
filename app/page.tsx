@@ -710,6 +710,15 @@ export default function Home() {
                 <span>💰</span>
                 <span className="hidden sm:inline">打電話賺錢</span>
               </a>
+              {/* PDF 庫 */}
+              <a
+                href="/pdfs"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 text-sm font-medium transition-colors"
+                title="PDF 庫：儲存 PDF，全庫搜尋＋高光"
+              >
+                <span>📚</span>
+                <span className="hidden sm:inline">PDF 庫</span>
+              </a>
               {/* 音頻轉文字 */}
               <a
                 href="/transcribe"
