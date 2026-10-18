@@ -233,7 +233,13 @@ export default function DocViewer(props: DocViewerProps) {
         : 'background:rgba(250,204,21,0.5);border-radius:2px;color:inherit'
     })
   }
-  useEffect(() => { if (kind === 'docx' && html) { applyDocxMarks(); styleDocxMarks() } }, [kind, html, query])   // eslint-disable-line react-hooks/exhaustive-deps
+  // 自己寫入 HTML（唔用 dangerouslySetInnerHTML：React 每次重繪會覆蓋掉 <mark>）
+  const htmlSetRef = useRef('')
+  useEffect(() => {
+    if (kind !== 'docx' || !html || !docxRef.current) return
+    if (htmlSetRef.current !== html || !docxRef.current.childNodes.length) { docxRef.current.innerHTML = html; htmlSetRef.current = html }
+    applyDocxMarks(); styleDocxMarks()
+  }, [kind, html, query])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // 搜尋／當前結果變 → 重畫
   useEffect(() => {
@@ -370,7 +376,7 @@ export default function DocViewer(props: DocViewerProps) {
             `}</style>
             <div ref={docxRef} className="docx-view"
               style={{ background: '#fff', color: isEink ? '#000' : '#1f2937', padding: '20px 22px', fontSize: `${zoom * 15}px`, boxShadow: isEink ? 'none' : '0 1px 4px rgba(0,0,0,0.1)', border: isEink ? '1px solid #000' : 'none' }}
-              dangerouslySetInnerHTML={{ __html: html }} />
+            />
           </div>
         )}
       </div>
