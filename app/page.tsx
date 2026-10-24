@@ -879,6 +879,7 @@ export default function Home() {
               </button>
             </div>
             {quickNoteMsg && <p className="text-xs text-emerald-700 mt-2 px-1">{quickNoteMsg}</p>}
+            <a href="/import" className="inline-block mt-2 px-1 text-xs text-sky-700 hover:underline">📥 從網頁收入課程／文章（例如得到）→</a>
           </div>
 
           {/* Vision OCR 設定面板 */}
