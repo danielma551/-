@@ -72,21 +72,30 @@ export default function ImportPage() {
   const bmRef = useRef<HTMLAnchorElement>(null)
   const got = useRef(false)
 
+  // 同一個視窗可以重用：每次收到新內容（下一課）就重新預覽
+  const lastText = useRef('')
   const accept = (d: Payload) => {
-    if (got.current || !d || typeof d.text !== 'string' || !d.text.trim()) return
+    if (!d || typeof d.text !== 'string' || !d.text.trim()) return
+    if (lastText.current === d.text) return
+    lastText.current = d.text
     got.current = true
+    setDone(null); setErr('')
     setData(d)
     setTitle((d.title || d.pageTitle || '未命名').trim())
+    setNewName(((d.pageTitle || d.title || '').split(/[-_|｜—]/)[0] || '').trim())
     setText(d.text.trim())
   }
 
   useEffect(() => {
     // 書籤經網址 # 帶資料（唔會傳去伺服器）
-    const m = location.hash.match(/^#d=(.+)$/)
-    if (m) {
+    const readHash = () => {
+      const m = location.hash.match(/^#d=(.+)$/)
+      if (!m) return
       try { accept(JSON.parse(decodeURIComponent(m[1]))) } catch { /* 太長被截 → 等 postMessage */ }
       history.replaceState(null, '', location.pathname)
     }
+    readHash()
+    window.addEventListener('hashchange', readHash)
     // 後備：postMessage
     const on = (e: MessageEvent) => {
       if (e.data?.type !== 'msw-import') return
@@ -100,13 +109,12 @@ export default function ImportPage() {
       const last = localStorage.getItem(LAST_KEY)
       if (last && list.some(b => b.id === last)) setTarget(last)
     })
-    return () => window.removeEventListener('message', on)
+    return () => { window.removeEventListener('message', on); window.removeEventListener('hashchange', readHash) }
   }, [])
 
   // React 唔准 href 直接寫 javascript:，自己設
   useEffect(() => { bmRef.current?.setAttribute('href', bookmarkletCode(SITE)) }, [])
 
-  useEffect(() => { if (data && !newName) setNewName((data.pageTitle || title).split(/[-_|｜—]/)[0].trim() || title) }, [data])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const sentences = useMemo(() => toSentences(text), [text])
   const targetBook = books.find(b => b.id === target)
