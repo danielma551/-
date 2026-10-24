@@ -234,8 +234,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [showPdf, setShowPdf] = useState(false)
   const pdfInputRef = useRef<HTMLInputElement | null>(null)
   const [winW, setWinW] = useState(1200)
+  const [winH, setWinH] = useState(800)
+  // 📱 手機橫屏：闊過高、高度矮 → 頂欄收埋，閱讀區用盡成個螢幕
+  const isLandscapePhone = winW > winH && winH <= 500
+  const [landHdr, setLandHdr] = useState(false)
+  useEffect(() => { if (!isLandscapePhone) setLandHdr(false) }, [isLandscapePhone])
   useEffect(() => {
-    const on = () => setWinW(window.innerWidth)
+    const on = () => { setWinW(window.innerWidth); setWinH(window.innerHeight) }
     on(); window.addEventListener('resize', on)
     return () => window.removeEventListener('resize', on)
   }, [])
@@ -346,7 +351,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     // main area: padding 8px top+bottom = 16px
     // inner container: padding 24px top+bottom = 48px
     // 額外 buffer: 20px 防止邊緣截字
-    const headerH = headerRef.current?.offsetHeight ?? 100
+    const headerH = isLandscapePhone ? 0 : (headerRef.current?.offsetHeight ?? 100)
     const availW = window.innerWidth - 64   // 左右 padding：main(12) + container(20) = 32px × 2
     const availH = window.innerHeight - headerH - 84  // header + 16 + 48 + 20 buffer
 
@@ -385,7 +390,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }
     }
     setEinkAutoFontSize(lo)
-  }, [currentIndex, einkMode, sentences, fontFamily])
+  }, [currentIndex, einkMode, sentences, fontFamily, isLandscapePhone])
 
   useEffect(() => {
     const loadSavedFont = async () => {
@@ -1990,14 +1995,42 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           .paper-foot:hover .paper-foot-cap { opacity: 1 !important; transform: translateX(-50%) translateY(0) !important; pointer-events: auto !important; }
         `}</style>
       )}
+      {/* 📱 橫屏：頂欄收埋，右上角細掣叫返出嚟 */}
+      {isLandscapePhone && (
+        <button
+          onClick={e => { e.stopPropagation(); setLandHdr(v => !v) }}
+          aria-label={landHdr ? '收起頂欄' : '打開頂欄'}
+          style={{
+            position: 'fixed', top: 8, right: 10, zIndex: 47, width: 34, height: 34,
+            borderRadius: isEink ? 0 : 999, border: isEink ? '1.5px solid #000' : '1px solid rgba(0,0,0,0.08)',
+            background: isEink ? '#fff' : 'rgba(255,255,255,0.85)', color: isEink ? '#000' : '#6b7280',
+            fontSize: 16, lineHeight: '32px', opacity: landHdr ? 1 : 0.55,
+            boxShadow: isEink ? 'none' : '0 2px 8px rgba(0,0,0,0.08)', backdropFilter: 'blur(6px)',
+          }}
+        >{landHdr ? '✕' : '☰'}</button>
+      )}
+      {isLandscapePhone && landHdr && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 44, background: isEink ? 'transparent' : 'rgba(0,0,0,0.12)' }}
+          onClick={e => { e.stopPropagation(); setLandHdr(false) }} />
+      )}
       <header
         ref={headerRef}
         className={isPaper ? 'paper-hdr relative' : 'bg-white'}
-        style={isEink
-          ? { borderBottom: '2px solid #000', boxShadow: 'none' }
-          : isPaper
-            ? { background: 'transparent', boxShadow: 'none' }
-            : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}
+        style={{
+          ...(isEink
+            ? { borderBottom: '2px solid #000', boxShadow: 'none' }
+            : isPaper
+              ? { background: 'transparent', boxShadow: 'none' }
+              : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }),
+          ...(isLandscapePhone ? {
+            position: 'fixed', top: 0, left: pdfOffset, right: 0, zIndex: 45,
+            background: isEink ? '#fff' : isPaper ? paperTheme.bg : '#fff',
+            paddingRight: 48, maxHeight: '85vh', overflowY: 'auto',
+            transform: landHdr ? 'translateY(0)' : 'translateY(-105%)',
+            transition: isEink ? 'none' : 'transform 220ms ease',
+            visibility: landHdr ? 'visible' : 'hidden',
+          } : {}),
+        }}
       >
         {isEink ? (
           /* ── 墨水屏極簡 Header：只剩書名、句數、⋯設定、🏠 ── */
@@ -3114,8 +3147,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       {/* 主閱讀區：整個 main 都可點，右半下一句，左半上一句 */}
       {/* eink 模式：去除 padding，讓文字佔滿整個可用高度 */}
       <main
-        className={`flex-1 flex items-center justify-center relative ${isEink ? '' : 'p-4 md:p-6'}`}
-        style={isEink ? { padding: '8px 12px' } : {}}
+        className={`flex-1 flex items-center justify-center relative ${isEink ? '' : isLandscapePhone ? 'px-12 py-2' : 'p-4 md:p-6'}`}
+        style={isEink ? { padding: isLandscapePhone ? '6px 48px 6px 16px' : '8px 12px' } : isLandscapePhone ? { minHeight: winH } : {}}
         onClick={handleMainTap}
       >
 
@@ -3235,18 +3268,20 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
         ) : (
           /* ── 預設模式（原有樣式）── */
-          <div className={isEink ? 'w-full' : 'max-w-4xl w-full'}>
+          <div className={isEink || isLandscapePhone ? 'w-full' : 'max-w-4xl w-full'}>
             <div
-              className={isEink ? 'flex items-center justify-center' : 'rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40'}
+              className={isEink ? 'flex items-center justify-center' : isLandscapePhone
+                ? 'rounded-2xl shadow-xl px-8 py-5 flex items-center justify-center transition-all border border-white/40'
+                : 'rounded-2xl shadow-2xl p-8 md:p-16 min-h-[320px] flex items-center justify-center transition-all border border-white/40'}
               style={isEink ? {
                 borderRadius: 0,
                 boxShadow: 'none',
                 padding: '24px 20px',
                 border: 'none',
-                minHeight: 'calc(100vh - 110px)',
+                minHeight: isLandscapePhone ? `${winH - 12}px` : 'calc(100vh - 110px)',
                 background: '#fff',
                 width: '100%',
-              } : {}}
+              }  : isLandscapePhone ? { minHeight: winH - 24 } : {}}
             >
               {(() => {
                 const animStyle = displaySettings.animationStyle ?? 'rise'

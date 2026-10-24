@@ -693,14 +693,14 @@ export default function Home() {
       )}
 
       {sentences.length === 0 ? (
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          {/* Header */}
-          <header className="flex items-center justify-between mb-10">
-            <div className="flex items-center space-x-2">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8 landscape-tight">
+          {/* Header（窄螢幕：標題一行，掣自動換行） */}
+          <header className="flex flex-wrap items-center justify-between gap-3 mb-6 sm:mb-10">
+            <div className="flex items-center space-x-2 shrink-0 whitespace-nowrap">
               <BookOpen className="w-6 h-6 text-gray-800" />
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 [&>*]:whitespace-nowrap [&>*]:shrink-0">
               {/* 打電話賺錢 */}
               <a
                 href="/work"
@@ -708,7 +708,7 @@ export default function Home() {
                 title="打電話賺錢：把打電話 confirm payment 金錢化"
               >
                 <span>💰</span>
-                <span className="hidden sm:inline">打電話賺錢</span>
+                <span className="hidden lg:inline">打電話賺錢</span>
               </a>
               {/* 講稿庫 */}
               <a
@@ -717,7 +717,7 @@ export default function Home() {
                 title="講稿庫：PDF／Word 儲存，全庫搜尋＋高光"
               >
                 <span>📚</span>
-                <span className="hidden sm:inline">講稿庫</span>
+                <span className="hidden lg:inline">講稿庫</span>
               </a>
               {/* 音頻轉文字 */}
               <a
@@ -726,7 +726,7 @@ export default function Home() {
                 title="音頻轉文字：Whisper 本機轉錄（免費、免 key）"
               >
                 <span>🎙️</span>
-                <span className="hidden sm:inline">音頻轉文字</span>
+                <span className="hidden lg:inline">音頻轉文字</span>
               </a>
               {/* 每日外刊按鈕 */}
               <button
@@ -738,7 +738,7 @@ export default function Home() {
                 {extStatus === 'loading'
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   : <Newspaper className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">{extStatus === 'loading' ? '生成中…' : '每日外刊'}</span>
+                <span className="hidden lg:inline">{extStatus === 'loading' ? '生成中…' : '每日外刊'}</span>
                 {!extDoneToday && extStatus !== 'loading' && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-teal-500" title="今日未生成" />
                 )}
@@ -750,7 +750,7 @@ export default function Home() {
                 title="設定 AI 視覺 OCR（掃描 PDF 識別）"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{visionApiKey ? 'Vision OCR ✓' : 'Vision OCR'}</span>
+                <span className="hidden lg:inline">{visionApiKey ? 'Vision OCR ✓' : 'Vision OCR'}</span>
               </button>
               <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
@@ -763,7 +763,7 @@ export default function Home() {
                   title="背景音樂：上傳檔案或加 YouTube 連結"
                 >
                   {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
-                  <span className="hidden sm:inline">{isSavingMusic ? '存儲中...' : (tracks.length > 0 ? `背景音樂 · ${tracks.length}` : '背景音樂')}</span>
+                  <span className="hidden lg:inline">{isSavingMusic ? '存儲中...' : (tracks.length > 0 ? `背景音樂 · ${tracks.length}` : '背景音樂')}</span>
                 </button>
                 <input
                   id="music-upload"

@@ -293,10 +293,11 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
     <>
       <button
         onClick={handleOpen}
-        className="flex items-center space-x-2 px-4 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        title="雲端同步"
       >
         <Cloud className="w-4 h-4" />
-        <span>雲端同步</span>
+        <span className="hidden lg:inline">雲端同步</span>
       </button>
 
       {isOpen && (

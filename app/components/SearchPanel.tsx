@@ -156,7 +156,7 @@ export default function SearchPanel({ onOpenBook }: SearchPanelProps) {
         title="搜索書籍內容"
       >
         <Search className="w-4 h-4" />
-        <span className="hidden sm:inline">搜索</span>
+        <span className="hidden lg:inline">搜索</span>
       </button>
 
       {/* 全屏搜索面板：Portal 渲染到 body，跳出 Reader header 的 transform containing block */}
