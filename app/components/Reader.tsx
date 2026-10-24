@@ -3256,7 +3256,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
 
             {/* 手機觸摸提示 */}
-            <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
+            <div className={`mt-6 md:hidden ${isLandscapePhone ? "!hidden" : "flex"} items-center justify-between px-2 select-none pointer-events-none`}>
               <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
                 <ChevronLeft className="w-3 h-3" /> 上一句
               </span>
@@ -3369,7 +3369,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             {/* 電腦：顯示按鈕；eink 模式下隱藏（用實體按鍵）；手機/平板：隱藏按鈕，改用觸摸分區 */}
             {!isEink && (
-              <div className="mt-8 hidden md:flex items-center justify-between">
+              <div className={`mt-8 hidden ${isLandscapePhone ? "" : "md:flex"} items-center justify-between`}>
                 <button
                   onClick={goToNext}
                   disabled={currentIndex === sentences.length - 1}
@@ -3393,7 +3393,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             )}
 
             {/* 手機/平板：觸摸提示；eink 模式下更明顯 */}
-            <div className="mt-6 md:hidden flex items-center justify-between px-2 select-none pointer-events-none">
+            <div className={`mt-6 md:hidden ${isLandscapePhone ? "!hidden" : "flex"} items-center justify-between px-2 select-none pointer-events-none`}>
               <span
                 className="flex items-center gap-1"
                 style={{ fontSize: isEink ? 15 : 12, color: isEink ? '#333' : '#d1d5db', fontWeight: isEink ? 600 : 400 }}
