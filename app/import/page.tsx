@@ -72,6 +72,13 @@ export default function ImportPage() {
   const bmRef = useRef<HTMLAnchorElement>(null)
   const got = useRef(false)
 
+  const loadBooks = () => getAllBooksFromIDB().then(all => {
+    const list = all.filter(b => !isAudioBook(b) && b.id !== 'daily-review').sort((a, b) => (b.lastReadDate || 0) - (a.lastReadDate || 0))
+    setBooks(list)
+    const last = localStorage.getItem(LAST_KEY)
+    setTarget(last && list.some(b => b.id === last) ? last : 'new')
+  })
+
   // 同一個視窗可以重用：每次收到新內容（下一課）就重新預覽
   const lastText = useRef('')
   const accept = (d: Payload) => {
@@ -103,12 +110,7 @@ export default function ImportPage() {
       try { (e.source as Window | null)?.postMessage('msw-import-ok', e.origin) } catch { /* ignore */ }
     }
     window.addEventListener('message', on)
-    getAllBooksFromIDB().then(all => {
-      const list = all.filter(b => !isAudioBook(b) && b.id !== 'daily-review').sort((a, b) => (b.lastReadDate || 0) - (a.lastReadDate || 0))
-      setBooks(list)
-      const last = localStorage.getItem(LAST_KEY)
-      if (last && list.some(b => b.id === last)) setTarget(last)
-    })
+    loadBooks()
     return () => { window.removeEventListener('message', on); window.removeEventListener('hashchange', readHash) }
   }, [])
 
@@ -117,6 +119,7 @@ export default function ImportPage() {
 
 
   const sentences = useMemo(() => toSentences(text), [text])
+  const realCount = sentences.filter(x => x !== PARA_SEP).length
   const targetBook = books.find(b => b.id === target)
   const dupChapter = !!targetBook?.chapters?.some(c => c.title === title.trim())
 
@@ -132,7 +135,8 @@ export default function ImportPage() {
         const book: BookData = { id, title: name, sentences, currentIndex: 0, uploadDate: now, lastReadDate: now, chapters: [{ title: chapter, startIndex: 0 }] }
         await saveBookToIDB(book)
         localStorage.setItem(LAST_KEY, id)
-        setDone({ id, n: sentences.length, chapter, append: false })
+        setDone({ id, n: realCount, chapter, append: false })
+        loadBooks()
       } else {
         const b = books.find(x => x.id === target)
         if (!b) { setErr('搵唔到嗰本書'); return }
@@ -146,7 +150,8 @@ export default function ImportPage() {
         }
         await saveBookToIDB(updated)
         localStorage.setItem(LAST_KEY, b.id)
-        setDone({ id: b.id, n: sentences.length, chapter, append: true })
+        setDone({ id: b.id, n: realCount, chapter, append: true })
+        loadBooks()
       }
     } catch (e) {
       console.error(e); setErr('儲存失敗（可能係瀏覽器空間不足）')
@@ -199,7 +204,7 @@ export default function ImportPage() {
             <div>
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-gray-500">內容（可以刪走唔要嘅部分）</label>
-                <span className="text-xs text-gray-400">{sentences.filter(s => s !== PARA_SEP).length} 句 · {text.replace(/\s/g, '').length} 字</span>
+                <span className="text-xs text-gray-400">{realCount} 句 · {text.replace(/\s/g, '').length} 字</span>
               </div>
               <textarea value={text} onChange={e => setText(e.target.value)} rows={12}
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm leading-relaxed outline-none focus:border-indigo-400 resize-y" />
