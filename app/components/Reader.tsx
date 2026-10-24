@@ -2687,7 +2687,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         className="fixed top-32 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-500"
         style={{ opacity: cpToast ? 1 : 0, transform: `translateX(-50%) translateY(${cpToast ? '0px' : '-8px'})` }}
       >
-        <div className="px-4 py-2 bg-indigo-600/85 backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap">
+        <div className={`px-4 py-2 ${isPaper ? '' : 'bg-indigo-600/85'} backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap`}
+          style={isPaper ? { background: 'rgba(138,106,60,0.88)' } : undefined}>
           {cpToast}
         </div>
       </div>
