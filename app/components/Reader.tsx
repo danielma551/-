@@ -1921,6 +1921,46 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     btnBg: 'rgba(253,250,243,0.85)', btnBorder: '#e2d3b3', btnText: '#8a6a3c', okBg: '#8a6a3c',
   }
 
+  // 📜 紙本模式精簡進度：同正文一樣闊、左右留白、三條幼線統一粗細，平時半透明，滑鼠移上去先清楚
+  const renderPaperHud = () => {
+    const dot = (left: number, on: boolean) => (
+      <span key={left} style={{ position: 'absolute', left: `${left}%`, top: '50%', width: 5, height: 5, borderRadius: 99, transform: 'translate(-50%,-50%)', background: on ? warm.strong : warm.tick, transition: 'background .3s' }} />
+    )
+    const track = (h: number, children: React.ReactNode, mt = 0) => (
+      <div style={{ position: 'relative', height: h, borderRadius: 99, background: warm.track, marginTop: mt }}>{children}</div>
+    )
+    return (
+      <div className="paper-hud" style={{ maxWidth: 'min(900px, 80vw)', margin: '0 auto', padding: '10px 0 4px', fontFamily: paperTheme.fontFamily }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, letterSpacing: '0.08em', color: paperTheme.muted, marginBottom: 8 }}>
+          <span>
+            {battleMonster && <>{battleMonster.emoji} {battleMonster.name}{goalCompleted ? ' · 已擊敗' : ''}　</>}
+            第 {currentCycleIdx + 1}/{cycleData.count} 循環 · {Math.max(posInCycle, 0)}/{cycleSize} 句
+          </span>
+          <span className="tabular-nums" style={{ color: battleMonster && !goalCompleted ? paperTheme.accentColor : paperTheme.muted }}>
+            {battleMonster ? (goalCompleted ? `+${xpForGoal(readingGoal)} XP · ` : `HP ${battleHp}/${readingGoal} · `) : ''}{mergedBarWidth.toFixed(0)}%
+          </span>
+        </div>
+        {/* 循環進度 */}
+        {track(3, <>
+          <div style={{ position: 'absolute', inset: 0, width: `${mergedBarWidth}%`, borderRadius: 99, background: warm.fill, transition: 'width .35s var(--ease-out)' }} />
+          {[25, 50, 75].map(m => dot(m, mergedBarWidth >= m))}
+        </>)}
+        {/* 打怪征途（有目標先顯示）：細勇者行向怪物 */}
+        {battleMonster && track(3, <>
+          <div style={{ position: 'absolute', inset: 0, width: `${questPct}%`, borderRadius: 99, background: warm.quest, transition: 'width .35s var(--ease-out)' }} />
+          {[25, 50, 75].map(m => dot(m, questPct >= m))}
+          <span style={{ position: 'absolute', left: `${Math.min(questPct, 97)}%`, top: '50%', transform: 'translate(-50%,-55%)', fontSize: 11, lineHeight: 1, transition: 'left .35s var(--ease-out)', animation: hudShake ? 'gamify-hero-step 350ms var(--ease-out)' : undefined }}>⚔️</span>
+          <span style={{ position: 'absolute', right: -4, top: '50%', transform: 'translate(0,-55%)', fontSize: 11, lineHeight: 1, filter: goalCompleted ? 'grayscale(1)' : undefined, opacity: goalCompleted ? 0.5 : 1 }}>{battleMonster.emoji}</span>
+        </>, 10)}
+        {/* 全書：之前讀咗＋今日 */}
+        <div title={`全書 ${currentIndex + 1}/${sentences.length} 句`} style={{ position: 'relative', height: 2, borderRadius: 99, background: warm.track2, marginTop: 10, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${bookBeforePct}%`, background: '#e6d6b3' }} />
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: '#b7791f', transition: 'width .35s var(--ease-out)' }} />
+        </div>
+      </div>
+    )
+  }
+
   const toggleReaderMode = () => {
     const next = readerMode === 'paper' ? 'default' : 'paper'
     setReaderMode(next)
@@ -2008,6 +2048,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         <style>{`
           .paper-cap { opacity: 0; pointer-events: none; transition: opacity .25s ease; }
           .paper-hdr:hover .paper-cap { opacity: 1; pointer-events: auto; }
+          .paper-hud { opacity: .55; transition: opacity .25s ease; }
+          .paper-hud:hover { opacity: 1; }
           .paper-foot:hover .paper-foot-cap { opacity: 1 !important; transform: translateX(-50%) translateY(0) !important; pointer-events: auto !important; }
         `}</style>
       )}
@@ -2403,7 +2445,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
           </div>
         )}
-        <div className="w-full">
+        {isPaper && !isEink ? renderPaperHud() : (<div className="w-full">
           {/* ── ⚔️ 戰況列：怪物 + HP，融合喺原進度條上方 ── */}
           {/* 普通模式：扣血震動 + HP 變色；墨水屏：純黑靜態文字，無動畫無轉場（避免殘影） */}
           {battleMonster && (
@@ -2657,7 +2699,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
           </>
           )}
-        </div>
+        </div>)}
       </header>
 
       {/* 循環完成氣泡（4b）：錨在循環進度游標下方，白底小膠囊 */}
