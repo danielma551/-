@@ -1922,6 +1922,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   // 📜 紙本模式精簡進度：同正文一樣闊、左右留白、三條幼線統一粗細，平時半透明，滑鼠移上去先清楚
+  // 進度條保持彩色（用戶鍾意原本有顏色嘅版本）；精簡版保留備用
+  const paperBars = false as boolean
   const renderPaperHud = () => {
     const dot = (left: number, on: boolean) => (
       <span key={left} style={{ position: 'absolute', left: `${left}%`, top: '50%', width: 5, height: 5, borderRadius: 99, transform: 'translate(-50%,-50%)', background: on ? warm.strong : warm.tick, transition: 'background .3s' }} />
@@ -2445,7 +2447,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
           </div>
         )}
-        {isPaper && !isEink ? renderPaperHud() : (<div className="w-full">
+        <div className="w-full">
           {/* ── ⚔️ 戰況列：怪物 + HP，融合喺原進度條上方 ── */}
           {/* 普通模式：扣血震動 + HP 變色；墨水屏：純黑靜態文字，無動畫無轉場（避免殘影） */}
           {battleMonster && (
@@ -2482,7 +2484,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 className="text-xs tabular-nums font-medium"
                 style={isEink
                   ? { fontSize: 13, fontWeight: 700, color: '#000' }
-                  : { color: goalCompleted ? (isPaper ? '#7c8b4a' : '#16a34a') : (isPaper ? paperTheme.accentColor : battleBarColor) }}
+                  : { color: goalCompleted ? (paperBars ? '#7c8b4a' : '#16a34a') : (paperBars ? paperTheme.accentColor : battleBarColor) }}
               >
                 {goalCompleted ? `⚡ +${xpForGoal(readingGoal)} XP` : `HP ${battleHp}/${readingGoal}`}
               </span>
@@ -2495,17 +2497,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ④ 合併循環條：一條 bar 顯示成個循環，50% 加粗中點刻度 = 上半/下半交界 */}
           <div
             className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5"
-            style={{ color: isPaper ? paperTheme.muted : getProgressColor() }}
+            style={{ color: paperBars ? paperTheme.muted : getProgressColor() }}
           >
             <span>循環進度 · 第 {currentCycleIdx + 1}/{cycleData.count} 循環（{Math.max(posInCycle, 0)}/{cycleSize} 句）</span>
             <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
           </div>
           <div className="w-full relative" style={{ height: 8 }}>
-            <div className="absolute inset-0 rounded-full" style={{ background: isPaper ? warm.track : '#e5e7eb' }} />
+            <div className="absolute inset-0 rounded-full" style={{ background: paperBars ? warm.track : '#e5e7eb' }} />
             {/* 漸層色填充（紅→黃→瑞幸藍，沿用原插值邏輯；紙本模式用墨啡） */}
             <div
               className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${mergedBarWidth}%`, background: isPaper ? warm.fill : getBarColor(mergedBarWidth), transition: 'all 0.3s' }}
+              style={{ width: `${mergedBarWidth}%`, background: paperBars ? warm.fill : getBarColor(mergedBarWidth), transition: 'all 0.3s' }}
             />
             {/* 發光尾端 */}
             {mergedBarWidth > 0.5 && (
@@ -2515,9 +2517,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   left: `${mergedBarWidth}%`,
                   transform: 'translate(-50%,-50%)',
                   width: 14, height: 14,
-                  backgroundColor: isPaper ? warm.strong : getBarColor(mergedBarWidth),
-                  opacity: isPaper ? 0.35 : 0.5,
-                  boxShadow: `0 0 8px 5px ${isPaper ? warm.strong : getBarColor(mergedBarWidth)}${isPaper ? '44' : '88'}`,
+                  backgroundColor: paperBars ? warm.strong : getBarColor(mergedBarWidth),
+                  opacity: paperBars ? 0.35 : 0.5,
+                  boxShadow: `0 0 8px 5px ${paperBars ? warm.strong : getBarColor(mergedBarWidth)}${paperBars ? '44' : '88'}`,
                 }}
               />
             )}
@@ -2526,23 +2528,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <div
                 key={m}
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: 2, height: 14, background: isPaper ? paperTheme.bg : 'white', borderRadius: 0 }}
+                style={{ left: `${m}%`, width: 2, height: 14, background: paperBars ? paperTheme.bg : 'white', borderRadius: 0 }}
               />
             ))}
             {/* 50% 加粗中點刻度 */}
             <div
               className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
-              style={{ left: '50%', width: 4, height: 18, background: isPaper ? warm.tick : '#a5b4fc', borderRadius: 2 }}
+              style={{ left: '50%', width: 4, height: 18, background: paperBars ? warm.tick : '#a5b4fc', borderRadius: 2 }}
             />
           </div>
 
           {/* ①② 戰鬥征途：小勇者行向怪物 + 檢查點旗仔（有目標先顯示） */}
           {battleMonster && (
             <div className="w-full relative" style={{ height: 10, marginTop: 16 }}>
-              <div className="absolute inset-0 rounded-full" style={isPaper ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#eef2ff', border: '1px solid #e0e7ff' }} />
+              <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#eef2ff', border: '1px solid #e0e7ff' }} />
               <div
                 className="absolute inset-y-0 left-0 rounded-full"
-                style={{ width: `${questPct}%`, background: isPaper ? warm.quest : 'linear-gradient(90deg,#a5b4fc,#6366f1)', transition: 'width 350ms var(--ease-out)' }}
+                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : 'linear-gradient(90deg,#a5b4fc,#6366f1)', transition: 'width 350ms var(--ease-out)' }}
               />
               {/* ② 檢查點旗仔：25/50/75，通過時著燈 + 閃光 */}
               {[25, 50, 75].map(m => (
@@ -2551,7 +2553,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
                   style={{
                     left: `${m}%`, width: 2, height: 16,
-                    background: questPct >= m ? (isPaper ? warm.strong : '#6366f1') : (isPaper ? warm.tick : '#c7d2fe'),
+                    background: questPct >= m ? (paperBars ? warm.strong : '#6366f1') : (paperBars ? warm.tick : '#c7d2fe'),
                     transition: 'background .3s',
                     animation: cpFlash === m ? 'gamify-cp-flash 700ms var(--ease-out)' : undefined,
                   }}
@@ -2587,13 +2589,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ⑤ 全書薄條 + 今日疆土：淺藍=之前讀咗，深藍=今日疆土，灰=未讀 */}
           <div
             className="w-full relative rounded-full overflow-hidden"
-            style={{ height: 4, background: isPaper ? warm.track2 : '#f3f4f6', marginTop: battleMonster ? 8 : 4 }}
+            style={{ height: 4, background: paperBars ? warm.track2 : '#f3f4f6', marginTop: battleMonster ? 8 : 4 }}
             title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
           >
-            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: isPaper ? '#e6d6b3' : '#bae6fd' }} />
+            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: paperBars ? '#e6d6b3' : '#bae6fd' }} />
             <div
               className="absolute inset-y-0"
-              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: isPaper ? '#b7791f' : '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
+              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: paperBars ? '#b7791f' : '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
             />
           </div>
 
@@ -2699,7 +2701,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           </div>
           </>
           )}
-        </div>)}
+        </div>
       </header>
 
       {/* 循環完成氣泡（4b）：錨在循環進度游標下方，白底小膠囊 */}
@@ -2729,8 +2731,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         className="fixed top-32 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-500"
         style={{ opacity: cpToast ? 1 : 0, transform: `translateX(-50%) translateY(${cpToast ? '0px' : '-8px'})` }}
       >
-        <div className={`px-4 py-2 ${isPaper ? '' : 'bg-indigo-600/85'} backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap`}
-          style={isPaper ? { background: 'rgba(138,106,60,0.88)' } : undefined}>
+        <div className="px-4 py-2 bg-indigo-600/85 backdrop-blur-sm text-white text-sm font-medium rounded-full shadow-lg whitespace-nowrap">
           {cpToast}
         </div>
       </div>
