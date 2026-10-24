@@ -72,6 +72,8 @@ export default function ReadingHeatmap() {
     const month = firstReal.date.slice(0, 7)   // 'YYYY-MM'
     if (month !== lastMonth) {
       const [, mm] = month.split('-')
+      // 兩個月份標籤太近（頭一週嘅零碎月）會疊埋 → 丟咗前一個
+      if (monthLabels.length && wi - monthLabels[monthLabels.length - 1].weekIdx < 3) monthLabels.pop()
       monthLabels.push({ label: `${parseInt(mm)}月`, weekIdx: wi })
       lastMonth = month
     }

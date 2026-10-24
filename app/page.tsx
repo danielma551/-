@@ -700,7 +700,7 @@ export default function Home() {
               <BookOpen className="w-6 h-6 text-gray-800" />
               <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 [&>*]:whitespace-nowrap [&>*]:shrink-0">
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 [&>*]:whitespace-nowrap [&>*]:shrink-0">
               {/* 打電話賺錢 */}
               <a
                 href="/work"
@@ -860,20 +860,20 @@ export default function Home() {
           </header>
 
           {/* ✍️ 快速加筆記（首頁顯眼位置：隨手記，即刻入温習循環） */}
-          <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
-            <div className="flex items-start gap-3">
+          <div className="mb-6 sm:mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3 sm:p-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
               <textarea
                 value={quickNote}
                 onChange={e => setQuickNote(e.target.value)}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleQuickAddNote() } }}
                 placeholder="✍️ 隨手寫低一個諗法／筆記…（⌘/Ctrl + Enter 快速加入，即刻入温習循環）"
                 rows={2}
-                className="flex-1 bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-gray-400 pt-1"
+                className="flex-1 w-full bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-gray-400 pt-1"
               />
               <button
                 onClick={handleQuickAddNote}
                 disabled={!quickNote.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 self-stretch"
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 sm:self-stretch self-end"
               >
                 <Plus className="w-4 h-4" /> 加入筆記
               </button>
