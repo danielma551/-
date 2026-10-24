@@ -76,6 +76,8 @@ const LUCKY_TYPES = [
   { emoji: '⭐', label: '流星！',     color: '#f472b6', shadow: 'rgba(244,114,182,0.35)' },
 ]
 
+const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.05 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>')}")`
+
 export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
@@ -287,7 +289,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     // 初始化每一條雨滴（斜角線段，有遠近大小差異）
     interface Drop { x: number; y: number; len: number; speed: number; width: number; opacity: number }
     const angle = 0.25 // 斜角弧度（約 14 度）
-    const drops: Drop[] = Array.from({ length: Math.floor(canvas.width / 14) }, () => ({
+    // 紙本模式：雨絲少一半、改暖灰、好淡（唔好似紙張刮花）
+    const paperRain = readerMode === 'paper'
+    const rgb = paperRain ? '168, 150, 118' : '200, 230, 255'
+    const opMul = paperRain ? 0.28 : 1
+    const drops: Drop[] = Array.from({ length: Math.floor(canvas.width / (paperRain ? 28 : 14)) }, () => ({
       x: Math.random() * (canvas.width + 200) - 100,
       y: Math.random() * canvas.height - canvas.height,
       len: Math.random() * 30 + 10,   // 長度差異模擬遠近感
@@ -303,8 +309,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         const dy = Math.cos(angle) * drop.len
         // 建立從頭（亮）到尾（透明）的線性漸變
         const grad = ctx.createLinearGradient(drop.x, drop.y, drop.x + dx, drop.y + dy)
-        grad.addColorStop(0, `rgba(200, 230, 255, ${drop.opacity})`)
-        grad.addColorStop(1, 'rgba(200, 230, 255, 0)')
+        grad.addColorStop(0, `rgba(${rgb}, ${drop.opacity * opMul})`)
+        grad.addColorStop(1, `rgba(${rgb}, 0)`)
         ctx.beginPath()
         ctx.moveTo(drop.x, drop.y)
         ctx.lineTo(drop.x + dx, drop.y + dy)
@@ -329,7 +335,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (rainAnimRef.current) cancelAnimationFrame(rainAnimRef.current)
       window.removeEventListener('resize', handleResize)
     }
-  }, [rainEnabled, einkMode])
+  }, [rainEnabled, einkMode, readerMode])
 
 
   // ── 墨水屏自適應字體大小：binary search ──
@@ -1907,6 +1913,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     fontFamily: '"Noto Serif TC", STSong, "Songti TC", "宋體", Georgia, serif',
   }
 
+  // 🎨 紙本模式暖色（墨啡／赭石／淡金），取代藍紫綠
+  const warm = {
+    track: '#efe6d2', track2: '#f4ecdb', tick: '#dccaa4',
+    fill: 'linear-gradient(90deg,#d8b98a,#a0723f)', strong: '#a0723f',
+    quest: 'linear-gradient(90deg,#e3cfa8,#b08d57)',
+    btnBg: 'rgba(253,250,243,0.85)', btnBorder: '#e2d3b3', btnText: '#8a6a3c', okBg: '#8a6a3c',
+  }
+
   const toggleReaderMode = () => {
     const next = readerMode === 'paper' ? 'default' : 'paper'
     setReaderMode(next)
@@ -1918,6 +1932,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       className="min-h-screen flex flex-col overflow-x-hidden transition-all duration-300"
       style={{
         backgroundColor: isEink ? einkTheme.bg : isPaper ? paperTheme.bg : displaySettings.backgroundColor,
+        // 紙本模式：好淡嘅紙紋（SVG 雜訊），取代「刮花」感
+        backgroundImage: isPaper && !isEink ? PAPER_GRAIN : undefined,
         paddingRight: (!isEink && showSidebar) ? SIDEBAR_WIDTH : 0,
         paddingLeft: pdfOffset,
         animation: isEink ? undefined : 'reader-in 340ms cubic-bezier(0.23,1,0.32,1) both',
@@ -2424,7 +2440,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 className="text-xs tabular-nums font-medium"
                 style={isEink
                   ? { fontSize: 13, fontWeight: 700, color: '#000' }
-                  : { color: goalCompleted ? '#16a34a' : battleBarColor }}
+                  : { color: goalCompleted ? (isPaper ? '#7c8b4a' : '#16a34a') : (isPaper ? paperTheme.accentColor : battleBarColor) }}
               >
                 {goalCompleted ? `⚡ +${xpForGoal(readingGoal)} XP` : `HP ${battleHp}/${readingGoal}`}
               </span>
@@ -2437,17 +2453,17 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ④ 合併循環條：一條 bar 顯示成個循環，50% 加粗中點刻度 = 上半/下半交界 */}
           <div
             className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5"
-            style={{ color: getProgressColor() }}
+            style={{ color: isPaper ? paperTheme.muted : getProgressColor() }}
           >
             <span>循環進度 · 第 {currentCycleIdx + 1}/{cycleData.count} 循環（{Math.max(posInCycle, 0)}/{cycleSize} 句）</span>
             <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
           </div>
           <div className="w-full relative" style={{ height: 8 }}>
-            <div className="absolute inset-0 rounded-full bg-gray-200" />
-            {/* 漸層色填充（紅→黃→瑞幸藍，沿用原插值邏輯） */}
+            <div className="absolute inset-0 rounded-full" style={{ background: isPaper ? warm.track : '#e5e7eb' }} />
+            {/* 漸層色填充（紅→黃→瑞幸藍，沿用原插值邏輯；紙本模式用墨啡） */}
             <div
               className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${mergedBarWidth}%`, backgroundColor: getBarColor(mergedBarWidth), transition: 'all 0.3s' }}
+              style={{ width: `${mergedBarWidth}%`, background: isPaper ? warm.fill : getBarColor(mergedBarWidth), transition: 'all 0.3s' }}
             />
             {/* 發光尾端 */}
             {mergedBarWidth > 0.5 && (
@@ -2457,9 +2473,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   left: `${mergedBarWidth}%`,
                   transform: 'translate(-50%,-50%)',
                   width: 14, height: 14,
-                  backgroundColor: getBarColor(mergedBarWidth),
-                  opacity: 0.5,
-                  boxShadow: `0 0 8px 5px ${getBarColor(mergedBarWidth)}88`,
+                  backgroundColor: isPaper ? warm.strong : getBarColor(mergedBarWidth),
+                  opacity: isPaper ? 0.35 : 0.5,
+                  boxShadow: `0 0 8px 5px ${isPaper ? warm.strong : getBarColor(mergedBarWidth)}${isPaper ? '44' : '88'}`,
                 }}
               />
             )}
@@ -2468,23 +2484,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <div
                 key={m}
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
-                style={{ left: `${m}%`, width: 2, height: 14, background: 'white', borderRadius: 0 }}
+                style={{ left: `${m}%`, width: 2, height: 14, background: isPaper ? paperTheme.bg : 'white', borderRadius: 0 }}
               />
             ))}
             {/* 50% 加粗中點刻度 */}
             <div
               className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 pointer-events-none"
-              style={{ left: '50%', width: 4, height: 18, background: '#a5b4fc', borderRadius: 2 }}
+              style={{ left: '50%', width: 4, height: 18, background: isPaper ? warm.tick : '#a5b4fc', borderRadius: 2 }}
             />
           </div>
 
           {/* ①② 戰鬥征途：小勇者行向怪物 + 檢查點旗仔（有目標先顯示） */}
           {battleMonster && (
             <div className="w-full relative" style={{ height: 10, marginTop: 16 }}>
-              <div className="absolute inset-0 rounded-full" style={{ background: '#eef2ff', border: '1px solid #e0e7ff' }} />
+              <div className="absolute inset-0 rounded-full" style={isPaper ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#eef2ff', border: '1px solid #e0e7ff' }} />
               <div
                 className="absolute inset-y-0 left-0 rounded-full"
-                style={{ width: `${questPct}%`, background: 'linear-gradient(90deg,#a5b4fc,#6366f1)', transition: 'width 350ms var(--ease-out)' }}
+                style={{ width: `${questPct}%`, background: isPaper ? warm.quest : 'linear-gradient(90deg,#a5b4fc,#6366f1)', transition: 'width 350ms var(--ease-out)' }}
               />
               {/* ② 檢查點旗仔：25/50/75，通過時著燈 + 閃光 */}
               {[25, 50, 75].map(m => (
@@ -2493,7 +2509,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
                   style={{
                     left: `${m}%`, width: 2, height: 16,
-                    background: questPct >= m ? '#6366f1' : '#c7d2fe',
+                    background: questPct >= m ? (isPaper ? warm.strong : '#6366f1') : (isPaper ? warm.tick : '#c7d2fe'),
                     transition: 'background .3s',
                     animation: cpFlash === m ? 'gamify-cp-flash 700ms var(--ease-out)' : undefined,
                   }}
@@ -2529,13 +2545,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ⑤ 全書薄條 + 今日疆土：淺藍=之前讀咗，深藍=今日疆土，灰=未讀 */}
           <div
             className="w-full relative rounded-full overflow-hidden"
-            style={{ height: 4, background: '#f3f4f6', marginTop: battleMonster ? 8 : 4 }}
+            style={{ height: 4, background: isPaper ? warm.track2 : '#f3f4f6', marginTop: battleMonster ? 8 : 4 }}
             title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
           >
-            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: '#bae6fd' }} />
+            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: isPaper ? '#e6d6b3' : '#bae6fd' }} />
             <div
               className="absolute inset-y-0"
-              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
+              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: isPaper ? '#b7791f' : '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
             />
           </div>
 
@@ -2965,7 +2981,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           <div
             className="text-xs font-bold px-2.5 py-1 rounded-full"
             style={{
-              background: isEink ? '#000' : '#16a34a',
+              background: isEink ? '#000' : isPaper ? warm.okBg : '#16a34a',
               color: '#fff',
               animation: 'panel-in 150ms cubic-bezier(0.23,1,0.32,1) both',
             }}
@@ -2999,10 +3015,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             className="flex items-center justify-center rounded-xl font-bold text-base shadow-lg"
             style={{
               width: 44, height: 44,
-              background: flomoAddFlash ? (isEink ? '#000' : '#16a34a') : (isEink ? '#fff' : '#f0fdf4'),
-              color: flomoAddFlash ? '#fff' : (isEink ? '#000' : '#15803d'),
-              border: isEink ? '2px solid #000' : '1.5px solid #86efac',
-              boxShadow: isEink ? '2px 2px 0 #000' : '0 4px 12px rgba(0,0,0,0.12)',
+              background: flomoAddFlash ? (isEink ? '#000' : isPaper ? warm.okBg : '#16a34a') : (isEink ? '#fff' : isPaper ? warm.btnBg : '#f0fdf4'),
+              color: flomoAddFlash ? '#fff' : (isEink ? '#000' : isPaper ? warm.btnText : '#15803d'),
+              border: isEink ? '2px solid #000' : isPaper ? `1px solid ${warm.btnBorder}` : '1.5px solid #86efac',
+              boxShadow: isEink ? '2px 2px 0 #000' : isPaper ? '0 2px 8px rgba(120,90,40,0.08)' : '0 4px 12px rgba(0,0,0,0.12)',
               transform: flomoAddFlash ? 'scale(1.15)' : 'scale(1)',
               transition: 'transform 200ms cubic-bezier(0.23,1,0.32,1), background 200ms, color 200ms',
             }}
@@ -3019,15 +3035,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             style={{
               width: 52, height: 44,
               background: flomoStatus === 'ok'
-                ? (isEink ? '#000' : '#16a34a')
+                ? (isEink ? '#000' : isPaper ? warm.okBg : '#16a34a')
                 : flomoStatus === 'error'
                   ? (isEink ? '#000' : '#dc2626')
-                  : (isEink ? '#fff' : '#f0fdf4'),
+                  : (isEink ? '#fff' : isPaper ? warm.btnBg : '#f0fdf4'),
               color: (flomoStatus === 'ok' || flomoStatus === 'error')
                 ? '#fff'
-                : (isEink ? '#000' : '#15803d'),
-              border: isEink ? '2px solid #000' : '1.5px solid #86efac',
-              boxShadow: isEink ? '2px 2px 0 #000' : '0 4px 12px rgba(0,0,0,0.12)',
+                : (isEink ? '#000' : isPaper ? warm.btnText : '#15803d'),
+              border: isEink ? '2px solid #000' : isPaper ? `1px solid ${warm.btnBorder}` : '1.5px solid #86efac',
+              boxShadow: isEink ? '2px 2px 0 #000' : isPaper ? '0 2px 8px rgba(120,90,40,0.08)' : '0 4px 12px rgba(0,0,0,0.12)',
             }}
             title={flomoBuffer.length > 0 ? `儲存 ${flomoBuffer.length} 句做筆記（入每日温習）` : '儲存筆記（入每日温習）'}
           >
@@ -3221,10 +3237,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               )}
             </div>
 
-            {/* 頁碼 */}
-            <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, letterSpacing: '0.15em', color: '#c4bca6', fontFamily: paperTheme.fontFamily }}>
-              — {currentIndex + 1} —
-            </div>
 
             {/* 完成目標嘅勝利彈框改為全局 modal（見 main 之後），紙本模式都用同一個 */}
             {articleCompleted && (
@@ -3831,6 +3843,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         <SearchSidebar
           isOpen={showSidebar}
           onToggle={() => setShowSidebar(v => !v)}
+          tone={isPaper ? 'paper' : undefined}
           currentBookId={bookId}
           onOpenBook={(book, idx) => {
             if (onOpenBook) onOpenBook(book, idx)

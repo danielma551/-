@@ -37,6 +37,7 @@ interface ContextPreview { book: BookData; matchIndex: number; keyword: string }
 interface SearchSidebarProps {
   isOpen: boolean
   onToggle: () => void
+  tone?: 'paper'
   currentBookId: string
   onOpenBook: (book: BookData, sentenceIndex: number) => void
 }
@@ -85,7 +86,7 @@ function accentColor(gradient: string) {
 
 export { SIDEBAR_WIDTH }
 
-export default function SearchSidebar({ isOpen, onToggle, currentBookId, onOpenBook }: SearchSidebarProps) {
+export default function SearchSidebar({ isOpen, onToggle, currentBookId, onOpenBook, tone }: SearchSidebarProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -167,7 +168,8 @@ export default function SearchSidebar({ isOpen, onToggle, currentBookId, onOpenB
           right: isOpen ? SIDEBAR_WIDTH : 0,
           top: '50%',
           transform: 'translateY(-50%)',
-          background: headerGradient,
+          background: tone === 'paper' ? 'linear-gradient(180deg,#d9c49c,#b08d57)' : headerGradient,
+          opacity: tone === 'paper' && !isOpen ? 0.45 : 1,
         }}
         title={isOpen ? '收起搜索' : '展開搜索'}
       >
