@@ -9,10 +9,10 @@ import { PARA_SEP } from './epubParser'
 export interface Station { title: string; startIndex: number; auto?: boolean }
 
 const CN_NUM = '一二三四五六七八九十百千零〇两兩\\d'
-const HEAD_RE = new RegExp(
-  `^\\s*(第[${CN_NUM}]+[章節节回講讲篇部卷集課课]|序[章言幕]?|前言|引言|楔子|導言|导言|尾聲|尾声|後記|后记|結語|结语|附錄|附录|Chapter\\s*\\d+|CHAPTER\\s*\\d+|Part\\s*\\d+|PART\\s*\\d+)` +
-  `[\\s:：·.、]*([^\\s，。！？,.!?；;：:]{0,14})`,
-)
+// 上傳 txt 時換行會變空格，冇標點嘅標題會黐住下一句 → 中文標題容許喺句首或者空格之後出現
+const CN_HEAD = `第[${CN_NUM}]+[章節节回講讲篇部卷集課课]|序[章言幕]|前言|引言|楔子|導言|导言|尾聲|尾声|後記|后记|結語|结语|附錄|附录`
+const CN_RE = new RegExp(`(?:^|\\s)(${CN_HEAD})[\\s:：·.、]*([^\\s，。！？,.!?；;：:「」“”]{0,14})`, 'g')
+const EN_RE = /^\s*((?:Chapter|CHAPTER|Part|PART)\s*\d+)[\s:.]*([^\s,.!?;:]{0,20})?/
 
 const clean = (s: string) => s.replace(/\s+/g, ' ').trim()
 
@@ -21,20 +21,25 @@ function detectHeadings(sentences: string[]): Station[] {
   const limit = Math.min(sentences.length, 200000)
   for (let i = 0; i < limit; i++) {
     const s = sentences[i]
-    if (!s || s === PARA_SEP || s.length > 80 || s.startsWith('data:image/')) continue
-    const m = HEAD_RE.exec(s)
-    if (!m) continue
-    const title = clean(m[1] + (m[2] ? ' ' + m[2] : ''))
-    found.push({ title, startIndex: i })
+    if (!s || s === PARA_SEP || s.startsWith('data:image/')) continue
+    const en = EN_RE.exec(s)
+    if (en) { found.push({ title: clean(en[1] + (en[2] ? ' ' + en[2] : '')), startIndex: i }); continue }
+    CN_RE.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = CN_RE.exec(s))) {
+      found.push({ title: clean(m[1] + (m[2] ? ' ' + m[2] : '')), startIndex: i })
+    }
   }
   // 目錄：同一標題出現多次 → 只留最後一次（正文嗰次）
   const lastByTitle = new Map<string, number>()
   found.forEach((f, k) => lastByTitle.set(f.title, k))
   let out = found.filter((f, k) => lastByTitle.get(f.title) === k)
-  // 擠埋一齊（相隔 < 8 句）多數係目錄 → 剔走
+  // 同一句有幾個標題（目錄）或者擠埋一齊（相隔 < 8 句）→ 剔走
   out = out.filter((f, k) => {
-    const next = out[k + 1]
-    return !next || next.startIndex - f.startIndex >= 8
+    const next = out[k + 1], prev = out[k - 1]
+    if (next && next.startIndex - f.startIndex < 8) return false
+    if (prev && prev.startIndex === f.startIndex) return false
+    return true
   })
   return out
 }
