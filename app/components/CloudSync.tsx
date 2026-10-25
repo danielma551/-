@@ -6,7 +6,8 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getSyncId, getSyncStatus, createSyncId, connectSyncId, disconnectSync, syncNow, formatId, SyncStatus } from '../utils/autoSync'
 import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
 import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage } from '../utils/storage'
@@ -78,6 +79,47 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
   const [inputCode, setInputCode] = useState('')
   const [copied, setCopied] = useState(false)
   const [cleaning, setCleaning] = useState(false)
+  // ☁️ 自動同步
+  const [autoId, setAutoId] = useState('')
+  const [auto, setAuto] = useState<SyncStatus>({ state: 'off' })
+  const [joinCode, setJoinCode] = useState('')
+  const [autoMsg, setAutoMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    setAutoId(getSyncId()); setAuto(getSyncStatus())
+    const on = (e: Event) => setAuto((e as CustomEvent<SyncStatus>).detail)
+    window.addEventListener('msw-sync-status', on)
+    const iv = setInterval(() => tick(t => t + 1), 30000)   // 「幾分鐘前」更新
+    return () => { window.removeEventListener('msw-sync-status', on); clearInterval(iv) }
+  }, [])
+  const ago = (t?: number) => {
+    if (!t) return ''
+    const m = Math.round((Date.now() - t) / 60000)
+    return m < 1 ? '啱啱' : m < 60 ? `${m} 分鐘前` : m < 1440 ? `${Math.round(m / 60)} 小時前` : `${Math.round(m / 1440)} 日前`
+  }
+  const afterSync = (r: SyncStatus) => {
+    if (r.state === 'ok') { setAutoMsg(r.changed ? '已同步，並收到另一部機嘅更新 ✓' : '已同步 ✓'); onSyncComplete?.() }
+    else if (r.state === 'error') setAutoMsg('同步失敗：' + (r.error || ''))
+  }
+  const handleCreate = async () => {
+    setBusy(true); setAutoMsg('')
+    try { const id = await createSyncId(); setAutoId(id); setAutoMsg('建立咗！首次上傳緊…'); afterSync(await syncNow()) }
+    catch (e) { setAutoMsg(e instanceof Error ? e.message : '建立失敗') }
+    setBusy(false)
+  }
+  const handleJoin = async () => {
+    if (!joinCode.trim()) return
+    setBusy(true); setAutoMsg('')
+    try { await connectSyncId(joinCode); setAutoId(getSyncId()); setAutoMsg('連接成功，合併緊兩部機嘅資料…'); afterSync(await syncNow()) }
+    catch (e) { setAutoMsg(e instanceof Error ? e.message : '連接失敗') }
+    setBusy(false)
+  }
+  const handleSyncNow = async () => { setBusy(true); setAutoMsg(''); afterSync(await syncNow()); setBusy(false) }
+  const handleDisconnect = () => {
+    if (!confirm('呢部機唔再自動同步？（雲端同另一部機嘅資料唔受影響，之後可以再入同步碼連返）')) return
+    disconnectSync(); setAutoId(''); setAuto({ state: 'off' }); setAutoMsg('')
+  }
 
   const handleUpload = async () => {
     setStatus('uploading')
@@ -296,8 +338,13 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         title="雲端同步"
       >
-        <Cloud className="w-4 h-4" />
-        <span className="hidden lg:inline">雲端同步</span>
+        <span className="relative">
+          {auto.state === 'syncing' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+          {autoId && auto.state !== 'syncing' && (
+            <span className={`absolute -top-0.5 -right-1 w-2 h-2 rounded-full ${auto.state === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+          )}
+        </span>
+        <span className="hidden lg:inline">{autoId ? (auto.state === 'syncing' ? '同步中…' : auto.state === 'error' ? '同步出錯' : '已同步') : '雲端同步'}</span>
       </button>
 
       {isOpen && (
@@ -332,6 +379,49 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
             </div>
 
             <div className="p-6 space-y-5">
+              {/* ☁️ 自動同步（固定同步碼） */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-800">☁️ 自動同步 <span className="text-xs font-normal text-gray-400">· 兩部機用同一個碼，之後全自動</span></p>
+                {autoId ? (
+                  <>
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                      <p className="text-[11px] text-emerald-700 mb-1">你嘅同步碼（喺另一部機輸入呢個碼）</p>
+                      <div className="flex items-center gap-2">
+                        <p className="flex-1 font-mono text-lg font-bold tracking-wider text-emerald-800">{formatId(autoId)}</p>
+                        <button onClick={() => { navigator.clipboard.writeText(formatId(autoId)); setCopied(true); setTimeout(() => setCopied(false), 2000) }} className="text-emerald-600 hover:text-emerald-800" title="複製">
+                          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-xs mt-1.5 text-emerald-700">
+                        {auto.state === 'syncing' ? '⏳ 同步中…' : auto.state === 'error' ? `⚠️ ${auto.error || '同步出錯'}` : auto.at ? `✓ 已同步 · ${ago(auto.at)}` : '等候同步'}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleSyncNow} disabled={busy || auto.state === 'syncing'} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50">
+                        {busy || auto.state === 'syncing' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />} 立即同步
+                      </button>
+                      <button onClick={handleDisconnect} className="px-3 py-2.5 rounded-xl text-sm text-gray-500 bg-gray-100 hover:bg-gray-200">中斷</button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 leading-relaxed">開網站、讀完離開、切走 App 時會自動同步；兩部機各自讀，進度以最後讀嗰部為準。🔒 同步碼即係鎖匙，唔好畀人。</p>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={handleCreate} disabled={busy} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50">
+                      {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />} 第一部機：建立同步碼
+                    </button>
+                    <div className="flex gap-2">
+                      <input value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="第二部機：輸入同步碼"
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono uppercase focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      <button onClick={handleJoin} disabled={busy || !joinCode.trim()} className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 disabled:opacity-40">連接</button>
+                    </div>
+                  </>
+                )}
+                {autoMsg && <p className="text-xs text-gray-600">{autoMsg}</p>}
+              </div>
+
+              <details className="group">
+                <summary className="text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">舊方式：手動上傳／下載（4 位數碼）</summary>
+                <div className="space-y-5 mt-4">
               {/* Upload */}
               <div className="space-y-3">
                 <p className="text-sm font-medium text-gray-700">📤 上傳並獲取同步碼</p>
@@ -389,7 +479,9 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
                 </div>
               )}
 
-              <p className="text-xs text-gray-400 text-center">同步碼有效期約 30 天</p>
+              <p className="text-xs text-gray-400 text-center">4 位數碼有效期約 30 天</p>
+                </div>
+              </details>
             </div>
           </div>
         </div>

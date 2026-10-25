@@ -37,12 +37,19 @@ export async function POST() {
     const manifestUrls = new Set<string>()
     let cursor = '0'
     do {
-      const r = await redis(['SCAN', cursor, 'MATCH', KEY_PREFIX + '*', 'COUNT', '500'])
-      const [next, keys] = (r.result || ['0', []]) as [string, string[]]
+      // msw:（舊式 4 位數碼，值係網址）＋ msw2:（固定同步碼，值係 JSON { blobUrl }）
+      const r = await redis(['SCAN', cursor, 'MATCH', 'msw*', 'COUNT', '500'])
+      const [next, keys0] = (r.result || ['0', []]) as [string, string[]]
       cursor = String(next)
+      const keys = keys0.filter(k => k.startsWith(KEY_PREFIX) || k.startsWith('msw2:'))
       if (keys.length > 0) {
         const g = await redis(['MGET', ...keys])
-        for (const v of (g.result || []) as (string | null)[]) if (v) manifestUrls.add(v)
+        for (const v of (g.result || []) as (string | null)[]) {
+          if (!v) continue
+          if (v.startsWith('{')) {
+            try { const o = JSON.parse(v); if (typeof o.blobUrl === 'string') manifestUrls.add(o.blobUrl) } catch { /* ignore */ }
+          } else manifestUrls.add(v)
+        }
       }
     } while (cursor !== '0')
 

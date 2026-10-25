@@ -24,7 +24,8 @@ import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
 import { generateBookId, BookData, reviewStorage, isAudioBook } from './utils/storage'
-import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './utils/bookDB'
+import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB, getBookFromIDB } from './utils/bookDB'
+import { installAutoSync, markBookDeleted, scheduleSync, waitForSync } from './utils/autoSync'
 import { parseEpubClientSide } from './utils/epubParser'
 import { addTrack, addYouTubeTrack, listTracks, deleteTrack, MusicTrack } from './utils/musicDB'
 import CharacterGraph from './components/CharacterGraph'
@@ -377,6 +378,7 @@ export default function Home() {
       }
 
       await saveBookToIDB(bookData)
+      scheduleSync(3000)
       getAllBooksFromIDB().then(setSavedBooks)
       setPendingBook({ sentences, title, id, index: 0, chapters: epubChapters })
       setShowGoalModal(true)
@@ -391,13 +393,16 @@ export default function Home() {
     }
   }
 
-  const handleLoadBook = (book: BookData) => {
+  const handleLoadBook = async (book: BookData) => {
+    // ☁️ 如果正喺度同步，等埋佢，再攞最新進度（另一部機可能讀到更後）
+    await waitForSync()
+    const fresh = (await getBookFromIDB(book.id)) || book
     setPendingBook({
-      sentences: book.sentences,
-      title: book.title,
-      id: book.id,
-      index: book.currentIndex,
-      chapters: book.chapters,
+      sentences: fresh.sentences,
+      title: fresh.title,
+      id: fresh.id,
+      index: fresh.currentIndex,
+      chapters: fresh.chapters,
     })
     setShowGoalModal(true)
   }
@@ -438,6 +443,7 @@ export default function Home() {
     e.stopPropagation()
     if (confirm('確定要刪除這本書嗎？')) {
       deleteBookFromIDB(id).then(() => getAllBooksFromIDB().then(setSavedBooks))
+      markBookDeleted(id)   // ☁️ 另一部機都會刪
       deleteBookAudio(id)   // 有錄音嘅書：連錄音一齊刪
       deleteBookPdf(id)     // 連參考 PDF 一齊刪
       if (bookId === id) {
@@ -460,7 +466,14 @@ export default function Home() {
     setPendingBook(null)
     setUploadError('')
     getAllBooksFromIDB().then(setSavedBooks)
+    scheduleSync(800)   // ☁️ 讀完離開 → 推進度上雲
   }
+
+  // ☁️ 自動同步：開網站拉一次、切走 App 推一次、每 2 分鐘檢查；另一部機有更新就刷新書架
+  useEffect(() => installAutoSync(() => {
+    getAllBooksFromIDB().then(setSavedBooks)
+    setReviewDue(reviewStorage.stats().due)
+  }), [])
 
   const handleSyncComplete = () => {
     getAllBooksFromIDB().then(setSavedBooks)

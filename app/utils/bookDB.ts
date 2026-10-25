@@ -40,6 +40,19 @@ export async function getAllBooksFromIDB(): Promise<BookData[]> {
   }
 }
 
+export async function getBookFromIDB(id: string): Promise<BookData | null> {
+  try {
+    const db = await openDB()
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(id)
+      request.onsuccess = () => resolve((request.result as BookData) ?? null)
+      request.onerror = () => reject(request.error)
+    })
+  } catch {
+    return null
+  }
+}
+
 export async function saveBookToIDB(book: BookData): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
