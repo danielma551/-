@@ -90,6 +90,7 @@ export async function updateBookProgressInIDB(id: string, currentIndex: number):
       book.currentIndex = currentIndex
       book.lastReadDate = Date.now()
       await saveBookToIDB(book)
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('msw-local-change'))   // ☁️ 有新進度（等停低先上傳）
     }
   } catch {
     // Ignore errors

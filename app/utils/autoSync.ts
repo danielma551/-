@@ -122,19 +122,22 @@ function emit(s: SyncStatus) {
 }
 
 // ── 主流程 ──
+// pullOnly：只睇吓雲端有冇更新（唔上傳）→ 慳 Vercel Blob 上傳次數（每月得 2,000 次）
 let running: Promise<SyncStatus> | null = null
 let again = false
+let againPush = false
 
-export function syncNow(): Promise<SyncStatus> {
-  if (running) { again = true; return running }
+export function syncNow(opts: { pullOnly?: boolean } = {}): Promise<SyncStatus> {
+  if (running) { again = true; if (!opts.pullOnly) againPush = true; return running }
+  if (!opts.pullOnly) { pendingSince = 0; if (idleTimer) { clearTimeout(idleTimer); idleTimer = null } }
   running = (async () => {
     let res: SyncStatus
-    try { res = await doSync() } catch (e) {
+    try { res = await doSync(!!opts.pullOnly) } catch (e) {
       res = { state: 'error', at: Date.now(), error: e instanceof Error ? e.message : String(e) }
       emit(res)
     }
     running = null
-    if (again) { again = false; setTimeout(() => syncNow(), 500) }
+    if (again) { const p = againPush; again = false; againPush = false; setTimeout(() => syncNow({ pullOnly: !p }), 500) }
     return res
   })()
   return running
@@ -144,6 +147,20 @@ export function syncNow(): Promise<SyncStatus> {
 export async function waitForSync(ms = 4000): Promise<void> {
   if (!running) return
   await Promise.race([running.catch(() => null), new Promise(r => setTimeout(r, ms))])
+}
+
+// ── 閱讀中：揭頁唔會即刻上傳；停低 3 分鐘冇再揭，或者連續讀咗 20 分鐘，先上傳一次 ──
+const IDLE_MS = 3 * 60 * 1000
+const MAX_WAIT_MS = 20 * 60 * 1000
+let idleTimer: ReturnType<typeof setTimeout> | null = null
+let pendingSince = 0
+export function noteLocalChange() {
+  if (!getSyncId()) return
+  const now = Date.now()
+  if (!pendingSince) pendingSince = now
+  if (idleTimer) clearTimeout(idleTimer)
+  const wait = Math.max(0, Math.min(IDLE_MS, pendingSince + MAX_WAIT_MS - now))
+  idleTimer = setTimeout(() => { idleTimer = null; syncNow() }, wait)
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -160,7 +177,7 @@ async function getMeta(id: string): Promise<{ blobUrl?: string; rev: number; emp
   return { blobUrl: j.blobUrl, rev: Number(j.rev || 0), empty: !!j.empty }
 }
 
-async function doSync(): Promise<SyncStatus> {
+async function doSync(pullOnly = false): Promise<SyncStatus> {
   const id = getSyncId()
   if (!id) { emit({ state: 'off' }); return { state: 'off' } }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) { const s: SyncStatus = { state: 'error', error: '離線中' }; emit(s); return s }
@@ -176,8 +193,8 @@ async function doSync(): Promise<SyncStatus> {
       ls.set(MANIFEST_KEY, meta.blobUrl)
       ls.set(REV_KEY, String(meta.rev))
     }
-    // 2) 推（本機有改動先推）
-    const pushed = await push(id, meta.rev, meta.blobUrl)
+    // 2) 推（本機有改動先推；只拉模式唔推）
+    const pushed = pullOnly ? 'skip' : await push(id, meta.rev, meta.blobUrl)
     if (pushed === 'conflict') continue          // 另一部機啱啱推咗 → 再拉再合併
     const s: SyncStatus = { state: 'ok', at: Date.now(), changed }
     ls.set(LAST_OK_KEY, String(s.at))
@@ -328,16 +345,25 @@ export function installAutoSync(onChanged: () => void) {
   if (installed || typeof window === 'undefined') return () => {}
   installed = true
   const run = () => { syncNow() }
-  const onVis = () => { if (document.visibilityState === 'hidden') syncNow(); else run() }
+  // 切走／熄 mon → 有改動就上傳；返嚟 → 只拉
+  // （上傳前會比較指紋：冇改動就唔會用到上傳次數）
+  const onVis = () => { if (document.visibilityState === 'hidden') syncNow(); else syncNow({ pullOnly: true }) }
+  const onHide = () => { syncNow() }
+  const onLocal = () => noteLocalChange()
   const onStatus = (e: Event) => { const d = (e as CustomEvent<SyncStatus>).detail; if (d?.state === 'ok' && d.changed) onChanged() }
   if (getSyncId()) run()
   document.addEventListener('visibilitychange', onVis)
+  window.addEventListener('pagehide', onHide)
+  window.addEventListener('msw-local-change', onLocal)
   window.addEventListener('online', run)
   window.addEventListener('msw-sync-status', onStatus)
-  const iv = setInterval(() => { if (document.visibilityState === 'visible' && getSyncId()) syncNow() }, 2 * 60 * 1000)
+  // 每 2 分鐘只「睇吓」雲端有冇新嘢（唔上傳，唔使 Blob 上傳次數）
+  const iv = setInterval(() => { if (document.visibilityState === 'visible' && getSyncId()) syncNow({ pullOnly: true }) }, 2 * 60 * 1000)
   return () => {
     installed = false
     document.removeEventListener('visibilitychange', onVis)
+    window.removeEventListener('pagehide', onHide)
+    window.removeEventListener('msw-local-change', onLocal)
     window.removeEventListener('online', run)
     window.removeEventListener('msw-sync-status', onStatus)
     clearInterval(iv)
