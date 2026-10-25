@@ -20,6 +20,8 @@ import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { getBookAudio } from '../utils/bookAudioDB'
 import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
 import DocViewer from './DocViewer'
+import SubwayLine from './SubwayLine'
+import { computeStations, stationAt } from '../utils/stations'
 import AudioKeysPanel from './AudioKeysPanel'
 import { loadAudioKeys, comboOf, actionForCombo, prettyCombo, AudioKeyConfig } from '../utils/audioKeys'
 import { saveFontToIDB, getFontFromIDB, clearFontFromIDB } from '../utils/fontDB'
@@ -1847,6 +1849,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const mergedBarWidth = (cycleSize > 0 ? posInCycle / cycleSize : 0) * maxFill * 100
   // ① 戰鬥征途：勇者位置 = 目標進度
   const questPct = readingGoal > 0 ? Math.min((Math.max(sentencesRead, 0) / readingGoal) * 100, 100) : 0
+  // 🚇 地鐵站：章節 → 偵測標題 → 平均分站（每本書計一次）
+  const stations = useMemo(() => computeStations(sentences, chapters), [sentences, chapters])
   // ⑤ 全書薄條：今日疆土分段
   const bookBeforePct = sentences.length > 1 ? (startIndex / (sentences.length - 1)) * 100 : 0
   const bookTodayPct = sentences.length > 1 ? (Math.max(currentIndex - startIndex, 0) / (sentences.length - 1)) * 100 : 0
@@ -2586,18 +2590,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
           )}
 
-          {/* ⑤ 全書薄條 + 今日疆土：淺藍=之前讀咗，深藍=今日疆土，灰=未讀 */}
-          <div
-            className="w-full relative rounded-full overflow-hidden"
-            style={{ height: 4, background: paperBars ? warm.track2 : '#f3f4f6', marginTop: battleMonster ? 8 : 4 }}
-            title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
-          >
-            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: paperBars ? '#e6d6b3' : '#bae6fd' }} />
-            <div
-              className="absolute inset-y-0"
-              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: paperBars ? '#b7791f' : '#00A3E0', transition: 'width 350ms var(--ease-out)' }}
-            />
-          </div>
+          {/* ⑤ 🚇 閱讀地鐵線（取代原本全書薄條）：每章一個站，到站叮咚 */}
+          <SubwayLine stations={stations} index={currentIndex} total={sentences.length} marginTop={battleMonster ? 10 : 6} />
 
           {/* 📅 每日挑戰進度條（普通模式；紙本模式移入底部膠囊）*/}
           {!isPaper && dailyChallenge && !dailyChallenge.completed && (
@@ -3218,7 +3212,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             {/* 章節標題 */}
             <div style={{ textAlign: 'center', marginBottom: 22, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
-              第一章 · {bookTitle}
+              {(() => { const st = stations[stationAt(stations, currentIndex)]; return st ? (st.auto ? st.title.split(' · ')[0] : st.title) : '第一章' })()} · {bookTitle}
             </div>
 
             {/* 沉浸內容：移除紙卡容器，句子直接在背景上 */}
