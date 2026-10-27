@@ -251,6 +251,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const isLandscapePhone = winW > winH && winH <= 500
   const [landHdr, setLandHdr] = useState(false)
   useEffect(() => { if (!isLandscapePhone) setLandHdr(false) }, [isLandscapePhone])
+  // 橫屏收埋頂欄時，進度條仍然顯示 → 量佢高度，閱讀區讓位
+  const [landHudH, setLandHudH] = useState(0)
+  useEffect(() => {
+    if (!isLandscapePhone) { setLandHudH(0); return }
+    const el = headerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const measure = () => { if (!el.classList.contains('land-compact')) return; setLandHudH(el.offsetHeight) }
+    const ro = new ResizeObserver(measure); ro.observe(el); measure()
+    return () => ro.disconnect()
+  }, [isLandscapePhone, landHdr])
   useEffect(() => {
     const on = () => { setWinW(window.innerWidth); setWinH(window.innerHeight) }
     on(); window.addEventListener('resize', on)
@@ -1998,6 +2008,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }}
     >
       {/* 隱藏嘅 YouTube 背景音樂播放器（只作聲音用途） */}
+      <style>{`
+        .land-compact > :not(.hud-bars) { display: none !important; }
+        .land-compact > .hud-bars { padding: 6px 12px 4px; }
+        .land-compact .hud-hide { display: none !important; }
+      `}</style>
  {/* 🖼️ 壁紙層 */}
       {wpActive && (
         <>
@@ -2108,7 +2123,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       )}
       <header
         ref={headerRef}
-        className={isPaper ? 'paper-hdr relative' : 'bg-white'}
+        className={`${isPaper ? 'paper-hdr relative' : 'bg-white'}${isLandscapePhone && !landHdr ? ' land-compact' : ''}`}
         style={{
           ...(isEink
             ? { borderBottom: '2px solid #000', boxShadow: 'none' }
@@ -2119,9 +2134,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             position: 'fixed', top: 0, left: pdfOffset, right: 0, zIndex: 45,
             background: isEink ? '#fff' : isPaper ? paperTheme.bg : '#fff',
             paddingRight: 48, maxHeight: '85vh', overflowY: 'auto',
-            transform: landHdr ? 'translateY(0)' : 'translateY(-105%)',
-            transition: isEink ? 'none' : 'transform 220ms ease',
-            visibility: landHdr ? 'visible' : 'hidden',
+            // 收埋時只顯示進度條（工具列收起），撳 ☰ 先展開全部
+            ...(landHdr ? {} : { background: isEink ? '#fff' : isPaper ? (wpActive ? 'rgba(253,250,243,0.86)' : 'rgba(253,250,243,0.92)') : 'rgba(255,255,255,0.92)', backdropFilter: 'blur(6px)', overflow: 'hidden' }),
           } : {}),
         }}
       >
@@ -2485,7 +2499,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             </div>
           </div>
         )}
-        <div className="w-full">
+        <div className="w-full hud-bars">
           {/* ── ⚔️ 戰況列：怪物 + HP，融合喺原進度條上方 ── */}
           {/* 普通模式：扣血震動 + HP 變色；墨水屏：純黑靜態文字，無動畫無轉場（避免殘影） */}
           {battleMonster && (
@@ -2534,7 +2548,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           <>
           {/* ④ 合併循環條：一條 bar 顯示成個循環，50% 加粗中點刻度 = 上半/下半交界 */}
           <div
-            className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5"
+            className="hidden sm:flex justify-between text-xs mb-0.5 px-0.5 hud-hide"
             style={{ color: paperBars ? paperTheme.muted : getProgressColor() }}
           >
             <span>循環進度 · 第 {currentCycleIdx + 1}/{cycleData.count} 循環（{Math.max(posInCycle, 0)}/{cycleSize} 句）</span>
@@ -2629,7 +2643,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
           {/* 📅 每日挑戰進度條（普通模式；紙本模式移入底部膠囊）*/}
           {!isPaper && dailyChallenge && !dailyChallenge.completed && (
-            <div className="flex items-center gap-2 mt-2 px-0.5">
+            <div className="flex items-center gap-2 mt-2 px-0.5 hud-hide">
               <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 🎯 {dailyChallenge.type === 'kill_monsters'
                   ? `今日挑戰：擊敗 ${dailyChallenge.target} 隻怪獸`
@@ -3236,7 +3250,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       {/* eink 模式：去除 padding，讓文字佔滿整個可用高度 */}
       <main
         className={`flex-1 flex items-center justify-center relative ${isEink ? '' : isLandscapePhone ? 'px-12 py-2' : 'p-4 md:p-6'}`}
-        style={isEink ? { padding: isLandscapePhone ? '6px 48px 6px 16px' : '8px 12px' } : isLandscapePhone ? { minHeight: winH } : {}}
+        style={isEink ? { padding: isLandscapePhone ? `${6 + landHudH}px 48px 6px 16px` : '8px 12px' } : isLandscapePhone ? { minHeight: winH, paddingTop: 8 + landHudH } : {}}
         onClick={handleMainTap}
       >
 
