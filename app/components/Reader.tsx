@@ -21,6 +21,8 @@ import { getBookAudio } from '../utils/bookAudioDB'
 import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
 import DocViewer from './DocViewer'
 import SubwayLine from './SubwayLine'
+import WallpaperPanel from './WallpaperPanel'
+import { loadWp, saveWp, presetUrl, getCustomImageUrl, WallpaperSettings, DEFAULT_WP } from '../utils/wallpapers'
 import { computeStations, stationAt } from '../utils/stations'
 import AudioKeysPanel from './AudioKeysPanel'
 import { loadAudioKeys, comboOf, actionForCombo, prettyCombo, AudioKeyConfig } from '../utils/audioKeys'
@@ -145,6 +147,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const headerRef = useRef<HTMLElement>(null)
   // 下雨特效的開關狀態
   const [rainEnabled, setRainEnabled] = useState(true)
+  // 🖼️ 壁紙（普通／紙本各一套；墨水屏唔顯示）
+  const [wpDefault, setWpDefault] = useState<WallpaperSettings>(DEFAULT_WP)
+  const [wpPaper, setWpPaper] = useState<WallpaperSettings>(DEFAULT_WP)
+  const [wpCustomUrl, setWpCustomUrl] = useState<string | null>(null)
+  const [showWpPanel, setShowWpPanel] = useState(false)
+  useEffect(() => { setWpDefault(loadWp('default')); setWpPaper(loadWp('paper')); getCustomImageUrl().then(setWpCustomUrl) }, [])
   // Canvas 元素的引用
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // requestAnimationFrame 的 ID，用於清除動畫
@@ -1906,6 +1914,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   // ── Paper 模式主題 ──
   const isPaper = readerMode === 'paper'
+  const wp = isPaper ? wpPaper : wpDefault
+  const wpBg = wp.id === 'custom' ? (wpCustomUrl ? `url("${wpCustomUrl}")` : null) : presetUrl(wp.id)
+  const wpActive = !isEink && wp.id !== 'none' && !!wpBg
   const paperTheme = {
     bg: '#fdfaf3',
     text: '#3a342b',
@@ -1983,9 +1994,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         paddingRight: (!isEink && showSidebar) ? SIDEBAR_WIDTH : 0,
         paddingLeft: pdfOffset,
         animation: isEink ? undefined : 'reader-in 340ms cubic-bezier(0.23,1,0.32,1) both',
+        isolation: 'isolate',   // 壁紙層用 zIndex -1，要喺呢個容器入面
       }}
     >
       {/* 隱藏嘅 YouTube 背景音樂播放器（只作聲音用途） */}
+ {/* 🖼️ 壁紙層 */}
+      {wpActive && (
+        <>
+          <div aria-hidden style={{ position: 'fixed', inset: wp.blur ? -40 : 0, zIndex: -1, backgroundImage: wpBg!, backgroundSize: 'cover', backgroundPosition: 'center', filter: wp.blur ? `blur(${wp.blur}px)` : undefined, pointerEvents: 'none' }} />
+          <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: -1, background: isPaper ? paperTheme.bg : displaySettings.backgroundColor, opacity: wp.wash / 100, pointerEvents: 'none' }} />
+        </>
+      )}
+      {showWpPanel && (
+        <WallpaperPanel
+          modeLabel={isPaper ? '紙本模式' : '普通模式'}
+          value={wp}
+          customUrl={wpCustomUrl}
+          onChange={v => { if (isPaper) { setWpPaper(v); saveWp('paper', v) } else { setWpDefault(v); saveWp('default', v) } }}
+          onCustomUploaded={() => getCustomImageUrl().then(u => { if (wpCustomUrl) URL.revokeObjectURL(wpCustomUrl); setWpCustomUrl(u) })}
+          onClose={() => setShowWpPanel(false)}
+        />
+      )}
       <div id="msw-yt-player" style={{ position: 'fixed', width: 1, height: 1, left: -9999, top: -9999, pointerEvents: 'none', opacity: 0 }} />
 
       {/* 章節目錄抽屜（非墨水屏模式，有 chapters 才顯示）*/}
@@ -2327,6 +2356,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               >
                 <CloudRain className="w-4 h-4" />
               </button>
+              <button
+                onClick={() => setShowWpPanel(true)}
+                className={`p-1.5 rounded-lg transition-colors flex-shrink-0 text-sm leading-none ${wpActive ? 'bg-indigo-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                title="壁紙"
+              >🖼️</button>
 
               {/* 🎵 背景音樂播放器（有音樂文件才顯示）*/}
               {hasMusicFile && (() => {
@@ -3208,7 +3242,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
         {isPaper ? (
           /* ── Paper 紙本沉浸模式 ── */
-          <div style={{ position: 'relative', maxWidth: 'min(900px, 80vw)', width: '100%', margin: '0 auto' }}>
+          <div style={{ position: 'relative', maxWidth: 'min(900px, 80vw)', width: '100%', margin: '0 auto',
+            ...(wpActive && wp.backing ? { background: 'rgba(253,250,243,0.82)', borderRadius: 18, padding: '28px 32px', boxShadow: '0 8px 30px rgba(60,40,10,.10)', backdropFilter: 'blur(6px)' } : {}) }}>
 
             {/* 章節標題 */}
             <div style={{ textAlign: 'center', marginBottom: 22, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
@@ -3331,7 +3366,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 minHeight: isLandscapePhone ? `${winH - 12}px` : 'calc(100vh - 110px)',
                 background: '#fff',
                 width: '100%',
-              }  : isLandscapePhone ? { minHeight: winH - 24 } : {}}
+              }  : { ...(isLandscapePhone ? { minHeight: winH - 24 } : {}), ...(wpActive && wp.backing ? { background: 'rgba(255,255,255,0.78)', backdropFilter: 'blur(8px)' } : {}) }}
             >
               {(() => {
                 const animStyle = displaySettings.animationStyle ?? 'rise'

@@ -59,7 +59,7 @@ button:active:not(:disabled) {
 /* 6. 進入閱讀界面：整體淡入 + 輕微上移（非墨水屏）*/
 @keyframes reader-in {
   from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }   /* none：唔好令 fixed 子元素（壁紙、雨）跟住容器 */
 }
 /* 7. 底部彈窗（詞典 / AI）滑入 */
 @keyframes sheet-up {
