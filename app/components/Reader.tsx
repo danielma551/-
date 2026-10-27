@@ -2113,7 +2113,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           ...(isEink
             ? { borderBottom: '2px solid #000', boxShadow: 'none' }
             : isPaper
-              ? { background: 'transparent', boxShadow: 'none' }
+              ? (wpActive ? { background: 'rgba(253,250,243,0.86)', backdropFilter: 'blur(8px)', boxShadow: 'none' } : { background: 'transparent', boxShadow: 'none' })
               : { boxShadow: '0 1px 3px rgba(0,0,0,.08)' }),
           ...(isLandscapePhone ? {
             position: 'fixed', top: 0, left: pdfOffset, right: 0, zIndex: 45,
