@@ -12,7 +12,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network, SkipBack, SkipForward } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network, SkipBack, SkipForward } from 'lucide-react'
 import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, bookReadingStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB, getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 import { proofreadLines } from '../utils/proofread'
@@ -931,7 +931,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, sentences, shortcuts, onReset, bookId, audioKeys])
 
-  // 手機/平板觸摸區點擊：右半 = 下一句，左半 = 上一句
+  // 手機/平板觸摸區點擊：右上 = 上一句、右下 = 下一句，左半 = 上一句
   // 過濾掉點按鈕、輸入框等互動元素的情況，反饋改用振動（無視覺閃光）
   const handleMainTap = (e: React.MouseEvent<HTMLElement>) => {
     // 墨水屏長按查詞啱啱觸發咗：呢下 click 係長按嘅尾巴，唔好翻頁
@@ -943,8 +943,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return
     const rect = e.currentTarget.getBoundingClientRect()
     const isRight = e.clientX - rect.left > rect.width / 2
+    // 右半邊：上半＝上一句，下半＝下一句（單手拇指易撳）；左半邊＝上一句
     if (isRight) {
-      goToNext()
+      if (e.clientY < window.innerHeight / 2) goToPrevious()
+      else goToNext()
     } else {
       goToPrevious()
     }
@@ -3345,22 +3347,31 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             >
               <ChevronLeft className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', left: 36, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, color: '#d3c9ae' }} />
             </div>
+            {/* 右邊：上半＝上一句，下半＝下一句 */}
             <div
               className="group hidden md:block"
-              style={{ position: 'fixed', right: 0, top: 120, bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
+              style={{ position: 'fixed', right: 0, top: 120, height: 'calc(50vh - 120px)', width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); goToPrevious() }}
+              title="上一句"
+            >
+              <ChevronUp className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', right: 36, bottom: 24, width: 26, height: 26, color: '#d3c9ae' }} />
+            </div>
+            <div
+              className="group hidden md:block"
+              style={{ position: 'fixed', right: 0, top: '50vh', bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
               onClick={(e) => { e.stopPropagation(); goToNext() }}
               title="下一句"
             >
-              <ChevronRight className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, color: '#d3c9ae' }} />
+              <ChevronDown className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', right: 36, top: 24, width: 26, height: 26, color: '#d3c9ae' }} />
             </div>
 
             {/* 手機觸摸提示 */}
             <div className={`mt-6 md:hidden ${isLandscapePhone ? "!hidden" : "flex"} items-center justify-between px-2 select-none pointer-events-none`}>
               <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
-                <ChevronLeft className="w-3 h-3" /> 上一句
+                <ChevronLeft className="w-3 h-3" /> 左邊／右上：上一句
               </span>
               <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
-                下一句 <ChevronRight className="w-3 h-3" />
+                右下：下一句 <ChevronRight className="w-3 h-3" />
               </span>
             </div>
           </div>
@@ -3497,13 +3508,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 className="flex items-center gap-1"
                 style={{ fontSize: isEink ? 15 : 12, color: isEink ? '#333' : '#d1d5db', fontWeight: isEink ? 600 : 400 }}
               >
-                <ChevronLeft className={isEink ? 'w-5 h-5' : 'w-3 h-3'} /> 上一句
+                <ChevronLeft className={isEink ? 'w-5 h-5' : 'w-3 h-3'} /> 左邊／右上：上一句
               </span>
               <span
                 className="flex items-center gap-1"
                 style={{ fontSize: isEink ? 15 : 12, color: isEink ? '#333' : '#d1d5db', fontWeight: isEink ? 600 : 400 }}
               >
-                下一句 <ChevronRight className={isEink ? 'w-5 h-5' : 'w-3 h-3'} />
+                右下：下一句 <ChevronRight className={isEink ? 'w-5 h-5' : 'w-3 h-3'} />
               </span>
             </div>
 
