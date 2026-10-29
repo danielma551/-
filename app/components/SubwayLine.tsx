@@ -9,7 +9,7 @@ const LINE = '#10b981'      // 地鐵線顏色（綠）
 const TRACK = '#e5e7eb'
 
 // 叮咚（WebAudio，好細聲）
-function chime() {
+export function chime() {
   try {
     if (localStorage.getItem('subway-chime') === 'off') return
     const Ctx = (window.AudioContext || (window as any).webkitAudioContext)

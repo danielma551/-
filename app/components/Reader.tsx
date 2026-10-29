@@ -20,7 +20,7 @@ import { listTracks, getTrackObjectURL } from '../utils/musicDB'
 import { getBookAudio } from '../utils/bookAudioDB'
 import { getBookPdf, saveBookPdf, deleteBookPdf } from '../utils/bookAttachDB'
 import DocViewer from './DocViewer'
-import SubwayLine from './SubwayLine'
+import SubwayLine, { chime } from './SubwayLine'
 import WallpaperPanel from './WallpaperPanel'
 import { loadWp, saveWp, presetUrl, getCustomImageUrl, WallpaperSettings, DEFAULT_WP } from '../utils/wallpapers'
 import { computeStations, stationAt } from '../utils/stations'
@@ -1842,6 +1842,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
       // 每看完 6 個循環（進入第 6、12、18… 個循環）→ 呼吸休息動畫
       // 跟讀模式（錄音書 + 跟讀開住）唔出：錄音照播緊，彈出嚟會打斷聽
+      // 每 6 個循環：叮咚提示音（同地鐵到站一樣）
+      if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0) chime()
       if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0 && !(hasBookAudio && followAudio)) {
         setShowBreathing(true)
       }
