@@ -36,9 +36,11 @@ interface GoalModalProps {
   onSkip: () => void
   onCancel: () => void   // 純關閉，不進入閱讀
   maxSentences: number
+  dailyGoal?: number     // 🎯 每日目標（句）
+  todayRead?: number     // 呢本書今日已讀
 }
 
-export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }: GoalModalProps) {
+export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences, dailyGoal, todayRead = 0 }: GoalModalProps) {
   // 歷史記錄，首次渲染時從 localStorage 讀取
   const [history] = useState<number[]>(() => loadHistory())
 
@@ -117,6 +119,28 @@ export default function GoalModal({ onSetGoal, onSkip, onCancel, maxSentences }:
         <p className="text-gray-600 mb-6">
           今天想要閱讀多少句？目標越大，怪物越強，獎勵越多！
         </p>
+
+        {/* 🎯 每日目標：一撳就開戰，怪物 HP = 今日仲差幾句 */}
+        {dailyGoal ? (() => {
+          const left = Math.max(dailyGoal - todayRead, 0)
+          const pct = Math.min(100, Math.round((todayRead / dailyGoal) * 100))
+          return left > 0 ? (
+            <button type="button" onClick={() => onSetGoal(Math.min(left, maxSentences))}
+              className="w-full mb-5 p-4 rounded-2xl text-left text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 shadow-lg transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-base">🎯 今日目標 · 仲差 {left} 句</span>
+                <span className="text-sm opacity-90 tabular-nums">{todayRead}/{dailyGoal}</span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-white rounded-full" style={{ width: `${pct}%` }} /></div>
+              <p className="text-xs opacity-80 mt-1.5">撳一下直接開始（每本書每日 {dailyGoal} 句）</p>
+            </button>
+          ) : (
+            <div className="w-full mb-5 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800">
+              <p className="font-bold">✅ 呢本書今日已達標（{todayRead}/{dailyGoal}）</p>
+              <p className="text-xs mt-1 text-emerald-700">想再讀多啲？喺下面揀隻怪物，或者直接跳過。</p>
+            </div>
+          )
+        })() : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 召喚今日怪物：點怪物卡直接開戰；✏️ 自訂每隻怪嘅句數 */}

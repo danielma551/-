@@ -9,6 +9,7 @@
 
 'use client'
 
+import { dailyGoalStorage } from './utils/storage'
 import { useState, useEffect, useRef } from 'react'
 import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X } from 'lucide-react'
 import Reader from './components/Reader'
@@ -236,6 +237,11 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false)
   const [savedBooks, setSavedBooks] = useState<BookData[]>([])
   const [showGoalModal, setShowGoalModal] = useState(false)
+  // 🎯 每本書每日目標
+  const [dailyGoal, setDailyGoal] = useState(404)
+  const [editingGoal, setEditingGoal] = useState(false)
+  const [goalInput, setGoalInput] = useState('')
+  useEffect(() => { setDailyGoal(dailyGoalStorage.get()) }, [])
   const [readingGoal, setReadingGoal] = useState<number>(0)
   const [pendingBook, setPendingBook] = useState<{
     sentences: string[]
@@ -681,6 +687,8 @@ export default function Home() {
           onSkip={handleSkipGoal}
           onCancel={handleCancelGoal}
           maxSentences={pendingBook.sentences.length}
+          dailyGoal={dailyGoal}
+          todayRead={dailyGoalStorage.todayRead(pendingBook.id)}
         />
       )}
 
@@ -1047,6 +1055,23 @@ export default function Home() {
             {openFolder === 'audio' && audioBooks.length === 0 && (
               <p className="text-sm text-gray-400 py-16 text-center">文件夾仲係空嘅，去「🎙️ 音頻轉文字」轉一段錄音啦</p>
             )}
+            {/* 🎯 每日目標（每本書） */}
+            <div className="flex items-center gap-2 mb-4 text-sm text-gray-500">
+              <span>🎯 每本書每日目標</span>
+              {editingGoal ? (
+                <form className="flex items-center gap-1" onSubmit={e => { e.preventDefault(); const n = parseInt(goalInput); if (n > 0) { dailyGoalStorage.set(n); setDailyGoal(n) } setEditingGoal(false) }}>
+                  <input autoFocus type="number" min={1} value={goalInput} onChange={e => setGoalInput(e.target.value)}
+                    className="w-20 px-2 py-0.5 rounded-md border border-gray-300 text-sm text-gray-800 outline-none focus:border-indigo-400" />
+                  <span>句</span>
+                  <button className="px-2 py-0.5 rounded-md text-xs font-medium text-white bg-indigo-600">好</button>
+                </form>
+              ) : (
+                <button onClick={() => { setGoalInput(String(dailyGoal)); setEditingGoal(true) }} className="px-2 py-0.5 rounded-md font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100" title="改每日目標">
+                  {dailyGoal} 句 ✏️
+                </button>
+              )}
+              <span className="text-xs text-gray-400">· 達標嘅書封面會有 ✅</span>
+            </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-5 gap-y-8">
               {/* 🎧 錄音文件夾卡（書架主頁先顯示） */}
               {!openFolder && audioBooks.length > 0 && (
@@ -1117,6 +1142,23 @@ export default function Home() {
                             <span style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.9)', lineHeight: 1, position: 'relative', zIndex: 1 }}>
                               {progress}%
                             </span>
+                          </div>
+                        )
+                      })()}
+                      {/* 🎯 今日目標徽章（左下角） */}
+                      {(() => {
+                        const done = dailyGoalStorage.todayRead(book.id)
+                        if (done <= 0) return null
+                        const hit = done >= dailyGoal
+                        return hit ? (
+                          <div className="absolute bottom-2 left-2 px-2 py-1 rounded-full text-[10px] font-bold text-white shadow-md flex items-center gap-0.5"
+                            style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }} title={`今日讀咗 ${done} 句，已達標 ${dailyGoal} 句`}>
+                            ✅ 今日達標
+                          </div>
+                        ) : (
+                          <div className="absolute bottom-2 left-2 px-1.5 py-1 rounded-md bg-black/45 backdrop-blur-sm text-white" title={`今日讀咗 ${done}/${dailyGoal} 句`}>
+                            <div className="text-[9px] font-semibold leading-none tabular-nums">今日 {done}/{dailyGoal}</div>
+                            <div className="mt-1 h-[3px] w-12 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${Math.min(100, (done / dailyGoal) * 100)}%` }} /></div>
                           </div>
                         )
                       })()}

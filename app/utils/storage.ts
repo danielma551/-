@@ -870,3 +870,22 @@ export const speedStorage = {
     return speedStorage.getAll().slice(-30)
   }
 }
+
+// 🎯 每本書每日目標（句）：完成咗會喺封面顯示「今日達標」
+const DAILY_BOOK_GOAL_KEY = 'daily-book-goal'
+export const dailyGoalStorage = {
+  get(): number {
+    if (typeof window === 'undefined') return 404
+    const n = parseInt(localStorage.getItem(DAILY_BOOK_GOAL_KEY) || '')
+    return Number.isFinite(n) && n > 0 ? n : 404
+  },
+  set(n: number): void {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(DAILY_BOOK_GOAL_KEY, String(Math.max(1, Math.round(n)))) } catch { /* ignore */ }
+  },
+  // 某本書今日讀咗幾句
+  todayRead(bookId: string): number {
+    const today = new Date().toLocaleDateString('en-CA')
+    return bookReadingStorage.getBookDays(bookId)[today] || 0
+  },
+}
