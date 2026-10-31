@@ -325,3 +325,8 @@ button:active:not(:disabled) {
 @keyframes cycle-eink-flash { 0% { opacity: .7 } 100% { opacity: 0 } }
 .cycle-settle { animation: cycle-settle 1.2s ease both; }
 @media (prefers-reduced-motion: reduce) { .cycle-settle { animation: none; } }
+
+/* 標題用宋體：書卷味 */
+.font-serif-tc {
+  font-family: 'Songti TC', 'Noto Serif TC', 'Source Han Serif TC', 'PMingLiU', serif;
+}

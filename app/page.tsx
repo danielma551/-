@@ -11,7 +11,7 @@
 
 import { dailyGoalStorage } from './utils/storage'
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, LayoutGrid, ChevronDown, Phone, Library, Mic, Music, Download, Pencil } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -232,6 +232,8 @@ export default function Home() {
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [showMusicList, setShowMusicList] = useState(false)
+  const [showTools, setShowTools] = useState(false)           // 頂部「工具」選單
+  const [statsTab, setStatsTab] = useState<'trend' | 'heat' | 'speed'>('trend')  // 統計分頁
   const [isSavingMusic, setIsSavingMusic] = useState(false)
   const musicInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -679,8 +681,13 @@ export default function Home() {
     return <VocabPractice onExit={() => setShowVocab(false)} />
   }
 
+  // 「繼續閱讀」：最近讀過、未讀完嘅一本
+  const continueBook = shelfBooks
+    .filter(b => b.currentIndex > 0 && b.currentIndex < b.sentences.length - 1)
+    .sort((a, b) => b.lastReadDate - a.lastReadDate)[0]
+
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-[#FAFAF8]">
       {showGoalModal && pendingBook && (
         <GoalModal
           onSetGoal={handleSetGoal}
@@ -715,76 +722,30 @@ export default function Home() {
 
       {sentences.length === 0 ? (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8 landscape-tight">
-          {/* Header（窄螢幕：標題一行，掣自動換行） */}
-          <header className="flex flex-wrap items-center justify-between gap-3 mb-6 sm:mb-10">
-            <div className="flex items-center space-x-2 shrink-0 whitespace-nowrap">
-              <BookOpen className="w-6 h-6 text-gray-800" />
-              <h1 className="text-xl font-bold text-gray-900">我的書架</h1>
+          {/* Header：標題 ＋ 搜尋／同步 ＋ 工具選單 ＋ 添加書籍（主按鈕） */}
+          <header className="flex flex-wrap items-center gap-3 mb-6 sm:mb-8">
+            <div className="flex items-center gap-2 shrink-0 whitespace-nowrap mr-auto">
+              <BookOpen className="w-6 h-6 text-indigo-600" />
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-serif-tc">我的書架</h1>
             </div>
-            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 [&>*]:whitespace-nowrap [&>*]:shrink-0">
-              {/* 打電話賺錢 */}
-              <a
-                href="/work"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-sm font-medium transition-colors"
-                title="打電話賺錢：把打電話 confirm payment 金錢化"
-              >
-                <span>💰</span>
-                <span className="hidden lg:inline">打電話賺錢</span>
-              </a>
-              {/* 講稿庫 */}
-              <a
-                href="/pdfs"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 text-sm font-medium transition-colors"
-                title="講稿庫：PDF／Word 儲存，全庫搜尋＋高光"
-              >
-                <span>📚</span>
-                <span className="hidden lg:inline">講稿庫</span>
-              </a>
-              {/* 音頻轉文字 */}
-              <a
-                href="/transcribe"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium transition-colors"
-                title="音頻轉文字：Whisper 本機轉錄（免費、免 key）"
-              >
-                <span>🎙️</span>
-                <span className="hidden lg:inline">音頻轉文字</span>
-              </a>
-              {/* 每日外刊按鈕 */}
-              <button
-                onClick={handleDailyExternal}
-                disabled={extStatus === 'loading'}
-                className="relative flex items-center space-x-1.5 px-3 py-2 rounded-full border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100 text-sm font-medium transition-colors disabled:opacity-60"
-                title="每日外刊精讀（DeepSeek 生成：英文＋中譯＋講解）"
-              >
-                {extStatus === 'loading'
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Newspaper className="w-3.5 h-3.5" />}
-                <span className="hidden lg:inline">{extStatus === 'loading' ? '生成中…' : '每日外刊'}</span>
-                {!extDoneToday && extStatus !== 'loading' && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-teal-500" title="今日未生成" />
-                )}
-              </button>
-              {/* Vision OCR 設定按鈕 */}
-              <button
-                onClick={() => { setVisionKeyInput(visionApiKey); setDeepseekKeyInput(deepseekKey); setShowVisionSettings(true) }}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-full border text-sm font-medium transition-colors ${visionApiKey ? 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}
-                title="設定 AI 視覺 OCR（掃描 PDF 識別）"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">{visionApiKey ? 'Vision OCR ✓' : 'Vision OCR'}</span>
-              </button>
+            <div className="flex flex-wrap items-center gap-2 [&>*]:whitespace-nowrap [&>*]:shrink-0">
               <SearchPanel onOpenBook={handleOpenBookAtSentence} />
               <CloudSync onSyncComplete={handleSyncComplete} />
 
-              {/* 🎵 背景音樂管理（上傳檔案 + YouTube 連結，多首播放清單） */}
+              {/* 🧰 工具選單：打電話賺錢、講稿庫、轉錄、外刊、音樂、AI 設定 */}
               <div className="relative">
                 <button
-                  onClick={() => setShowMusicList(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full border text-sm font-medium transition-colors ${tracks.length > 0 ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}
-                  title="背景音樂：上傳檔案或加 YouTube 連結"
+                  onClick={() => { setShowTools(v => !v); setShowMusicList(false) }}
+                  aria-haspopup="menu"
+                  aria-expanded={showTools}
+                  className="relative flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
                 >
-                  {isSavingMusic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🎵</span>}
-                  <span className="hidden lg:inline">{isSavingMusic ? '存儲中...' : (tracks.length > 0 ? `背景音樂 · ${tracks.length}` : '背景音樂')}</span>
+                  {(isSavingMusic || extStatus === 'loading') ? <Loader2 className="w-4 h-4 animate-spin" /> : <LayoutGrid className="w-4 h-4" />}
+                  <span>工具</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                  {!extDoneToday && extStatus !== 'loading' && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-indigo-500" title="今日外刊未生成" />
+                  )}
                 </button>
                 <input
                   id="music-upload"
@@ -796,6 +757,56 @@ export default function Home() {
                   onChange={handleMusicUpload}
                   disabled={isSavingMusic}
                 />
+                {showTools && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowTools(false)} />
+                    <div role="menu" className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-1.5 origin-top-right" style={{ animation: 'panel-in 160ms var(--ease-out)' }}>
+                      <a role="menuitem" href="/work" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                        <Phone className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">打電話賺錢</span><span className="block text-xs text-gray-500">把打電話 confirm payment 金錢化</span></span>
+                      </a>
+                      <a role="menuitem" href="/pdfs" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                        <Library className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">講稿庫</span><span className="block text-xs text-gray-500">PDF／Word 儲存，全庫搜尋＋高光</span></span>
+                      </a>
+                      <a role="menuitem" href="/transcribe" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                        <Mic className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">音頻轉文字</span><span className="block text-xs text-gray-500">Whisper 本機轉錄（免費、免 key）</span></span>
+                      </a>
+                      <a role="menuitem" href="/import" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                        <Download className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">從網頁收入文章</span><span className="block text-xs text-gray-500">課程／文章（例如得到）</span></span>
+                      </a>
+                      <div className="my-1 border-t border-gray-100" />
+                      <button
+                        role="menuitem"
+                        onClick={() => { setShowTools(false); handleDailyExternal() }}
+                        disabled={extStatus === 'loading'}
+                        className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors disabled:opacity-60"
+                      >
+                        <Newspaper className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span className="flex-1"><span className="block text-sm font-medium text-gray-900">每日外刊</span><span className="block text-xs text-gray-500">{extStatus === 'loading' ? '生成中…' : (extDoneToday ? '今日已生成' : 'DeepSeek 生成：英文＋中譯＋講解')}</span></span>
+                        {!extDoneToday && extStatus !== 'loading' && <span className="mt-1.5 w-2 h-2 rounded-full bg-indigo-500" />}
+                      </button>
+                      <button
+                        role="menuitem"
+                        onClick={() => { setShowTools(false); setShowMusicList(true) }}
+                        className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                      >
+                        <Music className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">背景音樂</span><span className="block text-xs text-gray-500">{tracks.length > 0 ? `播放清單 · ${tracks.length} 首` : '上傳檔案或加 YouTube 連結'}</span></span>
+                      </button>
+                      <button
+                        role="menuitem"
+                        onClick={() => { setShowTools(false); setVisionKeyInput(visionApiKey); setDeepseekKeyInput(deepseekKey); setShowVisionSettings(true) }}
+                        className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                      >
+                        <KeyRound className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">AI 設定</span><span className="block text-xs text-gray-500">{visionApiKey ? 'Vision OCR 已設定 ✓' : 'Vision OCR／DeepSeek API key'}</span></span>
+                      </button>
+                    </div>
+                  </>
+                )}
                 {/* 播放清單面板 */}
                 {showMusicList && (
                   <>
@@ -858,9 +869,10 @@ export default function Home() {
                   </>
                 )}
               </div>
+
               <label
                 htmlFor="file-upload"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700 cursor-pointer transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50'}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-medium cursor-pointer transition-colors shadow-sm ${isUploading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-indigo-700'}`}
               >
                 {isUploading
                   ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -879,29 +891,6 @@ export default function Home() {
               </label>
             </div>
           </header>
-
-          {/* ✍️ 快速加筆記（首頁顯眼位置：隨手記，即刻入温習循環） */}
-          <div className="mb-6 sm:mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3 sm:p-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
-              <textarea
-                value={quickNote}
-                onChange={e => setQuickNote(e.target.value)}
-                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleQuickAddNote() } }}
-                placeholder="✍️ 隨手寫低一個諗法／筆記…（⌘/Ctrl + Enter 快速加入，即刻入温習循環）"
-                rows={2}
-                className="flex-1 w-full bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-gray-400 pt-1"
-              />
-              <button
-                onClick={handleQuickAddNote}
-                disabled={!quickNote.trim()}
-                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 sm:self-stretch self-end"
-              >
-                <Plus className="w-4 h-4" /> 加入筆記
-              </button>
-            </div>
-            {quickNoteMsg && <p className="text-xs text-emerald-700 mt-2 px-1">{quickNoteMsg}</p>}
-            <a href="/import" className="inline-block mt-2 px-1 text-xs text-sky-700 hover:underline">📥 從網頁收入課程／文章（例如得到）→</a>
-          </div>
 
           {/* Vision OCR 設定面板 */}
           {showVisionSettings && (
@@ -989,46 +978,52 @@ export default function Home() {
             </div>
           )}
 
-          {/* RSS 訂閱文章面板 */}
-          <FeedPanel onReadArticle={handleReadArticle} />
-
-          {/* 30天閱讀趨勢圖（有資料時才顯示） */}
-          <ReadingTrend />
-          <ReadingHeatmap />
-
-          {/* 温習熱圖：每日温習嘅入口（有温習嗰日有顏色；配額冇温完會累積落聽日） */}
-          <ReviewHeatmap
-            onStart={handleOpenReviewBook}
-            onManage={() => setShowReview(true)}
-            refreshKey={reviewDue}
-          />
-          <SpeedChart />
-
-          {/* 閱讀冒險：等級 / XP / 連續打卡 / 怪物擊殺 */}
-          <GamifyBar />
-
-          {/* 每日練習入口卡片 */}
-          <div className="mb-6">
-            <button
-              onClick={() => setShowVocab(true)}
-              className="group flex items-center space-x-4 w-full px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl hover:from-indigo-100 hover:to-purple-100 transition-all"
-            >
-              <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white text-lg flex-shrink-0">
-                📝
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-semibold text-indigo-800">每日練習</p>
-                <p className="text-xs text-indigo-500">1000 個常用英文單詞拼寫練習</p>
-              </div>
-            </button>
-          </div>
+          {/* 📖 繼續閱讀：最近讀緊嘅書，一撳即返去上次嗰句 */}
+          {!openFolder && continueBook && (() => {
+            const b = continueBook
+            const p = Math.round(((b.currentIndex + 1) / b.sentences.length) * 100)
+            const cover = b.coverImage
+              ? { backgroundImage: `url(${b.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : { background: b.coverColor ?? getBookStyle(b.title) }
+            return (
+              <section className="mb-10 rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm flex gap-4 sm:gap-6 items-center book-card-animate">
+                <button
+                  onClick={() => handleLoadBook(b)}
+                  aria-label={`繼續讀《${b.title}》`}
+                  className="relative w-20 sm:w-28 aspect-[2/3] rounded-md overflow-hidden shadow-md flex-shrink-0 flex items-end p-2"
+                  style={cover}
+                >
+                  {b.coverImage
+                    ? <span className="absolute inset-0 bg-black/20" />
+                    : <span className="relative text-white text-xs font-medium leading-snug line-clamp-4 text-left drop-shadow">{b.title}</span>}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-indigo-600 mb-1">繼續閱讀 · {formatDate(b.lastReadDate)}</p>
+                  <h2 className="font-serif-tc text-lg sm:text-2xl font-bold text-gray-900 line-clamp-1">{b.title}</h2>
+                  <p className="hidden sm:block mt-2 text-sm text-gray-600 leading-relaxed line-clamp-2">「{b.sentences[b.currentIndex]}」</p>
+                  <div className="mt-3 flex items-center gap-3 max-w-md">
+                    <div className="flex-1 h-1.5 rounded-full bg-indigo-50 overflow-hidden">
+                      <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${p}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-500 tabular-nums">{p}%</span>
+                  </div>
+                  <button
+                    onClick={() => handleLoadBook(b)}
+                    className="mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+                  >
+                    繼續讀 →
+                  </button>
+                </div>
+              </section>
+            )
+          })()}
 
           {/* Book Grid */}
           {savedBooks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-40 text-gray-300">
-              <BookOpen className="w-20 h-20 mb-4" />
-              <p className="text-lg font-medium">書架空空如也</p>
-              <p className="text-sm mt-1">點擊「添加書籍」上傳您的第一本書</p>
+            <div className="flex flex-col items-center justify-center py-16 text-gray-300">
+              <BookOpen className="w-16 h-16 mb-4" />
+              <p className="text-lg font-medium text-gray-600">書架空空如也</p>
+              <p className="text-sm mt-1 text-gray-500">撳右上角「添加書籍」上傳你第一本書</p>
             </div>
           ) : (
             <>
@@ -1259,6 +1254,83 @@ export default function Home() {
             </div>
             </>
           )}
+
+          {/* ── 今日：等級／XP ＋ 快速筆記 ＋ 每日練習 ＋ 温習 ── */}
+          <section className="mt-14">
+            <h2 className="font-serif-tc text-lg sm:text-xl font-bold text-gray-900 mb-4">今日</h2>
+            <GamifyBar />
+            <div className="grid gap-4 sm:grid-cols-2 mb-6">
+              {/* ✍️ 快速筆記：隨手記，即刻入温習循環 */}
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm flex flex-col gap-2">
+                <label htmlFor="quick-note" className="text-sm font-semibold text-gray-900">快速筆記</label>
+                <textarea
+                  id="quick-note"
+                  value={quickNote}
+                  onChange={e => setQuickNote(e.target.value)}
+                  onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleQuickAddNote() } }}
+                  placeholder="隨手寫低一個諗法，即刻入温習循環…"
+                  rows={2}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none resize-none leading-relaxed placeholder:text-gray-500 focus:border-indigo-400 focus:bg-white transition-colors"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-gray-500">⌘/Ctrl + Enter 加入</span>
+                  <button
+                    onClick={handleQuickAddNote}
+                    disabled={!quickNote.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" /> 加入
+                  </button>
+                </div>
+                {quickNoteMsg && <p className="text-xs text-indigo-700">{quickNoteMsg}</p>}
+              </div>
+              {/* 每日練習入口 */}
+              <button
+                onClick={() => setShowVocab(true)}
+                className="flex items-center gap-4 w-full p-4 rounded-2xl border border-gray-200 bg-white shadow-sm hover:border-indigo-300 transition-colors text-left"
+              >
+                <span className="w-11 h-11 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <Pencil className="w-5 h-5" />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-gray-900">每日練習</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">1000 個常用英文單詞拼寫練習</span>
+                </span>
+              </button>
+            </div>
+            {/* 温習熱圖：每日温習入口（保持顯眼） */}
+            <ReviewHeatmap
+              onStart={handleOpenReviewBook}
+              onManage={() => setShowReview(true)}
+              refreshKey={reviewDue}
+            />
+          </section>
+
+          {/* ── 統計：趨勢／熱圖／速度 合埋一格，用分頁切換 ── */}
+          <section>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <h2 className="font-serif-tc text-lg sm:text-xl font-bold text-gray-900">統計</h2>
+              <div role="tablist" aria-label="統計類別" className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+                {([['trend', '30 天趨勢'], ['heat', '閱讀熱圖'], ['speed', '閱讀速度']] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    role="tab"
+                    aria-selected={statsTab === k}
+                    onClick={() => setStatsTab(k)}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${statsTab === k ? 'bg-white text-gray-900 font-medium shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {statsTab === 'trend' && <ReadingTrend />}
+            {statsTab === 'heat' && <ReadingHeatmap />}
+            {statsTab === 'speed' && <SpeedChart />}
+          </section>
+
+          {/* RSS 訂閱文章 */}
+          <FeedPanel onReadArticle={handleReadArticle} />
         </div>
       ) : (
         <Reader
