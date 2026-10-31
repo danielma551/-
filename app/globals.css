@@ -310,3 +310,18 @@ button:active:not(:disabled) {
 @media (prefers-reduced-motion: reduce) {
   .lucky-fx { display: none; }
 }
+
+/* 🖌️ 循環完成：墨暈漾開（由中間淡淡暈開再散去）＋ 文字輕輕沉澱 */
+@keyframes cycle-ink {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: .6; }
+  70%  { opacity: .25; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+@keyframes cycle-settle {
+  0%   { opacity: 1; filter: none; }
+  35%  { opacity: .3; filter: blur(2px); }
+  100% { opacity: 1; filter: none; }
+}
+@keyframes cycle-eink-flash { 0% { opacity: .7 } 100% { opacity: 0 } }
+.cycle-settle { animation: cycle-settle 1.2s ease both; }
+@media (prefers-reduced-motion: reduce) { .cycle-settle { animation: none; } }

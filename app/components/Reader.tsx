@@ -1854,6 +1854,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     return cycleData.count - 1
   }, [sentencesRead, totalForProgress, cycleData])
 
+  // 🖌️ 墨暈動畫狀態
+  const [inkKey, setInkKey] = useState(0)
+  const inkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // 偵測循環切換，顯示提示
   useEffect(() => {
     if (prevCycleIdxRef.current === -1) {
@@ -1869,6 +1873,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       cycleToastTimer.current = setTimeout(() => setCycleToast(null), 2500)
       // 每看完 6 個循環（進入第 6、12、18… 個循環）→ 呼吸休息動畫
       // 跟讀模式（錄音書 + 跟讀開住）唔出：錄音照播緊，彈出嚟會打斷聽
+      // 🖌️ 每完成一個循環（向前）：墨暈漾開
+      if (currentCycleIdx > prevIdx) {
+        setInkKey(Date.now())
+        if (inkTimer.current) clearTimeout(inkTimer.current)
+        inkTimer.current = setTimeout(() => setInkKey(0), 1400)
+      }
       // 每 6 個循環：叮咚提示音（同地鐵到站一樣）
       if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0) chime()
       if (currentCycleIdx > prevIdx && currentCycleIdx % 6 === 0 && !(hasBookAudio && followAudio)) {
@@ -2044,6 +2054,18 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
         .land-compact > .hud-bars { padding: 6px 12px 4px; }
         .land-compact .hud-hide { display: none !important; }
       `}</style>
+      {/* 🖌️ 循環完成：墨暈漾開（墨水屏只淡淡閃一下） */}
+      {inkKey > 0 && (isEink ? (
+        <div key={inkKey} aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 35, background: '#fff', pointerEvents: 'none', animation: 'cycle-eink-flash 180ms linear forwards' }} />
+      ) : (
+        <div key={inkKey} aria-hidden style={{
+          position: 'fixed', left: '50%', top: '50%', width: '160vmax', height: '160vmax', borderRadius: '50%', zIndex: 35, pointerEvents: 'none',
+          background: isPaper
+            ? 'radial-gradient(circle, rgba(176,141,87,.34) 0%, rgba(176,141,87,.12) 45%, rgba(176,141,87,0) 70%)'
+            : 'radial-gradient(circle, rgba(99,102,241,.22) 0%, rgba(99,102,241,.08) 45%, rgba(99,102,241,0) 70%)',
+          animation: 'cycle-ink 1.3s cubic-bezier(.2,.7,.2,1) forwards',
+        }} />
+      ))}
  {/* 🖼️ 壁紙層 */}
       {wpActive && (
         <>
