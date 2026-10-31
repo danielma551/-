@@ -1056,8 +1056,8 @@ export default function Home() {
               <p className="text-sm text-gray-400 py-16 text-center">文件夾仲係空嘅，去「🎙️ 音頻轉文字」轉一段錄音啦</p>
             )}
             {/* 🎯 每日目標（每本書） */}
-            <div className="flex items-center gap-2 mb-4 text-sm text-gray-500">
-              <span>🎯 每本書每日目標</span>
+            <div className="flex items-center gap-2 mb-4 text-xs sm:text-sm text-gray-500 whitespace-nowrap">
+              <span>🎯 每日目標</span>
               {editingGoal ? (
                 <form className="flex items-center gap-1" onSubmit={e => { e.preventDefault(); const n = parseInt(goalInput); if (n > 0) { dailyGoalStorage.set(n); setDailyGoal(n) } setEditingGoal(false) }}>
                   <input autoFocus type="number" min={1} value={goalInput} onChange={e => setGoalInput(e.target.value)}
@@ -1070,7 +1070,7 @@ export default function Home() {
                   {dailyGoal} 句 ✏️
                 </button>
               )}
-              <span className="text-xs text-gray-400">· 達標嘅書封面會有 ✅</span>
+              <span className="hidden sm:inline text-xs text-gray-400">· 每本書計 · 達標嘅書封面會有 ✅</span>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-5 gap-y-8">
               {/* 🎧 錄音文件夾卡（書架主頁先顯示） */}
@@ -1150,15 +1150,16 @@ export default function Home() {
                         const done = dailyGoalStorage.todayRead(book.id)
                         if (done <= 0) return null
                         const hit = done >= dailyGoal
+                        // 放喺封面頂部中間：唔會同右下進度環、左下／四角嘅工具掣撞
                         return hit ? (
-                          <div className="absolute bottom-2 left-2 px-2 py-1 rounded-full text-[10px] font-bold text-white shadow-md flex items-center gap-0.5"
+                          <div className="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-md whitespace-nowrap"
                             style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }} title={`今日讀咗 ${done} 句，已達標 ${dailyGoal} 句`}>
-                            ✅ 今日達標
+                            ✅ 達標
                           </div>
                         ) : (
-                          <div className="absolute bottom-2 left-2 px-1.5 py-1 rounded-md bg-black/45 backdrop-blur-sm text-white" title={`今日讀咗 ${done}/${dailyGoal} 句`}>
-                            <div className="text-[9px] font-semibold leading-none tabular-nums">今日 {done}/{dailyGoal}</div>
-                            <div className="mt-1 h-[3px] w-12 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${Math.min(100, (done / dailyGoal) * 100)}%` }} /></div>
+                          <div className="absolute top-2 left-1/2 -translate-x-1/2 px-1.5 py-1 rounded-md bg-black/45 backdrop-blur-sm text-white" title={`今日讀咗 ${done}/${dailyGoal} 句`}>
+                            <div className="text-[9px] font-semibold leading-none tabular-nums whitespace-nowrap text-center">{done}/{dailyGoal}</div>
+                            <div className="mt-1 h-[3px] w-10 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${Math.min(100, (done / dailyGoal) * 100)}%` }} /></div>
                           </div>
                         )
                       })()}
@@ -1239,13 +1240,14 @@ export default function Home() {
                     <div className="flex items-center gap-1 mt-1.5">
                       <button
                         onClick={e => { e.stopPropagation(); setGraphBook(book) }}
-                        className="flex-1 text-[10px] text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded px-1.5 py-0.5 transition-colors text-left"
+                        className="flex-1 min-w-0 truncate whitespace-nowrap text-[10px] text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded px-1.5 py-0.5 transition-colors text-left"
+                        title="人物關係圖"
                       >
-                        🎭 人物關係圖
+                        🎭 <span className="hidden sm:inline">人物關係圖</span><span className="sm:hidden">人物</span>
                       </button>
                       <button
                         onClick={e => { e.stopPropagation(); setCalendarBook({ id: book.id, title: book.title }) }}
-                        className="text-[10px] text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded px-1.5 py-0.5 transition-colors flex-shrink-0"
+                        className="text-[10px] whitespace-nowrap text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded px-1.5 py-0.5 transition-colors flex-shrink-0"
                         title="呢本書嘅閱讀日曆"
                       >
                         📅 日曆
