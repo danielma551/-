@@ -462,7 +462,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   useEffect(() => {
     if (readingGoal > 0) {
-      const sentencesRead = currentIndex - startIndex + 1
+      const sentencesRead = countStops(startIndex, currentIndex)
       if (sentencesRead >= readingGoal && !goalCompleted) {
         setGoalCompleted(true)
         // 遊戲化：擊敗怪物 → 記錄 XP（加連打卡倍數）+ 擊殺
@@ -723,7 +723,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (ans === cur) return
     autoNavRef.current = true
     triggerFade(() => setCurrentIndex(ans), ans > cur ? 'up' : 'down')
-    if (ans > cur) { historyStorage.recordRead(ans - cur); bookReadingStorage.recordRead(bookId, ans - cur) }
+    if (ans > cur) recordAdvance(ans)
   }
   // 手動揭頁（← → 或撳屏幕）→ 錄音跳去嗰句
   useEffect(() => {
@@ -1348,6 +1348,27 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     isAnnotationItem(sentences[idx - 1])
 
   // 找下一個可停留的 index：跳過注文碎片 + 注尾碎片，但真實圖片是合法停留點
+  // (a, b] 之間有幾多個可停留嘅真句
+  function countStops(a: number, b: number): number {
+    let n = 0
+    for (let i = Math.max(a + 1, 0); i <= b && i < sentences.length; i++) {
+      if (isBlankSentence(sentences[i]) || isAnnotationItem(sentences[i]) || isAnnotationTail(i)) continue
+      n++
+    }
+    return n
+  }
+  // 今次閱讀揭到最遠嘅位置：返轉頭再揭唔重複計
+  const maxReachedRef = useRef(-1)
+  useEffect(() => { maxReachedRef.current = startIndex }, [startIndex, bookId])
+  const recordAdvance = (to: number) => {
+    const from = Math.max(maxReachedRef.current, startIndex)
+    if (to <= from) return 0
+    const n = countStops(from, to)
+    maxReachedRef.current = to
+    if (n > 0) { historyStorage.recordRead(n); bookReadingStorage.recordRead(bookId, n) }
+    return n
+  }
+
   const nextTextIndex = (from: number) => {
     let i = from + 1
     while (i < sentences.length) {
@@ -1374,8 +1395,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const next = nextTextIndex(currentIndex)
     if (next !== -1) {
       vibrate(displaySettings.vibrationIntensity)
-      historyStorage.recordRead(1)
-      bookReadingStorage.recordRead(bookId, 1)
+      recordAdvance(next)   // 只計新讀嘅句（返轉頭再揭唔重複計）
       // 📅 每日挑戰：讀句進度
       if (!einkMode) {
         const ch = updateDailyChallenge('read_sentences', 1)
@@ -1446,7 +1466,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     displayStorage.saveSettings(newSettings)
   }
 
-  const sentencesRead = currentIndex - startIndex + 1
+  // 讀咗幾句＝由開始位置向前揭過幾多個「真句」（唔計段落分隔／注文；同每日統計一致）
+  const sentencesRead = useMemo(() => countStops(startIndex, currentIndex), [startIndex, currentIndex, sentences])   // eslint-disable-line react-hooks/exhaustive-deps
   const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
 
   // ── ⚔️ 怪物戰鬥條（代替循環進度條；只在非墨水屏 + 有目標時使用） ──

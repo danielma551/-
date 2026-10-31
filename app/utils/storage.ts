@@ -797,9 +797,51 @@ export const bookReadingStorage = {
     days[today] = (days[today] || 0) + count
     this.saveAll(map)
   },
-  // 某本書每日句數 { date: count }
+  // 某本書每日句數 { date: count }＝本機＋其他裝置（各自計，加埋）
   getBookDays(bookId: string): Record<string, number> {
-    return this.getAll()[bookId] || {}
+    const own = { ...(this.getAll()[bookId] || {}) }
+    const since = this.since()
+    for (const map of Object.values(this.getRemote())) {
+      const days = map?.[bookId]
+      if (!days) continue
+      for (const [d, c] of Object.entries(days)) if (d >= since && typeof c === 'number') own[d] = (own[d] || 0) + c
+    }
+    return own
+  },
+  // ── 多裝置：每部機各自記錄，顯示時加埋（以前「取較大值」會令兩部機讀嘅唔夠數）──
+  deviceId(): string {
+    if (typeof window === 'undefined') return 'server'
+    let id = localStorage.getItem('msw-device-id')
+    if (!id) { id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); try { localStorage.setItem('msw-device-id', id) } catch { /* ignore */ } }
+    return id
+  },
+  since(): string {
+    if (typeof window === 'undefined') return '9999'
+    let d = localStorage.getItem('book-reading-days-since')
+    if (!d) { d = new Date().toLocaleDateString('en-CA'); try { localStorage.setItem('book-reading-days-since', d) } catch { /* ignore */ } }
+    return d
+  },
+  getRemote(): Record<string, BookReadDays> {
+    if (typeof window === 'undefined') return {}
+    try { return JSON.parse(localStorage.getItem('book-reading-days-remote') || '{}') } catch { return {} }
+  },
+  // 同步用：所有裝置（本機＋已知其他機）
+  getByDevice(): Record<string, BookReadDays> {
+    return { ...this.getRemote(), [this.deviceId()]: this.getAll() }
+  },
+  mergeByDevice(remote: Record<string, BookReadDays> | undefined | null): void {
+    if (!remote) return
+    const me = this.deviceId()
+    const store = this.getRemote()
+    for (const [dev, map] of Object.entries(remote)) {
+      if (dev === me || !map) continue
+      const cur = store[dev] || (store[dev] = {})
+      for (const [bid, days] of Object.entries(map)) {
+        const local = cur[bid] || (cur[bid] = {})
+        for (const [d, c] of Object.entries(days || {})) if (typeof c === 'number' && c > (local[d] || 0)) local[d] = c
+      }
+    }
+    try { localStorage.setItem('book-reading-days-remote', JSON.stringify(store)) } catch { /* ignore */ }
   },
   // 某本書統計：總天數、連續天數（去到今日／尋日為止）
   getStats(bookId: string): { totalDays: number; streak: number; firstDate?: string } {

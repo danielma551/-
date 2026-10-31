@@ -37,6 +37,7 @@ interface Manifest {
   reviewSession?: unknown
   reviewHeat?: Record<string, number>
   bookReadDays?: unknown
+  bookReadDaysByDevice?: Record<string, unknown>
 }
 
 // ── 小工具 ──
@@ -273,7 +274,9 @@ async function mergeRemote(remote: Manifest): Promise<boolean> {
     }
   }
   if (remote.reviewHeat) reviewStorage.mergeHeat(remote.reviewHeat)
-  if (remote.bookReadDays) bookReadingStorage.merge(remote.bookReadDays as never)
+  // 每本書每日句數：新版按裝置分開（加埋計）；舊版先用「取較大值」
+  if (remote.bookReadDaysByDevice) bookReadingStorage.mergeByDevice(remote.bookReadDaysByDevice as never)
+  else if (remote.bookReadDays) bookReadingStorage.merge(remote.bookReadDays as never)
   if (remote.font && !fontStorage.getFont()) fontStorage.saveFont(remote.font.fontFamily)
   return changed
 }
@@ -313,6 +316,7 @@ async function push(id: string, baseRev: number, oldManifest?: string): Promise<
     reviewSession: reviewStorage.getSession(),
     reviewHeat: reviewStorage.getHeat(),
     bookReadDays: bookReadingStorage.getAll(),
+    bookReadDaysByDevice: bookReadingStorage.getByDevice(),
   }
   const str = JSON.stringify(manifest)
   const fp = fastHash(str) + '_' + str.length
