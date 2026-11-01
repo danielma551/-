@@ -10,7 +10,7 @@ import { BookData, generateBookId, isAudioBook } from '../utils/storage'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 import { splitIntoSentences, PARA_SEP } from '../utils/epubParser'
 
-interface Payload { title: string; text: string; url?: string; site?: string; pageTitle?: string }
+interface Payload { title: string; text: string; url?: string; site?: string; pageTitle?: string; book?: string; date?: string }
 
 const LAST_KEY = 'import-last-book'
 const SITE = typeof window !== 'undefined' ? location.origin : 'https://myspiritworld.vercel.app'
@@ -37,7 +37,15 @@ function pick(){
 }
 var text=sel.length>30?sel:pick();
 var h=document.querySelector('h1')||document.querySelector('h2');
-var d={title:((h&&h.innerText)||document.title||'').trim().slice(0,120),text:text,url:location.href,site:location.hostname,pageTitle:document.title};
+var title=((h&&h.innerText)||document.title||'').trim(), book='', date='';
+if(location.hostname.indexOf('mp.weixin.qq.com')>=0){
+ var wc=document.getElementById('js_content'), wt=document.getElementById('activity-name'), wa=document.getElementById('js_name'), wp=document.getElementById('publish_time');
+ if(sel.length<=30&&wc) text=txt(wc);
+ if(wt) title=wt.innerText.trim();
+ if(wa) book=wa.innerText.trim();
+ if(wp) date=wp.innerText.trim();
+}
+var d={title:title.slice(0,120),text:text,url:location.href,site:location.hostname,pageTitle:document.title,book:book,date:date};
 var u='${origin}/import';
 var w=window.open(u+'#d='+encodeURIComponent(JSON.stringify(d)),'msw_import');
 var n=0,t=setInterval(function(){try{w&&w.postMessage({type:'msw-import',data:d},'${origin}')}catch(e){} if(++n>40)clearInterval(t)},300);
@@ -79,6 +87,15 @@ export default function ImportPage() {
     setTarget(last && list.some(b => b.id === last) ? last : 'new')
   })
 
+  // 有作者／公眾號名：自動揀返同名嗰本書（每個作者一本，每篇一章）
+  useEffect(() => {
+    const name = data?.book?.trim()
+    if (!name) return
+    const hit = books.find(b => b.title === name)
+    if (hit) setTarget(hit.id)
+    else setTarget('new')
+  }, [books, data])
+
   // 同一個視窗可以重用：每次收到新內容（下一課）就重新預覽
   const lastText = useRef('')
   const accept = (d: Payload) => {
@@ -88,8 +105,11 @@ export default function ImportPage() {
     got.current = true
     setDone(null); setErr('')
     setData(d)
-    setTitle((d.title || d.pageTitle || '未命名').trim())
-    setNewName(((d.pageTitle || d.title || '').split(/[-_|｜—]/)[0] || '').trim())
+    // 公眾號等有日期：章節名前面加日期（例如「11月1日 · 標題」）
+    const day = (d.date || '').replace(/\s*\d{1,2}:\d{2}.*$/, '').replace(/^\d{4}年/, '').trim()
+    const t = (d.title || d.pageTitle || '未命名').trim()
+    setTitle(day ? `${day} · ${t}` : t)
+    setNewName((d.book || ((d.pageTitle || d.title || '').split(/[-_|｜—]/)[0] || '')).trim())
     setText(d.text.trim())
   }
 
@@ -225,6 +245,7 @@ export default function ImportPage() {
                 <li>喺課程網頁（例如得到網頁版某一課文稿）撳書籤</li>
                 <li>會自動彈出呢頁預覽，揀「新書」或者加入同一門課</li>
                 <li>抽錯內容？先用滑鼠揀選正文，再撳書籤，就只會收你揀咗嘅文字</li>
+                <li>📰 微信公眾號：喺電腦微信文章右上角「⋯」揀「在默認瀏覽器中打開」，再撳書籤；同一個公眾號會自動放入同一本書，每篇一章</li>
               </ol>
             </div>
             <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-5">
