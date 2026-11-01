@@ -82,7 +82,7 @@ const LUCKY_TYPES = [
 
 const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0.45  0 0 0 0 0.36  0 0 0 0 0.22  0 0 0 0.05 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>')}")`
 
-const SHOW_QUEST_BAR = false as boolean   // 第二條（打怪征途）進度條：用戶要求取消
+const SHOW_QUEST_BAR = true as boolean   // 第二條（打怪征途）進度條：用戶要求加返
 
 export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
@@ -2643,7 +2643,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             />
           </div>
 
-          {/* ①② 戰鬥征途：已按用戶要求隱藏（SHOW_QUEST_BAR） */}
+          {/* ①② 戰鬥征途：小勇者行向怪物 + 檢查點旗仔（有目標先顯示） */}
           {SHOW_QUEST_BAR && battleMonster && (
             <div className="w-full relative" style={{ height: 10, marginTop: 16 }}>
               <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#eef2ff', border: '1px solid #e0e7ff' }} />
@@ -2692,7 +2692,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           )}
 
           {/* ⑤ 🚇 閱讀地鐵線（取代原本全書薄條）：每章一個站，到站叮咚 */}
-          <SubwayLine stations={stations} index={currentIndex} total={sentences.length} marginTop={6} />
+          <SubwayLine stations={stations} index={currentIndex} total={sentences.length} marginTop={battleMonster ? 10 : 6} />
 
           {/* 📅 每日挑戰進度條（普通模式；紙本模式移入底部膠囊）*/}
           {!isPaper && dailyChallenge && !dailyChallenge.completed && (
@@ -2741,7 +2741,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             />
           </div>
 
-          {/* ①② 戰鬥征途（墨水屏版）：已按用戶要求隱藏 */}
+          {/* ①② 戰鬥征途（墨水屏版） */}
           {SHOW_QUEST_BAR && battleMonster && (
             <div className="w-full relative" style={{ height: 12, marginTop: 18 }}>
               <div className="absolute inset-0 rounded-full" style={{ background: '#fff', border: '1.5px solid #000' }} />
