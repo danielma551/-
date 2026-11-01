@@ -723,7 +723,7 @@ export default function Home() {
       {sentences.length === 0 ? (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8 landscape-tight">
           {/* Header：標題 ＋ 搜尋／同步 ＋ 工具選單 ＋ 添加書籍（主按鈕） */}
-          <header className="flex flex-wrap items-center gap-3 mb-6 sm:mb-8">
+          <header className="relative flex flex-wrap items-center gap-3 mb-6 sm:mb-8">
             <div className="flex items-center gap-2 shrink-0 whitespace-nowrap mr-auto">
               <BookOpen className="w-6 h-6 text-indigo-600" />
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-serif-tc">我的書架</h1>
@@ -733,7 +733,8 @@ export default function Home() {
               <CloudSync onSyncComplete={handleSyncComplete} />
 
               {/* 🧰 工具選單：打電話賺錢、講稿庫、轉錄、外刊、音樂、AI 設定 */}
-              <div className="relative">
+              {/* 手機：選單以 header 為錨、鋪滿闊度（唔會出界）；電腦：靠右對齊工具掣 */}
+              <div className="sm:relative">
                 <button
                   onClick={() => { setShowTools(v => !v); setShowMusicList(false) }}
                   aria-haspopup="menu"
@@ -760,7 +761,7 @@ export default function Home() {
                 {showTools && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setShowTools(false)} />
-                    <div role="menu" className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-1.5 origin-top-right" style={{ animation: 'panel-in 160ms var(--ease-out)' }}>
+                    <div role="menu" className="absolute left-0 right-0 top-full mt-2 sm:left-auto sm:top-auto sm:w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-1.5 origin-top-right" style={{ animation: 'panel-in 160ms var(--ease-out)' }}>
                       <a role="menuitem" href="/work" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
                         <Phone className="w-4 h-4 mt-0.5 text-gray-500" />
                         <span><span className="block text-sm font-medium text-gray-900">打電話賺錢</span><span className="block text-xs text-gray-500">把打電話 confirm payment 金錢化</span></span>
@@ -811,7 +812,7 @@ export default function Home() {
                 {showMusicList && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setShowMusicList(false)} />
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-3">
+                    <div className="absolute left-0 right-0 top-full mt-2 sm:left-auto sm:top-auto sm:w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-40 p-3">
                       {/* 加音源 */}
                       <div className="flex items-center gap-2 mb-2">
                         <label htmlFor="music-upload" className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
