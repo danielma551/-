@@ -59,6 +59,13 @@ async function gzip(str: string): Promise<Blob> {
 async function gunzip(buf: ArrayBuffer): Promise<string> {
   return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
 }
+// 檔案唔見咗（404/403）→ 返 null，唔好令成個同步失敗
+async function fetchMaybe(url: string): Promise<any | null> {
+  const r = await fetch(url, { cache: 'no-store' })
+  if (r.status === 404 || r.status === 403) return null
+  if (!r.ok) throw new Error(`讀取雲端檔案失敗（${r.status}）`)
+  return url.includes('.json.gz') ? JSON.parse(await gunzip(await r.arrayBuffer())) : await r.json()
+}
 async function fetchJson(url: string): Promise<any> {
   const r = await fetch(url, { cache: 'no-store' })
   if (!r.ok) throw new Error(`讀取雲端檔案失敗（${r.status}）`)
@@ -187,18 +194,29 @@ async function doSync(pullOnly = false): Promise<SyncStatus> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const meta = await getMeta(id)
     const localRev = Number(ls.get(REV_KEY) || 0)
+    let repair = false
     // 1) 拉＋合併（雲端版本有變先拉）
     if (meta.blobUrl && meta.rev !== localRev) {
-      const remote = await fetchJson(meta.blobUrl) as Manifest
-      if (await mergeRemote(remote)) changed = true
+      const remote = await fetchMaybe(meta.blobUrl) as Manifest | null
+      if (remote) {
+        if (await mergeRemote(remote)) changed = true
+      } else {
+        // 雲端清單唔見咗 → 用本機資料重新上傳一份（自動修復）；另一部機之後會再合併返佢哋嘅資料
+        repair = true
+      }
       ls.set(MANIFEST_KEY, meta.blobUrl)
       ls.set(REV_KEY, String(meta.rev))
     }
-    // 2) 推（本機有改動先推；只拉模式唔推）
-    const pushed = pullOnly ? 'skip' : await push(id, meta.rev, meta.blobUrl)
+    // 2) 推（本機有改動先推；只拉模式唔推，除非要修復）
+    const pushed = pullOnly && !repair ? 'skip' : await push(id, meta.rev, repair)
     if (pushed === 'conflict') continue          // 另一部機啱啱推咗 → 再拉再合併
     const s: SyncStatus = { state: 'ok', at: Date.now(), changed }
     ls.set(LAST_OK_KEY, String(s.at))
+    // 每 7 日清一次雲端舊檔（舊清單、被取代嘅書檔）
+    if (!pullOnly && Date.now() - Number(ls.get('msw_last_cloud_cleanup') || 0) > 7 * 86400000) {
+      ls.set('msw_last_cloud_cleanup', String(Date.now()))
+      fetch('/api/blob/cleanup', { method: 'POST' }).catch(() => {})
+    }
     emit(s)
     return s
   }
@@ -234,15 +252,18 @@ async function mergeRemote(remote: Manifest): Promise<boolean> {
     let book: BookData | undefined = lb
     let inSync = !!lb && ref.chash === base                   // 內容同雲端一致
     if (!lb) {
-      book = await fetchJson(ref.url) as BookData          // 新書（另一部機加嘅）
+      book = (await fetchMaybe(ref.url)) as BookData | undefined   // 新書（另一部機加嘅）
+      if (!book) continue                                            // 雲端檔唔見咗：等嗰部機重新上傳
       changed = true; inSync = true
     } else if (ref.chash && ref.chash !== base) {
       const localCh = chashOf(lb)
       if (localCh === ref.chash) inSync = true
       else if (localCh === base || !base) {                 // 只係雲端改咗 → 用雲端內容（保留本機進度，下面再比）
-        const rb = await fetchJson(ref.url) as BookData
-        book = { ...rb, currentIndex: lb.currentIndex, lastReadDate: lb.lastReadDate }
-        changed = true; inSync = true
+        const rb = await fetchMaybe(ref.url) as BookData | null
+        if (rb) {
+          book = { ...rb, currentIndex: lb.currentIndex, lastReadDate: lb.lastReadDate }
+          changed = true; inSync = true
+        }
       }
       // 兩邊都改咗 → 保留本機內容（等陣推上去）
     }
@@ -281,7 +302,7 @@ async function mergeRemote(remote: Manifest): Promise<boolean> {
   return changed
 }
 
-async function push(id: string, baseRev: number, oldManifest?: string): Promise<'ok' | 'skip' | 'conflict'> {
+async function push(id: string, baseRev: number, repair = false): Promise<'ok' | 'skip' | 'conflict'> {
   const books = await getAllBooksFromIDB()
   const tombs = ls.json<Record<string, number>>(TOMB_KEY, {})
   const map = ls.json<Record<string, MapEntry>>(MAP_KEY, {})
@@ -293,7 +314,11 @@ async function push(id: string, baseRev: number, oldManifest?: string): Promise<
     if (SKIP.has(b.id)) continue
     progress[b.id] = { currentIndex: b.currentIndex, lastReadDate: b.lastReadDate }
     const ch = chashOf(b)
-    let entry = map[b.id]
+    let entry: MapEntry | undefined = map[b.id]
+    // 修復模式：檢查雲端書檔仲喺唔喺度，唔見咗就重新上傳
+    if (repair && entry?.url) {
+      try { const h = await fetch(entry.url, { method: 'HEAD', cache: 'no-store' }); if (!h.ok) entry = undefined } catch { /* 網絡問題：照用 */ }
+    }
     if (!entry || entry.chash !== ch) {
       const str = JSON.stringify({ ...b, currentIndex: 0, lastReadDate: 0 })
       const blob = await upload(`book-${b.id}-${ch}.json${gz ? '.gz' : ''}`, gz ? await gzip(str) : str, {
@@ -320,7 +345,7 @@ async function push(id: string, baseRev: number, oldManifest?: string): Promise<
   }
   const str = JSON.stringify(manifest)
   const fp = fastHash(str) + '_' + str.length
-  if (fp === ls.get(PUSH_FP_KEY) && Number(ls.get(REV_KEY) || 0) === baseRev) return 'skip'
+  if (!repair && fp === ls.get(PUSH_FP_KEY) && Number(ls.get(REV_KEY) || 0) === baseRev) return 'skip'
   const mBlob = await upload(`sync-${id.slice(0, 4)}-${Date.now()}.json${gz ? '.gz' : ''}`, gz ? await gzip(str) : str, {
     access: 'public', handleUploadUrl: '/api/blob', contentType: gz ? 'application/gzip' : 'application/json',
   })
@@ -338,7 +363,8 @@ async function push(id: string, baseRev: number, oldManifest?: string): Promise<
   ls.set(PUSH_FP_KEY, fp)
   ls.set(MANIFEST_KEY, mBlob.url)
   // 舊清單＋被取代嘅舊書檔（新清單已登記先刪）
-  const urls = [...toDelete, ...(oldManifest ? [oldManifest] : [])]
+  // ⚠️ 舊清單唔即刻刪（另一部機可能啱啱讀緊）→ 交俾每週清理（只刪 1 小時前、冇被引用嘅檔）
+  const urls = [...toDelete]
   if (urls.length) fetch('/api/blob', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }) }).catch(() => {})
   return 'ok'
 }
