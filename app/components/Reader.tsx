@@ -216,6 +216,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const [curTrackIdx, setCurTrackIdx] = useState(0)
   const [showTrackPicker, setShowTrackPicker] = useState(false)
   const ytPlayerRef = useRef<any>(null)              // YouTube IFrame 播放器
+  const ytMountRef = useRef<HTMLDivElement>(null)    // YT 容器：只由 React 管理外層，內層由 YT 換成 iframe
   const currentKindRef = useRef<'file' | 'youtube'>('file')
   const musicVolumeRef = useRef(0.4)
   // 🎧 書本錄音（由 mp3 轉錄嘅書）：入閱讀自動播放
@@ -535,7 +536,15 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       await ensureYT()
       if (cancelled) { resolve(); return }
       const w = window as any
-      ytPlayerRef.current = new w.YT.Player('msw-yt-player', {
+      // ⚠️ 唔可以將 React 自己 render 嘅節點交給 YT.Player：
+      // YT 會用 iframe 直接替換該節點，React 仍然以為舊節點喺原位，
+      // 之後插入面板／目錄就會拋 insertBefore NotFoundError。
+      // 所以只交出我哋自己 createElement 嘅內層 div，外層容器留返俾 React。
+      const host = ytMountRef.current
+      if (!host) { resolve(); return }
+      const el = document.createElement('div')
+      host.appendChild(el)
+      ytPlayerRef.current = new w.YT.Player(el, {
         height: '1', width: '1',
         playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1 },
         events: {
@@ -611,6 +620,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       if (musicUrlRef.current) { URL.revokeObjectURL(musicUrlRef.current); musicUrlRef.current = null }
       try { ytPlayerRef.current?.destroy?.() } catch {}
       ytPlayerRef.current = null
+      // 清走 YT 換入嘅 iframe（外層容器本身由 React 移除）
+      try { ytMountRef.current?.replaceChildren() } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -2083,7 +2094,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           onClose={() => setShowWpPanel(false)}
         />
       )}
-      <div id="msw-yt-player" style={{ position: 'fixed', width: 1, height: 1, left: -9999, top: -9999, pointerEvents: 'none', opacity: 0 }} />
+      <div ref={ytMountRef} aria-hidden="true" style={{ position: 'fixed', width: 1, height: 1, left: -9999, top: -9999, pointerEvents: 'none', opacity: 0 }} />
 
       {/* 章節目錄抽屜（非墨水屏模式，有 chapters 才顯示）*/}
       {!isEink && showToc && chapters && chapters.length > 0 && (
