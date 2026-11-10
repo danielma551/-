@@ -174,6 +174,7 @@ export interface DisplaySettings {
   animationStyle: 'fade' | 'rise'  // 句子過場：淡入 / 向上浮現
   animationSpeed: 'slow' | 'normal' | 'fast'  // 過場速度
   columnWidth: 'narrow' | 'medium' | 'wide'   // 閱讀欄寬
+  leftHandMode: boolean        // 左手模式：左下＝下一句、左上＝上一句
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -188,6 +189,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   animationStyle: 'rise',
   animationSpeed: 'normal',
   columnWidth: 'medium',
+  leftHandMode: false,
 }
 
 export const displayStorage = {

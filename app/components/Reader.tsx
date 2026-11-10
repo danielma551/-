@@ -956,9 +956,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return
     const rect = e.currentTarget.getBoundingClientRect()
     const isRight = e.clientX - rect.left > rect.width / 2
-    // 右半邊：上半＝上一句，下半＝下一句（單手拇指易撳）；左半邊＝上一句
+    const relY = e.clientY - rect.top
+    // 右手預設：左半＝上一句；右半上半＝上一句、下半＝下一句（單手拇指易撳）
+    // 左手模式：左半上面 1/4＝上一句，其餘（左下大範圍）＝下一句
     if (isRight) {
-      if (e.clientY < window.innerHeight / 2) goToPrevious()
+      if (relY < rect.height / 2) goToPrevious()
+      else goToNext()
+    } else if (displaySettings.leftHandMode) {
+      if (relY < rect.height * 0.25) goToPrevious()
       else goToNext()
     } else {
       goToPrevious()
@@ -3404,10 +3409,23 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <div
               className="group hidden md:block"
               style={{ position: 'fixed', left: pdfOffset, top: 120, bottom: 0, width: '15%', minWidth: 90, zIndex: 20, cursor: 'pointer' }}
-              onClick={(e) => { e.stopPropagation(); goToPrevious() }}
-              title="上一句"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!displaySettings.leftHandMode) { goToPrevious(); return }
+                const r = e.currentTarget.getBoundingClientRect()
+                if (e.clientY - r.top < r.height * 0.25) goToPrevious()
+                else goToNext()
+              }}
+              title={displaySettings.leftHandMode ? '左上：上一句／左下：下一句' : '上一句'}
             >
-              <ChevronLeft className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', left: 36, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, color: '#d3c9ae' }} />
+              {displaySettings.leftHandMode ? (
+                <>
+                  <ChevronUp className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', left: 36, top: 24, width: 26, height: 26, color: '#d3c9ae' }} />
+                  <ChevronDown className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', left: 36, bottom: 24, width: 26, height: 26, color: '#d3c9ae' }} />
+                </>
+              ) : (
+                <ChevronLeft className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ position: 'absolute', left: 36, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, color: '#d3c9ae' }} />
+              )}
             </div>
             {/* 右邊：上半＝上一句，下半＝下一句 */}
             <div
@@ -3430,7 +3448,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 手機觸摸提示 */}
             <div className={`mt-6 md:hidden ${isLandscapePhone ? "!hidden" : "flex"} items-center justify-between px-2 select-none pointer-events-none`}>
               <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
-                <ChevronLeft className="w-3 h-3" /> 左邊／右上：上一句
+                {displaySettings.leftHandMode
+                  ? <><ChevronUp className="w-3 h-3" /> 左上：上一句 · 左下：下一句</>
+                  : <><ChevronLeft className="w-3 h-3" /> 左邊／右上：上一句</>}
               </span>
               <span className="text-xs flex items-center gap-1" style={{ color: paperTheme.muted }}>
                 右下：下一句 <ChevronRight className="w-3 h-3" />
@@ -3570,7 +3590,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 className="flex items-center gap-1"
                 style={{ fontSize: isEink ? 15 : 12, color: isEink ? '#333' : '#d1d5db', fontWeight: isEink ? 600 : 400 }}
               >
-                <ChevronLeft className={isEink ? 'w-5 h-5' : 'w-3 h-3'} /> 左邊／右上：上一句
+                {displaySettings.leftHandMode
+                  ? <><ChevronUp className={isEink ? 'w-5 h-5' : 'w-3 h-3'} /> 左上：上一句 · 左下：下一句</>
+                  : <><ChevronLeft className={isEink ? 'w-5 h-5' : 'w-3 h-3'} /> 左邊／右上：上一句</>}
               </span>
               <span
                 className="flex items-center gap-1"

@@ -35,6 +35,7 @@ export interface DisplaySettings {
   animationStyle: 'fade' | 'rise'
   animationSpeed: 'slow' | 'normal' | 'fast'
   columnWidth: 'narrow' | 'medium' | 'wide'
+  leftHandMode: boolean
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -49,6 +50,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   animationStyle: 'rise',
   animationSpeed: 'normal',
   columnWidth: 'medium',
+  leftHandMode: false,
 }
 
 interface DisplaySettingsProps {
@@ -380,6 +382,31 @@ export default function DisplaySettings({ settings, onSave }: DisplaySettingsPro
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* 翻頁手勢 */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">翻頁手勢</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { key: false, label: '右手', desc: '左＝上一句' },
+                      { key: true,  label: '左手', desc: '左＝下一句' },
+                    ] as const).map(opt => (
+                      <button
+                        key={String(opt.key)}
+                        onClick={() => setEditingSettings(prev => ({ ...prev, leftHandMode: opt.key }))}
+                        className={`flex flex-col items-center py-2.5 px-2 rounded-xl border-2 transition-all ${
+                          (editingSettings.leftHandMode === true) === opt.key
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        <span className="text-xs text-gray-400 mt-0.5">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">左手模式：左下大範圍＝下一句，左上約 1/4＝上一句；右邊手勢不變。</p>
                 </div>
 
                 {/* Vibration Pattern */}
