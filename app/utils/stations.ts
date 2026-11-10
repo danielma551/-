@@ -21,7 +21,7 @@ function detectHeadings(sentences: string[]): Station[] {
   const limit = Math.min(sentences.length, 200000)
   for (let i = 0; i < limit; i++) {
     const s = sentences[i]
-    if (!s || s === PARA_SEP || s.startsWith('data:image/')) continue
+    if (!s || s === PARA_SEP || s.startsWith('data:image/') || s.startsWith('img:')) continue
     const en = EN_RE.exec(s)
     if (en) { found.push({ title: clean(en[1] + (en[2] ? ' ' + en[2] : '')), startIndex: i }); continue }
     CN_RE.lastIndex = 0
@@ -50,7 +50,7 @@ function evenStations(sentences: string[]): Station[] {
   const out: Station[] = []
   for (let start = 0, k = 1; start < n; start += step, k++) {
     let j = start
-    while (j < n && (sentences[j] === PARA_SEP || sentences[j]?.startsWith('data:image/'))) j++
+    while (j < n && (sentences[j] === PARA_SEP || sentences[j]?.startsWith('data:image/') || sentences[j]?.startsWith('img:'))) j++
     const head = clean(sentences[j] || '').replace(/[，。！？,.!?；;：:]+$/, '').slice(0, 8)
     out.push({ title: `第 ${k} 站${head ? ' · ' + head : ''}`, startIndex: start, auto: true })
   }

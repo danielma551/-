@@ -262,6 +262,7 @@ export default function ImportPage() {
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm leading-relaxed outline-none focus:border-indigo-400" />
               <button onClick={() => { const t = paste.trim(); if (!t) return; accept({ title: t.split('\n')[0].slice(0, 60), text: t }) }} disabled={!paste.trim()}
                 className="mt-2 w-full py-2 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40">下一步 →</button>
+              <p className="text-xs text-gray-500 mt-3">微信公眾號文章？<a href="/wx" className="text-indigo-600 font-medium hover:underline">貼連結收入（文字＋圖片）→</a></p>
             </div>
             <p className="text-[11px] text-gray-400 text-center">🔒 只會抄你打開緊嗰一頁，內容只存喺呢部機。</p>
           </div>

@@ -42,11 +42,16 @@ import { EXTERNAL_BOOK_ID, lookupGlossary, getGlossary } from '../utils/external
 import { REVIEW_BOOK_ID, REVIEW_NOTE_PREFIX, parseReviewPage, isReviewedToday } from '../utils/reviewBook'
 import { monsterForGoal, xpForGoal, gamifyStorage, fireConfetti, getStreak, levelForXP, getStreakMultiplier, getDailyChallenge, updateDailyChallenge, DailyChallenge } from '../utils/gamify'
 
+// 圖片句：EPUB 用 data:image/，網頁／微信文章用 img:https://…
+const isImageSentence = (s: string | undefined): boolean =>
+  !!s && (s.indexOf('data:image/') === 0 || s.indexOf('img:') === 0)
+const imageSrc = (s: string): string => s.startsWith('img:') ? s.slice(4) : s
+
 // 「空白句」判定：空字串、純空白（含全形/不換行/零寬空格）都當作要跳過的空句；
 // 圖片句（data:image/）屬有效內容，不算空白。涵蓋 PARA_SEP 段落標記與舊書殘留的空句。
 const isBlankSentence = (s: string | undefined): boolean => {
   if (!s) return true
-  if (s.startsWith('data:image/')) return false
+  if (isImageSentence(s)) return false
   return s.replace(/[\s　 ​‌‍﻿]/g, '') === ''
 }
 
@@ -367,7 +372,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   useEffect(() => {
     if (!einkMode) return
     const sentence = sentences[currentIndex]
-    if (!sentence || sentence.startsWith('data:image/')) return
+    if (!sentence || isImageSentence(sentence)) return
     const measure = measureDivRef.current
     if (!measure) return
 
@@ -387,11 +392,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     // 計算有效顯示文字（含注尾碎片）：與 effectiveSentence 邏輯保持一致
     let displayText = sentence
     const nextIdx = currentIndex + 1
-    if (nextIdx < sentences.length && sentences[nextIdx]?.startsWith('data:image/')) {
+    if (nextIdx < sentences.length && isImageSentence(sentences[nextIdx])) {
       let tail = ''; let i = nextIdx + 1
       while (i < sentences.length) {
         const s = sentences[i]
-        if (s.startsWith('data:image/')) break
+        if (isImageSentence(s)) break
         if (s.length > 8) break
         tail += s; i++
       }
@@ -977,7 +982,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       return
     }
     const results = sentences.reduce<number[]>((acc, s, i) => {
-      if (!s.startsWith('data:image/') && s.toLowerCase().includes(query.toLowerCase())) acc.push(i)
+      if (!isImageSentence(s) && s.toLowerCase().includes(query.toLowerCase())) acc.push(i)
       return acc
     }, [])
     setSearchResults(results)
@@ -1028,7 +1033,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       }
       // 舊句影子：同新句交疊離場（圖片頁唔做）
       const cur = sentences[currentIndex]
-      if (cur && !cur.startsWith('data:image/')) {
+      if (cur && !isImageSentence(cur)) {
         const key = now
         setExitGhost({ key, node: renderSentenceContent(), dir })
         if (ghostTimerRef.current) clearTimeout(ghostTimerRef.current)
@@ -1359,7 +1364,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const isAnnotationTail = (idx: number) =>
     idx >= 0 &&
     idx < sentences.length &&
-    !sentences[idx]?.startsWith('data:image/') &&
+    !isImageSentence(sentences[idx]) &&
     sentences[idx].length <= 8 &&
     isAnnotationItem(sentences[idx - 1])
 
@@ -1558,7 +1563,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 只有 data:image/annotation; 才是「注」；真實圖片不觸發此邏輯
   const annotationBlock = useMemo(() => {
     const cur = sentences[currentIndex]
-    if (!cur || cur.startsWith('data:image/')) return null
+    if (!cur || isImageSentence(cur)) return null
     const nextIdx = currentIndex + 1
     if (nextIdx >= sentences.length) return null
     if (!isAnnotationItem(sentences[nextIdx])) return null   // 只對注文生效
@@ -1568,7 +1573,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     let i = nextIdx + 1
     while (i < sentences.length && afterFragments.length < 6) {
       const s = sentences[i]
-      if (s.startsWith('data:image/')) break
+      if (isImageSentence(s)) break
       if (afterFragments.length > 0 && s.length > 30) break
       afterFragments.push(s)
       i++
@@ -1585,14 +1590,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // ── 有效顯示句：當前句 + 注文後的短尾巴碎片 ──
   const effectiveSentence = useMemo(() => {
     const cur = sentences[currentIndex]
-    if (!cur || cur.startsWith('data:image/')) return cur ?? ''
+    if (!cur || isImageSentence(cur)) return cur ?? ''
     const nextIdx = currentIndex + 1
     if (nextIdx >= sentences.length || !isAnnotationItem(sentences[nextIdx])) return cur
     let tail = ''
     let i = nextIdx + 1
     while (i < sentences.length) {
       const s = sentences[i]
-      if (s.startsWith('data:image/')) break
+      if (isImageSentence(s)) break
       if (s.length > 8) break
       tail += s
       i++
@@ -1755,7 +1760,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // ＋ 加入暫存：把當前句子加入 buffer，閃爍提示
   const addToFlomoBuffer = () => {
     const sentence = effectiveSentence
-    if (!sentence || sentence.startsWith('data:image/')) return
+    if (!sentence || isImageSentence(sentence)) return
     setFlomoBuffer(prev => [...prev, sentence])
     setFlomoAddFlash(true)
     setTimeout(() => setFlomoAddFlash(false), 600)
@@ -1767,7 +1772,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const collected: string[] = []
     for (let i = currentIndex; i >= 0 && collected.length < n; i--) {
       const s = sentences[i]
-      if (s && !s.startsWith('data:image/') && s !== ' ') collected.unshift(s)
+      if (s && !isImageSentence(s) && s !== ' ') collected.unshift(s)
     }
     if (collected.length === 0) return
     setFlomoPreview(collected)
@@ -1786,7 +1791,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       for (let i = currentIndex - fallbackN; i <= currentIndex + fallbackN; i++) {
         if (i < 0 || i >= sentences.length) continue
         const s = sentences[i]
-        if (s && !s.startsWith('data:image/')) collected.push(s)
+        if (s && !isImageSentence(s)) collected.push(s)
       }
       if (collected.length === 0) return
       setFlomoPreview(collected)
@@ -1821,7 +1826,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     // 保留 PARA_SEP 作段落分隔，過濾圖片句
     const collected = sentences
       .slice(start, end + 1)
-      .filter(s => !s.startsWith('data:image/'))
+      .filter(s => !isImageSentence(s))
     // 去掉首尾多餘的 PARA_SEP
     while (collected.length > 0 && collected[0] === PARA_SEP) collected.shift()
     while (collected.length > 0 && collected[collected.length - 1] === PARA_SEP) collected.pop()
@@ -1832,7 +1837,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 🌿 核心發送函數（接受要發送的句子陣列）
   // 📝 儲存筆記到自己網站嘅「每日温習」卡庫（唔再經 Flomo）
   const sendToFlomoWithContent = async (toSend: string[]) => {
-    if (!toSend[0] || toSend[0].startsWith('data:image/')) return
+    if (!toSend[0] || isImageSentence(toSend[0])) return
     // 按 PARA_SEP 分段，段內句子 join 成一行
     const paragraphs: string[] = []
     let cur: string[] = []
@@ -3338,9 +3343,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {/* 沉浸內容：移除紙卡容器，句子直接在背景上 */}
             <div style={{ position: 'relative', padding: '8px 0', minHeight: 200 }}>
 
-              {sentences[currentIndex]?.startsWith('data:image/') ? (
+              {isImageSentence(sentences[currentIndex]) ? (
                 <img
-                  src={sentences[currentIndex]}
+                  src={imageSrc(sentences[currentIndex])}
+                  referrerPolicy="no-referrer"
                   alt="圖片"
                   style={{
                     maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 8,
@@ -3489,9 +3495,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 const extTwoCol = bookId === EXTERNAL_BOOK_ID && !isEink
                   && effectiveSentence.includes('\n\n')
                   && !effectiveSentence.startsWith('📰') && !effectiveSentence.startsWith('💡')
-                return sentences[currentIndex]?.startsWith('data:image/') ? (
+                return isImageSentence(sentences[currentIndex]) ? (
                 <img
-                  src={sentences[currentIndex]}
+                  src={imageSrc(sentences[currentIndex])}
+                  referrerPolicy="no-referrer"
                   alt="圖片"
                   className="max-w-full max-h-[60vh] object-contain rounded-lg"
                   style={{

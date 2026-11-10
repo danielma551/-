@@ -11,7 +11,7 @@
 
 import { dailyGoalStorage } from './utils/storage'
 import { useState, useEffect, useRef } from 'react'
-import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, LayoutGrid, ChevronDown, Phone, Library, Mic, Music, Download, Pencil } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, LayoutGrid, ChevronDown, Phone, Library, Mic, Music, Download, Pencil, Link2 } from 'lucide-react'
 import Reader from './components/Reader'
 import GoalModal from './components/GoalModal'
 import CloudSync from './components/CloudSync'
@@ -777,6 +777,10 @@ export default function Home() {
                       <a role="menuitem" href="/import" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
                         <Download className="w-4 h-4 mt-0.5 text-gray-500" />
                         <span><span className="block text-sm font-medium text-gray-900">從網頁收入文章</span><span className="block text-xs text-gray-500">課程／文章（例如得到）</span></span>
+                      </a>
+                      <a role="menuitem" href="/wx" className="flex items-start gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                        <Link2 className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span><span className="block text-sm font-medium text-gray-900">貼連結收入</span><span className="block text-xs text-gray-500">微信文章，文字＋圖片</span></span>
                       </a>
                       <div className="my-1 border-t border-gray-100" />
                       <button
