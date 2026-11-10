@@ -1864,6 +1864,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 找出當前在第幾個循環
   const currentCycleIdx = useMemo(() => {
     const capped = Math.min(sentencesRead, totalForProgress)
+    // 未開始讀（0 句）屬於第 1 個循環；否則會跌到「最後一個循環」而出現負進度
+    if (capped <= 0) return 0
     for (let i = 0; i < cycleData.boundaries.length - 1; i++) {
       if (capped > cycleData.boundaries[i] && capped <= cycleData.boundaries[i + 1]) return i
     }
@@ -1921,7 +1923,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   }
 
   // ── ④ 合併單條：一條 bar 顯示成個循環（普通 + 墨水屏共用數值） ──
-  const mergedBarWidth = (cycleSize > 0 ? posInCycle / cycleSize : 0) * maxFill * 100
+  const mergedBarWidth = Math.min(100, Math.max(0, (cycleSize > 0 ? posInCycle / cycleSize : 0) * maxFill * 100))
   // ① 戰鬥征途：勇者位置 = 目標進度
   const questPct = readingGoal > 0 ? Math.min((Math.max(sentencesRead, 0) / readingGoal) * 100, 100) : 0
   // 🚇 地鐵站：章節 → 偵測標題 → 平均分站（每本書計一次）

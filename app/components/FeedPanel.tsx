@@ -90,7 +90,11 @@ export default function FeedPanel({ onReadArticle }: FeedPanelProps) {
       const plain = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'))
       return plain ? plain[1].trim() : ''
     }
-    const stripHtml = (h: string) => h.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim()
+    const decodeEntities = (s: string) => s
+      .replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"').replace(/&#0*39;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+      .replace(/&amp;/gi, '&')
+    const stripHtml = (h: string) => decodeEntities(decodeEntities(h).replace(/<[^>]+>/g, ' ')).replace(/\s{2,}/g, ' ').trim()
     const fmtDate = (s: string) => {
       if (!s) return ''
       const d = new Date(s)

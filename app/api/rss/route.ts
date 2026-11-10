@@ -6,20 +6,30 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
+// 解 HTML 實體（RSS 經常把正文 HTML 轉義成 &lt;div&gt;）
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/gi, '&')
+}
+
 // 把 HTML 字串去掉所有標籤，只留純文字
 function stripHtml(html: string): string {
-  return html
+  // 先解一次實體，否則 <description> 內的 &lt;div&gt; 會在 strip 之後才變成真標籤
+  let s = decodeEntities(html)
+  s = s
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+  // 再解一次，處理 &amp;nbsp; 這類雙重轉義
+  s = decodeEntities(s)
+  return s.replace(/\s{2,}/g, ' ').trim()
 }
 
 // 把純文字切成句子陣列（與上傳路由的分句邏輯保持一致）

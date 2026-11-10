@@ -643,6 +643,16 @@ export interface FeedSource {
 
 // RSS 訂閱的 localStorage 鍵名
 const FEED_STORAGE_KEY = 'reading-feeds'
+const FEED_SEEDED_KEY = 'reading-feeds-seeded-v1'
+
+// 內建訂閱：首次使用自動加入；用家刪除後唔會再加返
+const BUILTIN_FEEDS: FeedSource[] = [
+  {
+    id: 'builtin-hecaitou',
+    name: '槽邊往事（和菜頭）',
+    url: 'https://www.hecaitou.com/feeds/posts/default?alt=rss&max-results=25',
+  },
+]
 
 export const feedStorage = {
   // 取得所有訂閱來源
@@ -650,7 +660,15 @@ export const feedStorage = {
     if (typeof window === 'undefined') return []
     try {
       const data = localStorage.getItem(FEED_STORAGE_KEY)
-      return data ? JSON.parse(data) : []
+      const parsed = data ? JSON.parse(data) : []
+      let feeds: FeedSource[] = Array.isArray(parsed) ? parsed : []
+      // 一次性預載：舊有用戶都會見到內建訂閱
+      if (!localStorage.getItem(FEED_SEEDED_KEY)) {
+        if (!feeds.some(f => f.url.includes('hecaitou.com'))) feeds = [...feeds, ...BUILTIN_FEEDS]
+        localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(feeds))
+        localStorage.setItem(FEED_SEEDED_KEY, '1')
+      }
+      return feeds
     } catch { return [] }
   },
 
