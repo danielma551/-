@@ -208,6 +208,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (typeof window === 'undefined') return 0.4
     return parseFloat(localStorage.getItem('reader-music-volume') ?? '0.4')
   })
+  const musicEnabledRef = useRef(true)
+  useEffect(() => { musicEnabledRef.current = musicEnabled }, [musicEnabled])
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [hasMusicFile, setHasMusicFile] = useState(false)
   const [musicCurrentTime, setMusicCurrentTime] = useState(0)
@@ -607,6 +609,25 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
     loadTrackRef.current = loadTrack
 
+    // iPad/Safari：重新入閱讀器時，新 audio 的 play() 可能被當成自動播放而 block。
+    // 等用戶第一次觸碰（通常係翻頁）就即刻恢復，避免「第二次入去冇聲」。
+    const resumeMusic = () => {
+      if (!musicEnabledRef.current) return
+      if (currentKindRef.current === 'youtube') {
+        try {
+          const p = ytPlayerRef.current
+          if (p && p.getPlayerState && p.getPlayerState() !== 1) p.playVideo?.()
+        } catch {}
+      } else {
+        const a = audioRef.current
+        if (a && a.paused && a.src) a.play().catch(() => {})
+      }
+    }
+    document.addEventListener('pointerdown', resumeMusic, true)
+    document.addEventListener('touchstart', resumeMusic, true)
+    const onVisible = () => { if (document.visibilityState === 'visible') resumeMusic() }
+    document.addEventListener('visibilitychange', onVisible)
+
     listTracks().then(list => {
       if (cancelled || list.length === 0) return
       trackListRef.current = list
@@ -620,6 +641,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     })
     return () => {
       cancelled = true
+      document.removeEventListener('pointerdown', resumeMusic, true)
+      document.removeEventListener('touchstart', resumeMusic, true)
+      document.removeEventListener('visibilitychange', onVisible)
       stopYtPoll()
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
       if (musicUrlRef.current) { URL.revokeObjectURL(musicUrlRef.current); musicUrlRef.current = null }
