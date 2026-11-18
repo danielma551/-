@@ -9,6 +9,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Type, Upload, X, Check } from 'lucide-react'
 import { fontStorage } from '../utils/storage'
+import { WEB_FONTS, loadWebFont, ensureWebFontCss, webFontByFamily } from '../utils/webFonts'
 
 interface FontSelectorProps {
   currentFont: string
@@ -24,21 +25,7 @@ const DEFAULT_FONTS = [
   { name: 'Times New Roman', value: 'Times New Roman, serif' },
 ]
 
-// 需要從網路動態下載的字型
-const WEB_FONTS = [
-  {
-    name: '霞鶩文楷',
-    value: 'LXGW WenKai',
-    url: 'https://raw.githubusercontent.com/lxgw/LxgwWenKai/main/fonts/TTF/LXGWWenKai-Regular.ttf',
-    desc: '簡繁通用楷書，基於 Klee One',
-  },
-  {
-    name: '芫荽',
-    value: 'Iansui',
-    url: 'https://raw.githubusercontent.com/ButTaiwan/iansui/main/fonts/ttf/Iansui-Regular.ttf',
-    desc: '台灣教育楷書（繁體為主）',
-  },
-]
+// 網路字型由 utils/webFonts.ts 集中管理（子集 webfont，唔使下載成個 TTF）
 
 export default function FontSelector({ currentFont, onFontChange }: FontSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -55,26 +42,27 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
     const savedFont = fontStorage.getFont()
     if (savedFont) {
       setCustomFont({ name: `📎 ${savedFont.fontFamily}`, value: savedFont.fontFamily })
-      // 如果儲存的是網路字型，嘗試自動重新載入
-      const webFont = WEB_FONTS.find(f => f.value === savedFont.fontFamily)
-      if (webFont && !loadedWebFonts.current.has(webFont.value)) {
-        loadWebFont(webFont.value, webFont.url)
+      // 如果儲存的是網路字型，重新注入 CSS 令佢跨 session 都生效
+      const webFont = webFontByFamily(savedFont.fontFamily)
+      if (webFont) {
+        ensureWebFontCss(webFont.family)
+        setWebFontStatus(s => ({ ...s, [webFont.family]: 'loaded' }))
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const loadWebFont = async (fontName: string, url: string) => {
-    if (loadedWebFonts.current.has(fontName)) return
-    setWebFontStatus(s => ({ ...s, [fontName]: 'loading' }))
+  const loadFont = async (fontFamily: string) => {
+    if (loadedWebFonts.current.has(fontFamily)) return
+    setWebFontStatus(s => ({ ...s, [fontFamily]: 'loading' }))
+    const wf = webFontByFamily(fontFamily)
+    if (!wf) { setWebFontStatus(s => ({ ...s, [fontFamily]: 'error' })); return }
     try {
-      const fontFace = new FontFace(fontName, `url(${url})`)
-      await fontFace.load()
-      document.fonts.add(fontFace)
-      loadedWebFonts.current.add(fontName)
-      setWebFontStatus(s => ({ ...s, [fontName]: 'loaded' }))
+      await loadWebFont(wf)
+      loadedWebFonts.current.add(fontFamily)
+      setWebFontStatus(s => ({ ...s, [fontFamily]: 'loaded' }))
     } catch {
-      setWebFontStatus(s => ({ ...s, [fontName]: 'error' }))
+      setWebFontStatus(s => ({ ...s, [fontFamily]: 'error' }))
     }
   }
 
@@ -205,20 +193,20 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
               <div className="border-t border-gray-100 mt-1 pt-1">
                 <p className="px-4 py-1 text-[10px] text-gray-400 uppercase tracking-wide">網路字型</p>
                 {WEB_FONTS.map((font) => {
-                  const status = webFontStatus[font.value] ?? 'idle'
+                  const status = webFontStatus[font.family] ?? 'idle'
                   return (
                     <button
-                      key={font.value}
+                      key={font.family}
                       onClick={async () => {
-                        await loadWebFont(font.value, font.url)
-                        onFontChange(font.value)
+                        await loadFont(font.family)
+                        onFontChange(font.family)
                         setIsOpen(false)
                       }}
                       disabled={status === 'loading'}
                       className="w-full px-4 py-2.5 text-left hover:bg-purple-50 transition-colors flex items-center justify-between disabled:opacity-60"
                     >
                       <span className="flex flex-col gap-0.5">
-                        <span className="text-gray-700 text-sm" style={status === 'loaded' ? { fontFamily: font.value } : {}}>
+                        <span className="text-gray-700 text-sm" style={status === 'loaded' ? { fontFamily: font.family } : {}}>
                           {font.name}
                         </span>
                         <span className="text-[10px] text-gray-400">{font.desc}</span>
@@ -230,7 +218,7 @@ export default function FontSelector({ currentFont, onFontChange }: FontSelector
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                           </svg>
                         )}
-                        {status === 'loaded' && currentFont === font.value && <Check className="w-4 h-4 text-purple-500" />}
+                        {status === 'loaded' && currentFont === font.family && <Check className="w-4 h-4 text-purple-500" />}
                         {status === 'error' && <span className="text-[10px] text-red-400">失敗</span>}
                       </span>
                     </button>
