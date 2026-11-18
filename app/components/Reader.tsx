@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Home, BookOpen, Target, CheckCircle, Check, Search, X, CloudRain, List, Music, VolumeX, Volume2, Network, SkipBack, SkipForward } from 'lucide-react'
-import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, bookReadingStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
+import { fontStorage, shortcutsStorage, displayStorage, historyStorage, completionStorage, speedStorage, reviewStorage, bookReadingStorage, dailyGoalStorage, KeyboardShortcuts, DEFAULT_SHORTCUTS, DisplaySettings, DEFAULT_DISPLAY_SETTINGS, BookData, ChapterMark } from '../utils/storage'
 import { updateBookProgressInIDB, getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 import { proofreadLines } from '../utils/proofread'
 import { listTracks, getTrackObjectURL } from '../utils/musicDB'
@@ -1514,6 +1514,36 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   // 讀咗幾句＝由開始位置向前揭過幾多個「真句」（唔計段落分隔／注文；同每日統計一致）
   const sentencesRead = useMemo(() => countStops(startIndex, currentIndex), [startIndex, currentIndex, sentences])   // eslint-disable-line react-hooks/exhaustive-deps
   const totalForProgress = readingGoal > 0 ? readingGoal : sentences.length
+
+  // 達標後的小結：今日目標仲差幾句＋用最近閱讀速度估本書幾時讀完
+  const goalSummary = useMemo(() => {
+    const daily = dailyGoalStorage.get()
+    const today = dailyGoalStorage.todayRead(bookId)
+    const remainingToday = Math.max(0, daily - today)
+    const remainingBook = Math.max(0, sentences.length - 1 - currentIndex)
+
+    // 最近 7 個「有讀嘅日」平均每日幾句（冇數據就用每日目標）
+    const days = bookReadingStorage.getBookDays(bookId)
+    let sum = 0, active = 0
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i)
+      const c = days[d.toLocaleDateString('en-CA')] || 0
+      sum += c
+      if (c > 0) active++
+    }
+    const avg = active > 0 ? Math.round(sum / active) : 0
+    const pace = Math.max(1, avg || daily || readingGoal || 1)
+    const paceLabel = avg > 0 ? '最近平均' : '每日目標'
+    const daysNeeded = remainingBook > 0 ? Math.ceil(remainingBook / pace) : 0
+    const eta = new Date(); eta.setDate(eta.getDate() + daysNeeded)
+    const etaLabel = remainingBook <= 0
+      ? '呢本書已經讀完 🎉'
+      : daysNeeded <= 0 ? '今日'
+      : daysNeeded === 1 ? '明日'
+      : `${eta.getMonth() + 1}月${eta.getDate()}日`
+
+    return { daily, today, remainingToday, remainingBook, avg, pace, paceLabel, daysNeeded, etaLabel }
+  }, [bookId, currentIndex, sentences.length, readingGoal])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── ⚔️ 怪物戰鬥條（代替循環進度條；只在非墨水屏 + 有目標時使用） ──
   const battleMonster = readingGoal > 0 ? monsterForGoal(readingGoal) : null
@@ -3890,6 +3920,35 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 </p>
               </>
             )}
+
+            {/* 🎯 達標小結：今日仲差幾句＋預計幾時讀完本書 */}
+            <div
+              style={{
+                marginTop: 16, padding: '12px 14px', textAlign: 'left',
+                background: isEink ? '#fff' : '#f8fafc',
+                border: isEink ? '1.5px solid #000' : '1px solid #e2e8f0',
+                borderRadius: isEink ? 0 : 12,
+                color: isEink ? '#000' : '#334155',
+                fontSize: 13, lineHeight: 1.65,
+              }}
+            >
+              <p style={{ margin: 0, fontWeight: 700 }}>
+                🎯 今日目標 {goalSummary.today} / {goalSummary.daily} 句
+                {goalSummary.remainingToday > 0 ? ` · 仲有 ${goalSummary.remainingToday} 句` : ' · 已達標 ✅'}
+              </p>
+              {goalSummary.remainingBook > 0 ? (
+                <>
+                  <p style={{ margin: '4px 0 0' }}>
+                    📖 全書仲有 {goalSummary.remainingBook} 句 · 預計 {goalSummary.etaLabel}（約 {goalSummary.daysNeeded} 日）
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: isEink ? '#333' : '#64748b' }}>
+                    以{goalSummary.paceLabel}每日 {goalSummary.pace} 句計
+                  </p>
+                </>
+              ) : (
+                <p style={{ margin: '4px 0 0' }}>🎉 已經讀到最後一句</p>
+              )}
+            </div>
 
             <div className="flex items-center justify-center gap-3 flex-wrap" style={{ marginTop: 20 }}>
               {canRematch && (
