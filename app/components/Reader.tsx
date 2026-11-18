@@ -1522,18 +1522,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     const remainingToday = Math.max(0, daily - today)
     const remainingBook = Math.max(0, sentences.length - 1 - currentIndex)
 
-    // 最近 7 個「有讀嘅日」平均每日幾句（冇數據就用每日目標）
+    // 最近 14 日總句數 ÷ 14（包括冇讀嘅日），更貼近真實每日進度
     const days = bookReadingStorage.getBookDays(bookId)
-    let sum = 0, active = 0
-    for (let i = 0; i < 7; i++) {
+    let sum = 0
+    for (let i = 0; i < 14; i++) {
       const d = new Date(); d.setDate(d.getDate() - i)
-      const c = days[d.toLocaleDateString('en-CA')] || 0
-      sum += c
-      if (c > 0) active++
+      sum += days[d.toLocaleDateString('en-CA')] || 0
     }
-    const avg = active > 0 ? Math.round(sum / active) : 0
+    const avg = Math.round(sum / 14)
     const pace = Math.max(1, avg || daily || readingGoal || 1)
-    const paceLabel = avg > 0 ? '最近平均' : '每日目標'
+    const paceLabel = avg > 0 ? '最近 14 日平均每日' : '每日目標'
     const daysNeeded = remainingBook > 0 ? Math.ceil(remainingBook / pace) : 0
     const eta = new Date(); eta.setDate(eta.getDate() + daysNeeded)
     const etaLabel = remainingBook <= 0
@@ -3942,7 +3940,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     📖 全書仲有 {goalSummary.remainingBook} 句 · 預計 {goalSummary.etaLabel}（約 {goalSummary.daysNeeded} 日）
                   </p>
                   <p style={{ margin: '2px 0 0', fontSize: 11, color: isEink ? '#333' : '#64748b' }}>
-                    以{goalSummary.paceLabel}每日 {goalSummary.pace} 句計
+                    以{goalSummary.paceLabel} {goalSummary.pace} 句計
                   </p>
                 </>
               ) : (
