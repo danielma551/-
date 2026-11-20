@@ -71,7 +71,7 @@ function makeClient(ws) {
   ws.onclose = () => { for (const [, { rej }] of pending) rej(new Error('WS closed')); pending.clear() }
   const send = (method, params = {}) => new Promise((res, rej) => {
     const i = ++id
-    const timer = setTimeout(() => { if (pending.has(i)) { pending.delete(i); rej(new Error('CDP timeout: ' + method)) } }, 30000)
+    const timer = setTimeout(() => { if (pending.has(i)) { pending.delete(i); rej(new Error('CDP timeout: ' + method)) } }, 90000)
     pending.set(i, { res: m => { clearTimeout(timer); res(m) }, rej })
     ws.send(JSON.stringify({ id: i, method, params }))
   })
@@ -182,12 +182,17 @@ async function fetchArticleList(c, detailId) {
     console.log(`  ⚠️ article_list 回應 status=${res?.status}（可能未登入）`)
     return []
   }
+  const seenEnid = new Set()
   const arts = (data?.c?.article_list || []).map(a => ({
     enid: a.enid || a.id_str || String(a.id),
     title: (a.title || '').trim(),
     publish: a.publish_time || 0,
     column: ((a.share_title || '').split(/[|｜]/)[0] || '').trim(),
-  }))
+  })).filter(a => {
+    if (!a.enid || seenEnid.has(a.enid)) return false
+    seenEnid.add(a.enid)
+    return true
+  })
   return arts
 }
 
@@ -252,12 +257,21 @@ async function main() {
 
   const groups = {}
   for (const a of toFetch) {
-    await c.navigate(`https://www.dedao.cn/course/article?id=${a.enid}`); await sleep(6000)
+    try {
+      await c.navigate(`https://www.dedao.cn/course/article?id=${a.enid}`)
+    } catch (e) {
+      console.log(`  ⚠️ 開啟 ${a.title.slice(0, 20)} 失敗（${e.message}），重試一次…`)
+      await sleep(3000)
+      await c.navigate(`https://www.dedao.cn/course/article?id=${a.enid}`)
+    }
+    await sleep(6000)
     const d = await c.eval(EXTRACT_ARTICLE)
     const col = (d.column || a.column || '得到文章').trim() || '得到文章'
     ;(groups[col] = groups[col] || []).push({ title: d.title || a.title, text: d.text, imgs: d.imgs })
     seen[a.enid] = 1
+    try { writeFileSync(SEEN_FILE, JSON.stringify(seen, null, 2)) } catch { /* ignore */ }
     console.log(`  ✔ ${(d.title || a.title).slice(0, 40)} → ${col}`)
+    await sleep(1500)   // 放慢，避免被得到限流
   }
 
   // 返去網站 origin 先讀現有書（IndexedDB 係跟 origin，去錯頁會讀/寫落錯地方）
