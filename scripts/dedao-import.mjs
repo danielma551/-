@@ -65,10 +65,15 @@ function makeClient(ws) {
   const pending = new Map()
   ws.onmessage = e => {
     const m = JSON.parse(e.data)
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id) }
+    if (m.id && pending.has(m.id)) { const { res } = pending.get(m.id); pending.delete(m.id); res(m) }
   }
-  const send = (method, params = {}) => new Promise(res => {
-    const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params }))
+  ws.onerror = () => { for (const [, { rej }] of pending) rej(new Error('WS error')); pending.clear() }
+  ws.onclose = () => { for (const [, { rej }] of pending) rej(new Error('WS closed')); pending.clear() }
+  const send = (method, params = {}) => new Promise((res, rej) => {
+    const i = ++id
+    const timer = setTimeout(() => { if (pending.has(i)) { pending.delete(i); rej(new Error('CDP timeout: ' + method)) } }, 30000)
+    pending.set(i, { res: m => { clearTimeout(timer); res(m) }, rej })
+    ws.send(JSON.stringify({ id: i, method, params }))
   })
   return {
     send,
@@ -80,10 +85,22 @@ function makeClient(ws) {
   }
 }
 
-async function getPageClient() {
-  const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
-  const t = list.find(x => x.type === 'page')
-  if (!t) throw new Error('搵唔到 page target')
+async function newPageClient() {
+  // 開一個全新分頁並推到最前，確保用戶登入／睇到嘅就係程式控制嘅嗰個分頁
+  const ver = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json()
+  const bws = await connectWs(ver.webSocketDebuggerUrl)
+  const bc = makeClient(bws)
+  const r = await bc.send('Target.createTarget', { url: 'about:blank' })
+  const tid = r.result.targetId
+  await bc.send('Target.activateTarget', { targetId: tid })
+  let t = null
+  for (let i = 0; i < 20; i++) {
+    const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
+    t = list.find(x => x.id === tid)
+    if (t) break
+    await sleep(300)
+  }
+  if (!t) throw new Error('開唔到新分頁')
   const ws = await connectWs(t.webSocketDebuggerUrl)
   return makeClient(ws)
 }
@@ -157,8 +174,14 @@ async function fetchArticleList(c, detailId) {
     is_unlearn: false, max_id: 0, max_order_num: 0, reverse: true,
     since_id: 0, since_order_num: 0, unlearn_switch: false,
   })
-  const js = `(async()=>{ const r=await fetch('/api/pc/bauhinia/pc/class/purchase/article_list',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(body)}}); return await r.json() })()`
-  const data = await c.eval(js)
+  const js = `(async()=>{ const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),20000); try { const r=await fetch('/api/pc/bauhinia/pc/class/purchase/article_list',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(body)},signal:ctl.signal}); const t=await r.text(); clearTimeout(tm); return { status:r.status, text:t } } catch(e){ clearTimeout(tm); return { status:0, text:String(e.name||e.message) } } })()`
+  const res = await c.eval(js)
+  let data = null
+  try { data = res?.text ? JSON.parse(res.text) : null } catch { data = null }
+  if (!data || res?.status !== 200) {
+    console.log(`  ⚠️ article_list 回應 status=${res?.status}（可能未登入）`)
+    return []
+  }
   const arts = (data?.c?.article_list || []).map(a => ({
     enid: a.enid || a.id_str || String(a.id),
     title: (a.title || '').trim(),
@@ -178,7 +201,7 @@ async function main() {
 
   await launchChrome()
   console.log('✅ Chrome 已開啟（請留返個視窗用嚟登入）')
-  const c = await getPageClient()
+  const c = await newPageClient()
   console.log('🔌 已連線瀏覽器')
   await c.send('Page.enable')
 
@@ -196,6 +219,7 @@ async function main() {
 
   // import
   await c.navigate(SITE_URL); await sleep(5000)
+  console.log('🌐 網站已載入')
   const seen = existsSync(SEEN_FILE) ? JSON.parse(readFileSync(SEEN_FILE, 'utf8')) : {}
   const toFetch = [] // { enid, title, publish, column }
 
@@ -203,6 +227,7 @@ async function main() {
     const detailId = detailIdOf(colUrl)
     if (!detailId) { console.log(`⚠️ 唔識由 ${colUrl} 拆 detail id，跳過`); continue }
     await c.navigate(colUrl); await sleep(6000)
+    console.log('📄 專欄頁已載入，檢查登入…')
     if (!(await c.eval(HAS_COURSE_LIST))) {
       console.log('🔐 未登入，去觸發登入牆…')
       await c.navigate(LOGIN_TRIGGER); await sleep(5000)
@@ -212,6 +237,7 @@ async function main() {
     await sleep(3000)
     // 專欄名優先攞 DOM，再 fallback 用 share_title
     const domColumn = await c.eval(`(document.querySelector('.course-title')?.innerText || '').trim()`)
+    console.log('🔎 攞文章列表…')
     const arts = await fetchArticleList(c, detailId)
     console.log(`📋 ${colUrl} → 攞到 ${arts.length} 篇（最新喺前）`)
     for (const a of arts) {
@@ -234,6 +260,8 @@ async function main() {
     console.log(`  ✔ ${(d.title || a.title).slice(0, 40)} → ${col}`)
   }
 
+  // 返去網站 origin 先讀現有書（IndexedDB 係跟 origin，去錯頁會讀/寫落錯地方）
+  await c.navigate(SITE_URL); await sleep(6000)
   const existing = await c.eval(`(async()=>{ const db=await new Promise((res,rej)=>{const r=indexedDB.open('${DB_NAME}',1);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);r.onupgradeneeded=(e)=>{const d=e.target.result;if(!d.objectStoreNames.contains('${STORE_NAME}'))d.createObjectStore('${STORE_NAME}',{keyPath:'id'})}}); return await new Promise((res,rej)=>{const q=db.transaction('${STORE_NAME}','readonly').objectStore('${STORE_NAME}').getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error)}) })()`)
 
   const now = Date.now()
