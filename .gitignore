@@ -41,3 +41,4 @@ app/components/ReviewCards.tsx
 # 得到匯入器本地資料（唔好 commit）
 scripts/dedao-seen.json
 scripts/dedao-dump-*.json
+.dedao-profile/
