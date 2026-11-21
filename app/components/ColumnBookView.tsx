@@ -3,7 +3,7 @@
 // 【專欄書內頁】書架撳入「得到頭条」呢類專欄書，先顯示文章列表（標題／摘要／日期／閱讀），
 // 撳文章先入閱讀器。
 
-import { BookData } from '../utils/storage'
+import { BookData, columnReadStorage } from '../utils/storage'
 import { ArrowLeft, Rss } from 'lucide-react'
 
 const PARA_SEP = '\u2029'
@@ -58,24 +58,29 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
             </div>
           </div>
 
-          {chapters.map(ch => (
-            <button
-              key={`${ch.startIndex}-${ch.title}`}
-              onClick={() => onOpenArticle(ch.startIndex)}
-              className="w-full text-left px-5 py-4 border-t border-gray-50 hover:bg-blue-50 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug">{ch.title}</p>
-                  <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{summaryOf(book, ch)}</p>
+          {chapters.map(ch => {
+            const read = columnReadStorage.isRead(`${book.id}:${ch.startIndex}`)
+            return (
+              <button
+                key={`${ch.startIndex}-${ch.title}`}
+                onClick={() => onOpenArticle(ch.startIndex)}
+                className={`w-full text-left px-5 py-4 border-t border-gray-50 transition-colors ${read ? 'opacity-50 hover:bg-gray-50' : 'hover:bg-blue-50'}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium line-clamp-2 leading-snug ${read ? 'text-gray-400' : 'text-gray-800'}`}>{ch.title}</p>
+                    <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{summaryOf(book, ch)}</p>
+                  </div>
+                  <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                    <span className="text-xs text-gray-300 whitespace-nowrap">{relDate(ch.date)}</span>
+                    {read
+                      ? <span className="text-xs text-green-400">✓ 已讀</span>
+                      : <span className="text-xs text-blue-400">閱讀</span>}
+                  </div>
                 </div>
-                <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                  <span className="text-xs text-gray-300 whitespace-nowrap">{relDate(ch.date)}</span>
-                  <span className="text-xs text-blue-400">閱讀</span>
-                </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            )
+          })}
 
           {chapters.length === 0 && (
             <p className="px-5 py-10 text-center text-sm text-gray-400">仲未有任何文章</p>

@@ -9,7 +9,7 @@
 
 'use client'
 
-import { dailyGoalStorage } from './utils/storage'
+import { dailyGoalStorage, columnReadStorage } from './utils/storage'
 import { PARA_SEP } from './utils/epubParser'
 import { useState, useEffect, useRef } from 'react'
 import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, LayoutGrid, ChevronDown, Phone, Library, Mic, Music, Download, Pencil, Link2 } from 'lucide-react'
@@ -259,6 +259,7 @@ export default function Home() {
   // 專欄書（例如得到頭条）：撳書先入文章列表頁
   const [columnBook, setColumnBook] = useState<BookData | null>(null)
   const readingFromColumnRef = useRef<BookData | null>(null)
+  const columnArticleKeyRef = useRef<string | null>(null)
   const [columnReadOffset, setColumnReadOffset] = useState(0)
   // 控制是否顯示每日練習畫面
   const [showVocab, setShowVocab] = useState(false)
@@ -433,6 +434,7 @@ export default function Home() {
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
       setActiveChapters(pendingBook.chapters)
+      columnArticleKeyRef.current = null
       setColumnReadOffset(0)
       setReadingGoal(goal)
       setShowGoalModal(false)
@@ -447,6 +449,7 @@ export default function Home() {
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
       setActiveChapters(pendingBook.chapters)
+      columnArticleKeyRef.current = null
       setColumnReadOffset(0)
       setReadingGoal(0)
       setShowGoalModal(false)
@@ -657,6 +660,7 @@ export default function Home() {
     setBookId(book.id)
     setCurrentIndex(sentenceIndex)
     setActiveChapters(book.chapters)
+    columnArticleKeyRef.current = null
     setColumnReadOffset(0)
     setReadingGoal(0)
     setShowGoalModal(false)
@@ -679,6 +683,7 @@ export default function Home() {
     const saved = book.currentIndex || 0
     const offset = (saved >= base && saved < end) ? saved - base : 0
     readingFromColumnRef.current = book
+    columnArticleKeyRef.current = `${book.id}:${ch.startIndex}`
     setColumnBook(null)
     setColumnReadOffset(base)
     setSentences(slice)
@@ -695,8 +700,15 @@ export default function Home() {
     setBookTitle(title)
     setBookId('article-' + Date.now())
     setCurrentIndex(0)
+    columnArticleKeyRef.current = null
     setColumnReadOffset(0)
     setReadingGoal(0)
+  }
+
+  // 閱讀器讀到最後一句：RSS 文章記錄連結；專欄文章標記已讀
+  const handleReaderArticleFinished = () => {
+    if (readingArticleLink) handleArticleFinished()
+    if (columnArticleKeyRef.current) columnReadStorage.markRead(columnArticleKeyRef.current)
   }
 
   // 用戶讀完文章最後一句：將文章連結寫入 localStorage，FeedPanel 再次挂載時讀取
@@ -1404,7 +1416,7 @@ export default function Home() {
           chapters={activeChapters}
           progressOffset={columnReadOffset}
           onReset={handleReset}
-          onArticleFinished={readingArticleLink ? handleArticleFinished : undefined}
+          onArticleFinished={handleReaderArticleFinished}
           onOpenBook={handleOpenBookAtSentence}
         />
       )}

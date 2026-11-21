@@ -655,6 +655,36 @@ const BUILTIN_FEEDS: FeedSource[] = [
   },
 ]
 
+// 專欄文章已讀記錄（key = `${bookId}:${chapterStartIndex}`）
+const COLUMN_READ_KEY = 'reading-column-read'
+export const columnReadStorage = {
+  getAll(): string[] {
+    if (typeof window === 'undefined') return []
+    try { const raw = localStorage.getItem(COLUMN_READ_KEY); return raw ? JSON.parse(raw) : [] } catch { return [] }
+  },
+  isRead(key: string): boolean {
+    return this.getAll().includes(key)
+  },
+  markRead(key: string): void {
+    if (typeof window === 'undefined') return
+    try {
+      const all = this.getAll()
+      if (!all.includes(key)) { all.push(key); localStorage.setItem(COLUMN_READ_KEY, JSON.stringify(all)) }
+    } catch { /* ignore */ }
+  },
+  // 合併另一部機嘅已讀記錄，回傳有冇改動
+  merge(keys: string[]): boolean {
+    if (typeof window === 'undefined' || !Array.isArray(keys) || !keys.length) return false
+    try {
+      const all = this.getAll()
+      let changed = false
+      for (const k of keys) if (typeof k === 'string' && !all.includes(k)) { all.push(k); changed = true }
+      if (changed) localStorage.setItem(COLUMN_READ_KEY, JSON.stringify(all))
+      return changed
+    } catch { return false }
+  },
+}
+
 export const feedStorage = {
   // 取得所有訂閱來源
   getFeeds(): FeedSource[] {
