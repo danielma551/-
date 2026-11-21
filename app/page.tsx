@@ -10,6 +10,7 @@
 'use client'
 
 import { dailyGoalStorage } from './utils/storage'
+import { PARA_SEP } from './utils/epubParser'
 import { useState, useEffect, useRef } from 'react'
 import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, LayoutGrid, ChevronDown, Phone, Library, Mic, Music, Download, Pencil, Link2 } from 'lucide-react'
 import Reader from './components/Reader'
@@ -258,6 +259,7 @@ export default function Home() {
   // 專欄書（例如得到頭条）：撳書先入文章列表頁
   const [columnBook, setColumnBook] = useState<BookData | null>(null)
   const readingFromColumnRef = useRef<BookData | null>(null)
+  const [columnReadOffset, setColumnReadOffset] = useState(0)
   // 控制是否顯示每日練習畫面
   const [showVocab, setShowVocab] = useState(false)
   // 追加內容：記錄哪本書正在處理中
@@ -431,6 +433,7 @@ export default function Home() {
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
       setActiveChapters(pendingBook.chapters)
+      setColumnReadOffset(0)
       setReadingGoal(goal)
       setShowGoalModal(false)
       setPendingBook(null)
@@ -444,6 +447,7 @@ export default function Home() {
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
       setActiveChapters(pendingBook.chapters)
+      setColumnReadOffset(0)
       setReadingGoal(0)
       setShowGoalModal(false)
       setPendingBook(null)
@@ -486,7 +490,10 @@ export default function Home() {
     setUploadError('')
     getAllBooksFromIDB().then(setSavedBooks)
     scheduleSync(800)   // ☁️ 讀完離開 → 推進度上雲
-    if (backToColumn) setColumnBook(backToColumn)   // 由專欄文章入嚟 → 返文章列表
+    if (backToColumn) {
+      // 重新由 IDB 攞最新進度，返文章列表時可以續讀
+      getBookFromIDB(backToColumn.id).then(b => setColumnBook(b || backToColumn))
+    }
   }
 
   // ☁️ 自動同步：開網站拉一次、切走 App 推一次、每 2 分鐘檢查；另一部機有更新就刷新書架
@@ -650,18 +657,45 @@ export default function Home() {
     setBookId(book.id)
     setCurrentIndex(sentenceIndex)
     setActiveChapters(book.chapters)
+    setColumnReadOffset(0)
     setReadingGoal(0)
     setShowGoalModal(false)
     setPendingBook(null)
   }
 
+  // 由專欄文章列表打開一篇文章：只讀呢一篇（進度条按文章計），並記住讀到邊
+  const openColumnArticle = (book: BookData, startIndex: number) => {
+    const chs = book.chapters || []
+    const i = chs.findIndex(c => c.startIndex === startIndex)
+    const ch = chs[i]
+    if (!ch) return
+    const end = chs[i + 1]?.startIndex ?? book.sentences.length
+    let slice = book.sentences.slice(ch.startIndex, end)
+    let lead = 0
+    while (slice.length && slice[0] === PARA_SEP) { slice = slice.slice(1); lead++ }
+    while (slice.length && slice[slice.length - 1] === PARA_SEP) slice = slice.slice(0, -1)
+    if (!slice.length) return
+    const base = ch.startIndex + lead
+    const saved = book.currentIndex || 0
+    const offset = (saved >= base && saved < end) ? saved - base : 0
+    readingFromColumnRef.current = book
+    setColumnBook(null)
+    setColumnReadOffset(base)
+    setSentences(slice)
+    setBookTitle(ch.title)
+    setBookId(book.id)
+    setCurrentIndex(offset)
+    setActiveChapters(undefined)
+    setReadingGoal(0)
+  }
+
   // 用戶從 RSS 訂閱點了一篇文章，直接開啟閱讀器（不需要目標設定）
-  const handleReadArticle = (articleSentences: string[], title: string, link: string) => {
-    setReadingArticleLink(link)
+  const handleReadArticle = (articleSentences: string[], title: string, link: string) => {    setReadingArticleLink(link)
     setSentences(articleSentences)
     setBookTitle(title)
     setBookId('article-' + Date.now())
     setCurrentIndex(0)
+    setColumnReadOffset(0)
     setReadingGoal(0)
   }
 
@@ -699,11 +733,7 @@ export default function Home() {
       <ColumnBookView
         book={columnBook}
         onBack={() => setColumnBook(null)}
-        onOpenArticle={(startIndex) => {
-          readingFromColumnRef.current = columnBook
-          handleOpenBookAtSentence(columnBook, startIndex)
-          setColumnBook(null)
-        }}
+        onOpenArticle={(startIndex) => openColumnArticle(columnBook, startIndex)}
       />
     )
   }
@@ -1372,6 +1402,7 @@ export default function Home() {
           initialIndex={currentIndex}
           readingGoal={readingGoal}
           chapters={activeChapters}
+          progressOffset={columnReadOffset}
           onReset={handleReset}
           onArticleFinished={readingArticleLink ? handleArticleFinished : undefined}
           onOpenBook={handleOpenBookAtSentence}

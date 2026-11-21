@@ -62,6 +62,9 @@ interface ReaderProps {
   initialIndex: number
   readingGoal: number
   chapters?: ChapterMark[]
+  // 專欄文章用：呢個閱讀器只顯示文章一段（sentences 已經係文章 slice），
+  // 儲存進度時要加返文章喺全書嘅起始位置
+  progressOffset?: number
   onReset: () => void
   onArticleFinished?: () => void
   onOpenBook?: (book: BookData, sentenceIndex: number) => void
@@ -89,7 +92,7 @@ const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="h
 
 const SHOW_QUEST_BAR = true as boolean   // 第二條（打怪征途）進度條：用戶要求加返
 
-export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
+export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, progressOffset = 0, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
@@ -510,9 +513,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   useEffect(() => {
     if (bookId) {
-      updateBookProgressInIDB(bookId, currentIndex)
+      updateBookProgressInIDB(bookId, currentIndex + progressOffset)
     }
-  }, [currentIndex, bookId])
+  }, [currentIndex, bookId, progressOffset])
 
   // 背景音樂：載入 IDB，自動播放，unmount 時停止並釋放 URL
   useEffect(() => {
