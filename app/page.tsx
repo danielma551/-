@@ -21,7 +21,7 @@ import ReviewHeatmap from './components/ReviewHeatmap'
 import BookCalendar from './components/BookCalendar'
 import SpeedChart from './components/SpeedChart'
 import FeedPanel from './components/FeedPanel'
-import ColumnPanel from './components/ColumnPanel'
+import ColumnBookView from './components/ColumnBookView'
 import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
@@ -255,6 +255,9 @@ export default function Home() {
   } | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
   const [readingArticleLink, setReadingArticleLink] = useState<string>('')
+  // 專欄書（例如得到頭条）：撳書先入文章列表頁
+  const [columnBook, setColumnBook] = useState<BookData | null>(null)
+  const readingFromColumnRef = useRef<BookData | null>(null)
   // 控制是否顯示每日練習畫面
   const [showVocab, setShowVocab] = useState(false)
   // 追加內容：記錄哪本書正在處理中
@@ -406,6 +409,11 @@ export default function Home() {
     // ☁️ 如果正喺度同步，等埋佢，再攞最新進度（另一部機可能讀到更後）
     await waitForSync()
     const fresh = (await getBookFromIDB(book.id)) || book
+    // 專欄書（例如得到頭条）：撳書先入文章列表頁
+    if ((fresh.chapters || []).some(c => c.date)) {
+      setColumnBook(fresh)
+      return
+    }
     setPendingBook({
       sentences: fresh.sentences,
       title: fresh.title,
@@ -465,6 +473,8 @@ export default function Home() {
   }
 
   const handleReset = () => {
+    const backToColumn = readingFromColumnRef.current
+    readingFromColumnRef.current = null
     // 由錄音書退出 → 返去「🎧 錄音」文件夾；其他書 → 返書架主頁
     setOpenFolder(isAudioBook({ title: bookTitle, kind: savedBooks.find(b => b.id === bookId)?.kind }) ? 'audio' : null)
     setSentences([])
@@ -476,6 +486,7 @@ export default function Home() {
     setUploadError('')
     getAllBooksFromIDB().then(setSavedBooks)
     scheduleSync(800)   // ☁️ 讀完離開 → 推進度上雲
+    if (backToColumn) setColumnBook(backToColumn)   // 由專欄文章入嚟 → 返文章列表
   }
 
   // ☁️ 自動同步：開網站拉一次、切走 App 推一次、每 2 分鐘檢查；另一部機有更新就刷新書架
@@ -680,6 +691,21 @@ export default function Home() {
   // 顯示每日練習畫面時，整頁渲染 VocabPractice
   if (showVocab) {
     return <VocabPractice onExit={() => setShowVocab(false)} />
+  }
+
+  // 專欄書（例如得到頭条）：第二個頁面顯示文章列表
+  if (columnBook) {
+    return (
+      <ColumnBookView
+        book={columnBook}
+        onBack={() => setColumnBook(null)}
+        onOpenArticle={(startIndex) => {
+          readingFromColumnRef.current = columnBook
+          handleOpenBookAtSentence(columnBook, startIndex)
+          setColumnBook(null)
+        }}
+      />
+    )
   }
 
   // 「繼續閱讀」：最近讀過、未讀完嘅一本
@@ -1333,12 +1359,6 @@ export default function Home() {
             {statsTab === 'trend' && <ReadingTrend />}
             {statsTab === 'heat' && <ReadingHeatmap />}
             {statsTab === 'speed' && <SpeedChart />}
-          </section>
-
-          {/* 專欄文章（得到頭條等，列表風格） */}
-          <section className="mt-10">
-            <h2 className="font-serif-tc text-lg sm:text-xl font-bold text-gray-900 mb-4">專欄文章</h2>
-            <ColumnPanel onOpenBook={handleOpenBookAtSentence} />
           </section>
 
           {/* RSS 訂閱文章 */}
