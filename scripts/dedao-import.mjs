@@ -110,6 +110,8 @@ async function waitLogin(c) {
   for (let i = 1; ; i++) {
     await sleep(3000)
     if (!(await c.eval(IS_LOGIN))) { console.log('✅ 已登入'); return }
+    // 每 3 次 reload 一次：如果喺其他分頁登入咗，呢個分頁要重新載入先拿到 session
+    if (i % 3 === 0) { try { await c.send('Page.reload') } catch { /* ignore */ } }
     if (i % 10 === 0) console.log('  ⏳ 仲未見到登入成功，繼續等（撳 Chrome 視窗，掃碼登入）…')
   }
 }
