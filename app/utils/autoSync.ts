@@ -9,6 +9,7 @@
 
 import { upload } from '@vercel/blob/client'
 import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage } from './storage'
+import { gamifyStorage } from './gamify'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './bookDB'
 import { REVIEW_BOOK_ID } from './reviewBook'
 
@@ -38,6 +39,8 @@ interface Manifest {
   reviewHeat?: Record<string, number>
   bookReadDays?: unknown
   bookReadDaysByDevice?: Record<string, unknown>
+  // 遊戲化（XP／擊殺）：跨裝置取較大值，令各機顯示一致
+  gamify?: { xp: number; kills: Record<string, number>; todayKills?: { date: string; count: number } } | null
 }
 
 // ── 小工具 ──
@@ -285,6 +288,24 @@ async function mergeRemote(remote: Manifest): Promise<boolean> {
     for (const [date, n] of Object.entries(remote.readingHistory)) if ((h[date] ?? 0) < n) { h[date] = n; d = true }
     if (d) { ls.set('reading-history', JSON.stringify(h)); changed = true }
   }
+  // 遊戲化（XP／等級／擊殺）：跨裝置取較大值，令各機顯示一致
+  if (remote.gamify) {
+    const g = gamifyStorage.get()
+    let d = false
+    const rx = Number(remote.gamify.xp || 0)
+    if (rx > g.xp) { g.xp = rx; d = true }
+    for (const [m, c] of Object.entries(remote.gamify.kills || {})) {
+      const n = Number(c)
+      if ((g.kills[m] ?? 0) < n) { g.kills[m] = n; d = true }
+    }
+    const rt = remote.gamify.todayKills
+    if (rt && rt.date === new Date().toLocaleDateString('en-CA')) {
+      if (!g.todayKills || g.todayKills.date !== rt.date || (g.todayKills.count ?? 0) < Number(rt.count || 0)) {
+        g.todayKills = { date: rt.date, count: Number(rt.count || 0) }; d = true
+      }
+    }
+    if (d) { gamifyStorage.save(g); changed = true }
+  }
   if (Array.isArray(remote.reviewNotes)) reviewStorage.merge(remote.reviewNotes as never)
   if (remote.reviewSession && typeof remote.reviewSession === 'object') {
     const rs = remote.reviewSession as { date?: string; done?: number }
@@ -342,6 +363,7 @@ async function push(id: string, baseRev: number, repair = false): Promise<'ok' |
     reviewHeat: reviewStorage.getHeat(),
     bookReadDays: bookReadingStorage.getAll(),
     bookReadDaysByDevice: bookReadingStorage.getByDevice(),
+    gamify: gamifyStorage.get(),
   }
   const str = JSON.stringify(manifest)
   const fp = fastHash(str) + '_' + str.length
