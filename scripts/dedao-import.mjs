@@ -201,6 +201,7 @@ async function main() {
     console.log('用法：')
     console.log('  node scripts/dedao-import.mjs dump <文章網址>')
     console.log('  node scripts/dedao-import.mjs import <專欄網址> [專欄網址...]')
+    console.log('  node scripts/dedao-import.mjs dates <專欄網址>    # 只補章節發布日期')
     process.exit(0)
   }
 
@@ -219,6 +220,30 @@ async function main() {
     writeFileSync(file, JSON.stringify(d, null, 2))
     console.log('📄 已寫入：', file)
     console.log(JSON.stringify({ title: d.title, column: d.column, textLen: d.text?.length, imgs: d.imgs?.length }, null, 2))
+    process.exit(0)
+  }
+
+  // dates：只補章節發布日期（唔重新抓文章）
+  if (mode === 'dates') {
+    const detailId = detailIdOf(urls[0])
+    await c.navigate(`https://www.dedao.cn/course/detail?id=${detailId}`); await sleep(6000)
+    if (!(await c.eval(HAS_COURSE_LIST))) {
+      console.log('🔐 未登入，去觸發登入牆…')
+      await c.navigate(LOGIN_TRIGGER); await sleep(5000)
+      await waitLogin(c)
+      await c.navigate(`https://www.dedao.cn/course/detail?id=${detailId}`); await sleep(6000)
+    }
+    const arts = await fetchArticleList(c, detailId)
+    console.log(`📋 攞到 ${arts.length} 篇`)
+    if (!arts.length) { console.log('❌ 攞唔到文章列表（未登入？）'); process.exit(1) }
+    const map = {}
+    for (const a of arts) if (a.title) map[a.title.trim()] = a.publish ? a.publish * 1000 : 0
+    await c.navigate(SITE_URL); await sleep(6000)
+    const upd = await c.eval(`(async()=>{ const db=await new Promise((res,rej)=>{const r=indexedDB.open('${DB_NAME}',1);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}); const books=await new Promise((res,rej)=>{const q=db.transaction('${STORE_NAME}','readonly').objectStore('${STORE_NAME}').getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error)}); const b=books.find(x=>x.title.includes('得到头条')); if(!b) return 'no-book'; const m=${JSON.stringify(map)}; let n=0; b.chapters=(b.chapters||[]).map(c=>{ const d=m[c.title]; if(d){n++; return {...c, date:d}} return c }); await new Promise((res,rej)=>{const tx=db.transaction('${STORE_NAME}','readwrite');tx.objectStore('${STORE_NAME}').put(b);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)}); return 'updated '+n+'/'+(b.chapters||[]).length })()`)
+    console.log('📅', upd)
+    await c.eval(`(window.dispatchEvent(new Event('msw-local-change')), true)`)
+    await c.navigate(SITE_URL); await sleep(20000)
+    console.log('☁️ 已同步')
     process.exit(0)
   }
 
