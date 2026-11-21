@@ -10,6 +10,7 @@
 export interface ChapterMark {
   title: string
   startIndex: number
+  date?: number   // 文章發布時間（ms），專欄文章用
 }
 
 export interface BookData {

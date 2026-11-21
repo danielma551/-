@@ -21,6 +21,7 @@ import ReviewHeatmap from './components/ReviewHeatmap'
 import BookCalendar from './components/BookCalendar'
 import SpeedChart from './components/SpeedChart'
 import FeedPanel from './components/FeedPanel'
+import ColumnPanel from './components/ColumnPanel'
 import GamifyBar from './components/GamifyBar'
 import VocabPractice from './components/VocabPractice'
 import SearchPanel from './components/SearchPanel'
@@ -1332,6 +1333,12 @@ export default function Home() {
             {statsTab === 'trend' && <ReadingTrend />}
             {statsTab === 'heat' && <ReadingHeatmap />}
             {statsTab === 'speed' && <SpeedChart />}
+          </section>
+
+          {/* 專欄文章（得到頭條等，列表風格） */}
+          <section className="mt-10">
+            <h2 className="font-serif-tc text-lg sm:text-xl font-bold text-gray-900 mb-4">專欄文章</h2>
+            <ColumnPanel onOpenBook={handleOpenBookAtSentence} />
           </section>
 
           {/* RSS 訂閱文章 */}

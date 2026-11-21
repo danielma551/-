@@ -267,7 +267,7 @@ async function main() {
     await sleep(6000)
     const d = await c.eval(EXTRACT_ARTICLE)
     const col = (d.column || a.column || '得到文章').trim() || '得到文章'
-    ;(groups[col] = groups[col] || []).push({ title: d.title || a.title, text: d.text, imgs: d.imgs })
+    ;(groups[col] = groups[col] || []).push({ title: d.title || a.title, text: d.text, imgs: d.imgs, publish: a.publish })
     seen[a.enid] = 1
     try { writeFileSync(SEEN_FILE, JSON.stringify(seen, null, 2)) } catch { /* ignore */ }
     console.log(`  ✔ ${(d.title || a.title).slice(0, 40)} → ${col}`)
@@ -290,13 +290,13 @@ async function main() {
       if (!ss.length) continue
       const start = (eb?.sentences.length || 0) + ns.length + (ns.length ? 1 : 0)
       ns.push(...ss)
-      nc.push({ title: a.title || '未命名', startIndex: start })
+      nc.push({ title: a.title || '未命名', startIndex: start, date: a.publish ? a.publish * 1000 : undefined })
     }
     if (!ns.length) continue
     if (eb) {
       books.push({ ...eb, sentences: eb.sentences.length ? [...eb.sentences, PARA_SEP, ...ns] : ns, chapters: [...(eb.chapters || [{ title: eb.title, startIndex: 0 }]), ...nc], lastReadDate: now })
     } else {
-      books.push({ id: generateBookId(col), title: col, sentences: ns, currentIndex: 0, uploadDate: now, lastReadDate: now, chapters: [{ title: arts[0].title || col, startIndex: 0 }, ...nc.slice(1)] })
+      books.push({ id: generateBookId(col), title: col, sentences: ns, currentIndex: 0, uploadDate: now, lastReadDate: now, chapters: [{ title: arts[0].title || col, startIndex: 0, date: arts[0].publish ? arts[0].publish * 1000 : undefined }, ...nc.slice(1)] })
     }
   }
 
