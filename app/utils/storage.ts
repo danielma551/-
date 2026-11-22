@@ -742,6 +742,13 @@ function completionKey(c: BookCompletion): string {
   return c.id || `${c.date}::${c.bookTitle.trim()}`
 }
 
+// 每日温習屬於虛擬書，唔計入「完書誌」
+function isExcludedCompletion(bookId?: string, bookTitle?: string): boolean {
+  if (bookId === 'daily-review') return true
+  const t = (bookTitle || '').trim()
+  return t === '每日温習' || t === '每日溫習'
+}
+
 export const completionStorage = {
   getAll(): BookCompletion[] {
     if (typeof window === 'undefined') return []
@@ -749,7 +756,9 @@ export const completionStorage = {
       const data = localStorage.getItem(COMPLETIONS_STORAGE_KEY)
       const parsed: BookCompletion[] = data ? JSON.parse(data) : []
       return Array.isArray(parsed)
-        ? parsed.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        ? parsed
+            .filter(c => c && !isExcludedCompletion(c.bookId, c.bookTitle))
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         : []
     } catch { return [] }
   },
@@ -757,7 +766,9 @@ export const completionStorage = {
   saveAll(list: BookCompletion[]): void {
     if (typeof window === 'undefined') return
     try {
-      const sorted = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      const sorted = [...list]
+        .filter(c => c && !isExcludedCompletion(c.bookId, c.bookTitle))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       localStorage.setItem(COMPLETIONS_STORAGE_KEY, JSON.stringify(sorted))
       window.dispatchEvent(new Event('msw-local-change'))
     } catch (e) {
@@ -767,6 +778,7 @@ export const completionStorage = {
 
   record(bookTitle: string, bookId: string): void {
     if (typeof window === 'undefined') return
+    if (isExcludedCompletion(bookId, bookTitle)) return
     try {
       const all = completionStorage.getAll()
       const today = new Date().toLocaleDateString('en-CA')
@@ -825,7 +837,7 @@ export const completionStorage = {
     for (const c of local) map.set(`${c.date}::${c.bookTitle.trim()}`, c)
     let changed = false
     for (const r of remote) {
-      if (!r?.date || !r?.bookTitle) continue
+      if (!r?.date || !r?.bookTitle || isExcludedCompletion(r.bookId, r.bookTitle)) continue
       const k = `${r.date}::${r.bookTitle.trim()}`
       const existing = map.get(k)
       if (!existing) {

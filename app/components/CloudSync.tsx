@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react'
 import { getSyncId, getSyncStatus, createSyncId, connectSyncId, disconnectSync, syncNow, formatId, SyncStatus } from '../utils/autoSync'
 import { upload } from '@vercel/blob/client'
 import { Cloud, Upload as UploadIcon, Download, Check, AlertCircle, Loader2, Copy } from 'lucide-react'
-import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage } from '../utils/storage'
+import { BookData, completionStorage, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage } from '../utils/storage'
 import { saveFontToIDB } from '../utils/fontDB'
 import { getAllBooksFromIDB, saveBookToIDB } from '../utils/bookDB'
 import { REVIEW_BOOK_ID } from '../utils/reviewBook'
@@ -176,6 +176,7 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
         reviewSession: reviewStorage.getSession(),   // 今日温習進度（跨裝置：知道今日已温習）
         reviewHeat: reviewStorage.getHeat(),         // 温習熱圖（每日張數）
         bookReadDays: bookReadingStorage.getAll(),   // 每本書閱讀日
+        completions: completionStorage.getAll(),     // 完書誌記錄
         progress,                                    // 各書閱讀進度（同書本內容分開存）
       }
       const manifestStr = JSON.stringify(manifest)
@@ -307,6 +308,10 @@ export default function CloudSync({ onSyncComplete }: CloudSyncProps) {
       // 合併每本書閱讀日（每日取較大值）
       if (data.bookReadDays) {
         bookReadingStorage.merge(data.bookReadDays)
+      }
+      // 合併完書誌記錄
+      if (Array.isArray(data.completions)) {
+        completionStorage.merge(data.completions)
       }
       localStorage.setItem(DOWNLOAD_FP_KEY, fp)
       setStatus('success')

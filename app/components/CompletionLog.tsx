@@ -545,11 +545,14 @@ export default function CompletionLog({ books = [], refreshKey }: CompletionLogP
             </div>
 
             {/* 快速揀書架上嘅書 */}
-            {!editingKey && books.length > 0 && (
+            {!editingKey && books.filter(b => b.id !== 'daily-review' && b.title.trim() !== '每日温習' && b.title.trim() !== '每日溫習').length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-medium mb-1.5" style={{ color: '#7D7365' }}>由書架快速揀選（或直接喺下面輸入書名）</p>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {books.slice(0, 12).map(b => {
+                  {books
+                    .filter(b => b.id !== 'daily-review' && b.title.trim() !== '每日温習' && b.title.trim() !== '每日溫習')
+                    .slice(0, 12)
+                    .map(b => {
                     const selected = formBookId === b.id
                     return (
                       <button

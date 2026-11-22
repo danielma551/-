@@ -501,12 +501,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset, einkMode])
 
-  // 文章讀到最後一句：觸發完成畫面 + 記錄完書日期
+  // 文章讀到最後一句：觸發完成畫面 + 記錄完書日期（每日温習唔計入完書誌）
   useEffect(() => {
     if (sentences.length > 0 && currentIndex === sentences.length - 1 && !articleCompleted) {
       setArticleCompleted(true)
-      // 記錄完書日期（書名 + 日期）
-      completionStorage.record(bookTitle, bookId)
+      if (bookId !== REVIEW_BOOK_ID) {
+        completionStorage.record(bookTitle, bookId)
+      }
       if (onArticleFinished) onArticleFinished()
     }
   }, [currentIndex, sentences.length, onArticleFinished, articleCompleted, bookTitle, bookId])
