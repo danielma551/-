@@ -3379,10 +3379,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       )}
 
       {/* 主閱讀區：整個 main 都可點，右半下一句，左半上一句 */}
-      {/* eink 模式：去除 padding，讓文字佔滿整個可用高度 */}
+      {/* eink 模式：去除 padding，讓文字佔滿整個可用高度；一般／紙本模式微調下留白令正文落在視覺黃金中心（~45.5%） */}
       <main
         className={`flex-1 flex items-center justify-center relative ${isEink ? '' : isLandscapePhone ? 'px-12 py-2' : 'p-4 md:p-6'}`}
-        style={isEink ? { padding: isLandscapePhone ? `${6 + landHudH}px 48px 6px 16px` : '8px 12px' } : isLandscapePhone ? { minHeight: winH, paddingTop: 8 + landHudH } : {}}
+        style={
+          isEink
+            ? { padding: isLandscapePhone ? `${6 + landHudH}px 48px 6px 16px` : '8px 12px' }
+            : isLandscapePhone
+              ? { minHeight: winH, paddingTop: 8 + landHudH }
+              : { paddingBottom: 'clamp(36px, 8.5vh, 80px)' }
+        }
         onClick={handleMainTap}
       >
 
@@ -3392,12 +3398,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             ...(wpActive && wp.backing ? { background: 'rgba(253,250,243,0.82)', borderRadius: 18, padding: '28px 32px', boxShadow: '0 8px 30px rgba(60,40,10,.10)', backdropFilter: 'blur(6px)' } : {}) }}>
 
             {/* 章節標題 */}
-            <div style={{ textAlign: 'center', marginBottom: 22, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
+            <div style={{ textAlign: 'center', marginBottom: 28, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
               {(() => { const st = stations[stationAt(stations, currentIndex)]; return st ? (st.auto ? st.title.split(' · ')[0] : st.title) : '第一章' })()} · {bookTitle}
             </div>
 
             {/* 沉浸內容：移除紙卡容器，句子直接在背景上 */}
-            <div style={{ position: 'relative', padding: '8px 0', minHeight: 200 }}>
+            <div style={{ position: 'relative', padding: '8px 0', minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
 
               {isImageSentence(sentences[currentIndex]) ? (
                 <img
