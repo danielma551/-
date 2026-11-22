@@ -19,6 +19,7 @@ import CloudSync from './components/CloudSync'
 import ReadingTrend from './components/ReadingTrend'
 import ReadingHeatmap from './components/ReadingHeatmap'
 import ReviewHeatmap from './components/ReviewHeatmap'
+import CompletionLog from './components/CompletionLog'
 import BookCalendar from './components/BookCalendar'
 import SpeedChart from './components/SpeedChart'
 import FeedPanel from './components/FeedPanel'
@@ -276,6 +277,7 @@ export default function Home() {
   // 每日温習
   const [showReview, setShowReview] = useState(false)
   const [reviewDue, setReviewDue] = useState(0)
+  const [completionTick, setCompletionTick] = useState(0)
   // 首頁快速加筆記
   const [quickNote, setQuickNote] = useState('')
   const [quickNoteMsg, setQuickNoteMsg] = useState('')
@@ -503,11 +505,13 @@ export default function Home() {
   useEffect(() => installAutoSync(() => {
     getAllBooksFromIDB().then(setSavedBooks)
     setReviewDue(reviewStorage.stats().due)
+    setCompletionTick(t => t + 1)
   }), [])
 
   const handleSyncComplete = () => {
     getAllBooksFromIDB().then(setSavedBooks)
     setReviewDue(reviewStorage.stats().due)   // 同步後更新温習到期數
+    setCompletionTick(t => t + 1)
   }
 
   // 📖 每日温習書：今日 24 張筆記做成一本書，一頁一張（書名／日期／內容）
@@ -1379,6 +1383,9 @@ export default function Home() {
               refreshKey={reviewDue}
             />
           </section>
+
+          {/* ── 完書誌：記錄邊一日睇完邊本書 ── */}
+          <CompletionLog books={savedBooks} refreshKey={completionTick} />
 
           {/* ── 統計：趨勢／熱圖／速度 合埋一格，用分頁切換 ── */}
           <section>

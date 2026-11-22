@@ -726,13 +726,20 @@ export const feedStorage = {
   }
 }
 
-// 完書記錄：哪天讀完了哪本書
+// 完書記錄：哪天讀完了哪本書（自動記錄 + 手動補記 + 雲端合併）
 const COMPLETIONS_STORAGE_KEY = 'reading-completions'
 
 export interface BookCompletion {
-  date: string   // "2026-06-06"
+  id?: string
+  date: string        // "2026-11-22"
   bookTitle: string
   bookId: string
+  note?: string       // 一句話心得／留念
+  favorite?: boolean  // ✦ 值得重讀
+}
+
+function completionKey(c: BookCompletion): string {
+  return c.id || `${c.date}::${c.bookTitle.trim()}`
 }
 
 export const completionStorage = {
@@ -740,8 +747,22 @@ export const completionStorage = {
     if (typeof window === 'undefined') return []
     try {
       const data = localStorage.getItem(COMPLETIONS_STORAGE_KEY)
-      return data ? JSON.parse(data) : []
+      const parsed: BookCompletion[] = data ? JSON.parse(data) : []
+      return Array.isArray(parsed)
+        ? parsed.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        : []
     } catch { return [] }
+  },
+
+  saveAll(list: BookCompletion[]): void {
+    if (typeof window === 'undefined') return
+    try {
+      const sorted = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      localStorage.setItem(COMPLETIONS_STORAGE_KEY, JSON.stringify(sorted))
+      window.dispatchEvent(new Event('msw-local-change'))
+    } catch (e) {
+      console.error('[completionStorage] saveAll failed:', e)
+    }
   },
 
   record(bookTitle: string, bookId: string): void {
@@ -750,13 +771,73 @@ export const completionStorage = {
       const all = completionStorage.getAll()
       const today = new Date().toLocaleDateString('en-CA')
       // 同一本書同一天只記一次
-      const alreadyRecorded = all.some(c => c.date === today && c.bookId === bookId)
+      const alreadyRecorded = all.some(c => c.date === today && (c.bookId === bookId || c.bookTitle.trim() === bookTitle.trim()))
       if (alreadyRecorded) return
-      all.push({ date: today, bookTitle, bookId })
-      localStorage.setItem(COMPLETIONS_STORAGE_KEY, JSON.stringify(all))
+      all.unshift({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: today,
+        bookTitle: bookTitle.trim(),
+        bookId,
+      })
+      completionStorage.saveAll(all)
     } catch (e) {
       console.error('[completionStorage] record failed:', e)
     }
+  },
+
+  add(entry: Omit<BookCompletion, 'id'>): BookCompletion {
+    const all = completionStorage.getAll()
+    const item: BookCompletion = {
+      ...entry,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      bookTitle: entry.bookTitle.trim(),
+      note: entry.note?.trim() || undefined,
+    }
+    all.unshift(item)
+    completionStorage.saveAll(all)
+    return item
+  },
+
+  update(key: string, patch: Partial<Omit<BookCompletion, 'id'>>): void {
+    const all = completionStorage.getAll()
+    const next = all.map(c => {
+      if (completionKey(c) !== key) return c
+      return {
+        ...c,
+        id: c.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        ...patch,
+        bookTitle: (patch.bookTitle ?? c.bookTitle).trim(),
+        note: patch.note !== undefined ? (patch.note.trim() || undefined) : c.note,
+      }
+    })
+    completionStorage.saveAll(next)
+  },
+
+  remove(key: string): void {
+    const all = completionStorage.getAll()
+    completionStorage.saveAll(all.filter(c => completionKey(c) !== key))
+  },
+
+  merge(remote: BookCompletion[]): boolean {
+    if (!Array.isArray(remote) || remote.length === 0) return false
+    const local = completionStorage.getAll()
+    const map = new Map<string, BookCompletion>()
+    for (const c of local) map.set(`${c.date}::${c.bookTitle.trim()}`, c)
+    let changed = false
+    for (const r of remote) {
+      if (!r?.date || !r?.bookTitle) continue
+      const k = `${r.date}::${r.bookTitle.trim()}`
+      const existing = map.get(k)
+      if (!existing) {
+        map.set(k, r)
+        changed = true
+      } else if ((!existing.note && r.note) || (!existing.favorite && r.favorite)) {
+        map.set(k, { ...existing, note: existing.note || r.note, favorite: existing.favorite || r.favorite })
+        changed = true
+      }
+    }
+    if (changed) completionStorage.saveAll([...map.values()])
+    return changed
   },
 
   // 取得某天有沒有完書（回傳書名清單）

@@ -8,7 +8,7 @@
 // 觸發：開網站、離開閱讀、切走 App、每 2 分鐘（有改動先推）
 
 import { upload } from '@vercel/blob/client'
-import { BookData, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage, columnReadStorage } from './storage'
+import { BookData, BookCompletion, completionStorage, fontStorage, historyStorage, ReadingHistory, reviewStorage, bookReadingStorage, columnReadStorage } from './storage'
 import { gamifyStorage } from './gamify'
 import { getAllBooksFromIDB, saveBookToIDB, deleteBookFromIDB } from './bookDB'
 import { REVIEW_BOOK_ID } from './reviewBook'
@@ -42,6 +42,7 @@ interface Manifest {
   // 遊戲化（XP／擊殺）：跨裝置取較大值，令各機顯示一致
   gamify?: { xp: number; kills: Record<string, number>; todayKills?: { date: string; count: number } } | null
   columnRead?: string[]
+  completions?: BookCompletion[]
 }
 
 // ── 小工具 ──
@@ -287,6 +288,9 @@ async function mergeRemote(remote: Manifest): Promise<boolean> {
   if (Array.isArray(remote.columnRead)) {
     if (columnReadStorage.merge(remote.columnRead)) changed = true
   }
+  if (Array.isArray(remote.completions)) {
+    if (completionStorage.merge(remote.completions)) changed = true
+  }
   if (remote.readingHistory) {
     const h = historyStorage.getHistory(); let d = false
     for (const [date, n] of Object.entries(remote.readingHistory)) if ((h[date] ?? 0) < n) { h[date] = n; d = true }
@@ -369,6 +373,7 @@ async function push(id: string, baseRev: number, repair = false): Promise<'ok' |
     bookReadDaysByDevice: bookReadingStorage.getByDevice(),
     gamify: gamifyStorage.get(),
     columnRead: columnReadStorage.getAll(),
+    completions: completionStorage.getAll(),
   }
   const str = JSON.stringify(manifest)
   const fp = fastHash(str) + '_' + str.length
