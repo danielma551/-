@@ -3379,7 +3379,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
       )}
 
       {/* 主閱讀區：整個 main 都可點，右半下一句，左半上一句 */}
-      {/* eink 模式：去除 padding，讓文字佔滿整個可用高度；一般／紙本模式微調下留白令正文落在視覺黃金中心（~45.5%） */}
+      {/* eink 模式：去除 padding，讓文字佔滿整個可用高度；一般／紙本模式補償頂欄高度並微調下留白，令正文落在全螢幕視覺黃金中心（~45.5%） */}
       <main
         className={`flex-1 flex items-center justify-center relative ${isEink ? '' : isLandscapePhone ? 'px-12 py-2' : 'p-4 md:p-6'}`}
         style={
@@ -3387,7 +3387,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             ? { padding: isLandscapePhone ? `${6 + landHudH}px 48px 6px 16px` : '8px 12px' }
             : isLandscapePhone
               ? { minHeight: winH, paddingTop: 8 + landHudH }
-              : { paddingBottom: 'clamp(36px, 8.5vh, 80px)' }
+              : { paddingBottom: 'clamp(120px, 22vh, 220px)' }
         }
         onClick={handleMainTap}
       >
@@ -3417,7 +3417,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
                   {renderExitGhost(false, {
                     fontSize: `${displaySettings.fontSize}px`, color: paperTheme.text, textAlign: 'center',
                     lineHeight: displaySettings.lineHeight ?? 1.8, letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
