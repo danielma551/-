@@ -431,6 +431,7 @@ export default function Home() {
 
   const handleSetGoal = (goal: number) => {
     if (pendingBook) {
+      setReadingArticleLink('')
       setSentences(pendingBook.sentences)
       setBookTitle(pendingBook.title)
       setBookId(pendingBook.id)
@@ -446,6 +447,7 @@ export default function Home() {
 
   const handleSkipGoal = () => {
     if (pendingBook) {
+      setReadingArticleLink('')
       setSentences(pendingBook.sentences)
       setBookTitle(pendingBook.title)
       setBookId(pendingBook.id)
@@ -484,6 +486,8 @@ export default function Home() {
   const handleReset = () => {
     const backToColumn = readingFromColumnRef.current
     readingFromColumnRef.current = null
+    columnArticleKeyRef.current = null
+    setReadingArticleLink('')
     // 由錄音書退出 → 返去「🎧 錄音」文件夾；其他書 → 返書架主頁
     setOpenFolder(isAudioBook({ title: bookTitle, kind: savedBooks.find(b => b.id === bookId)?.kind }) ? 'audio' : null)
     setSentences([])
@@ -659,6 +663,7 @@ export default function Home() {
 
   // 從搜索結果直接跳到某本書的某句（不需要顯示目標設定視窗）
   const handleOpenBookAtSentence = (book: BookData, sentenceIndex: number) => {
+    setReadingArticleLink('')
     setSentences(book.sentences)
     setBookTitle(book.title)
     setBookId(book.id)
@@ -1422,6 +1427,7 @@ export default function Home() {
           readingGoal={readingGoal}
           chapters={activeChapters}
           progressOffset={columnReadOffset}
+          recordCompletion={!readingArticleLink && !columnArticleKeyRef.current && bookId !== 'daily-review' && bookId !== 'external-reading' && !bookId.startsWith('article-')}
           onReset={handleReset}
           onArticleFinished={handleReaderArticleFinished}
           onOpenBook={handleOpenBookAtSentence}

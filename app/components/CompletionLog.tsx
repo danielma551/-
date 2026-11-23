@@ -62,11 +62,26 @@ export default function CompletionLog({ books = [], refreshKey }: CompletionLogP
   const [formNote, setFormNote] = useState('')
   const [formFav, setFormFav] = useState(false)
 
-  const reload = () => setItems(completionStorage.getAll())
+  // 專欄／每日温習／每日外刊唔計入書本（唔顯示、亦唔列入快速揀書）
+  const nonBookIds = useMemo(() => {
+    const set = new Set<string>(['daily-review', 'external-reading'])
+    for (const b of books) {
+      if ((b.chapters || []).some(c => c.date)) set.add(b.id)
+    }
+    return set
+  }, [books])
+
+  const selectableBooks = useMemo(
+    () => books.filter(b => !nonBookIds.has(b.id) && b.title.trim() !== '每日温習' && b.title.trim() !== '每日溫習' && b.title.trim() !== '每日外刊'),
+    [books, nonBookIds]
+  )
+
+  const reload = () => setItems(completionStorage.getAll().filter(c => !nonBookIds.has(c.bookId)))
 
   useEffect(() => {
     reload()
-  }, [refreshKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, nonBookIds])
 
   // 書架封面查詢表（優先按 bookId，其次按書名）
   const bookLookup = useMemo(() => {
@@ -295,7 +310,7 @@ export default function CompletionLog({ books = [], refreshKey }: CompletionLogP
               仲未有完書印記
             </p>
             <p className="text-xs mt-1.5 max-w-sm mx-auto leading-relaxed" style={{ color: '#938878' }}>
-              讀完書架入面嘅最後一句會自動記低；亦可以按右上角「記低一本」，補記以前睇完嘅實體書或專欄。
+              讀完書架入面一本書嘅最後一句會自動記低（文章同專欄唔會計入）；亦可以按右上角「記低一本」，補記以前睇完嘅實體書。
             </p>
           </div>
         ) : view === 'timeline' ? (
@@ -545,14 +560,11 @@ export default function CompletionLog({ books = [], refreshKey }: CompletionLogP
             </div>
 
             {/* 快速揀書架上嘅書 */}
-            {!editingKey && books.filter(b => b.id !== 'daily-review' && b.title.trim() !== '每日温習' && b.title.trim() !== '每日溫習').length > 0 && (
+            {!editingKey && selectableBooks.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-medium mb-1.5" style={{ color: '#7D7365' }}>由書架快速揀選（或直接喺下面輸入書名）</p>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {books
-                    .filter(b => b.id !== 'daily-review' && b.title.trim() !== '每日温習' && b.title.trim() !== '每日溫習')
-                    .slice(0, 12)
-                    .map(b => {
+                  {selectableBooks.slice(0, 12).map(b => {
                     const selected = formBookId === b.id
                     return (
                       <button
@@ -574,13 +586,13 @@ export default function CompletionLog({ books = [], refreshKey }: CompletionLogP
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold mb-1.5" style={{ color: '#5C5449' }}>書名／專欄名</label>
+                <label className="block text-xs font-semibold mb-1.5" style={{ color: '#5C5449' }}>書名</label>
                 <input
                   type="text"
                   required
                   value={formTitle}
                   onChange={e => { setFormTitle(e.target.value); setFormBookId('') }}
-                  placeholder="例如：活著、薛兆豐經濟學講堂…"
+                  placeholder="例如：活著、百年孤獨…"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none bg-white"
                   style={{ borderColor: '#DDD5C4', color: '#2B2620' }}
                 />

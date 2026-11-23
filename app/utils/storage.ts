@@ -742,11 +742,15 @@ function completionKey(c: BookCompletion): string {
   return c.id || `${c.date}::${c.bookTitle.trim()}`
 }
 
-// 每日温習屬於虛擬書，唔計入「完書誌」
+// 非書本項目（每日温習、每日外刊、RSS 訂閱文章、專欄文章等）唔計入「完書誌」
 function isExcludedCompletion(bookId?: string, bookTitle?: string): boolean {
-  if (bookId === 'daily-review') return true
+  const id = (bookId || '').trim()
+  if (id === 'daily-review' || id === 'external-reading' || id.startsWith('article-')) return true
   const t = (bookTitle || '').trim()
-  return t === '每日温習' || t === '每日溫習'
+  if (!t) return false
+  if (t === '每日温習' || t === '每日溫習' || t === '每日外刊') return true
+  if (/^(得到[頭头][條条]|槽[邊边]往事)/.test(t)) return true
+  return false
 }
 
 export const completionStorage = {

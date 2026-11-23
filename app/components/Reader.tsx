@@ -65,6 +65,8 @@ interface ReaderProps {
   // 專欄文章用：呢個閱讀器只顯示文章一段（sentences 已經係文章 slice），
   // 儲存進度時要加返文章喺全書嘅起始位置
   progressOffset?: number
+  // 只有真正書本先記錄入「完書誌」（文章、專欄、RSS、每日温習／外刊為 false）
+  recordCompletion?: boolean
   onReset: () => void
   onArticleFinished?: () => void
   onOpenBook?: (book: BookData, sentenceIndex: number) => void
@@ -92,7 +94,7 @@ const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="h
 
 const SHOW_QUEST_BAR = true as boolean   // 第二條（打怪征途）進度條：用戶要求加返
 
-export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, progressOffset = 0, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
+export default function Reader({ sentences, bookTitle, bookId, initialIndex, readingGoal, chapters, progressOffset = 0, recordCompletion = true, onReset, onArticleFinished, onOpenBook }: ReaderProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [startIndex, setStartIndex] = useState(initialIndex)
   const [goalCompleted, setGoalCompleted] = useState(false)
@@ -501,16 +503,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     }
   }, [currentIndex, startIndex, readingGoal, goalCompleted, onReset, einkMode])
 
-  // 文章讀到最後一句：觸發完成畫面 + 記錄完書日期（每日温習唔計入完書誌）
+  // 讀到最後一句：觸發完成畫面；只有真正書本先寫入「完書誌」（文章／專欄／RSS／每日温習／外刊唔記）
   useEffect(() => {
     if (sentences.length > 0 && currentIndex === sentences.length - 1 && !articleCompleted) {
       setArticleCompleted(true)
-      if (bookId !== REVIEW_BOOK_ID) {
+      if (recordCompletion && bookId !== REVIEW_BOOK_ID && bookId !== EXTERNAL_BOOK_ID && !bookId.startsWith('article-')) {
         completionStorage.record(bookTitle, bookId)
       }
       if (onArticleFinished) onArticleFinished()
     }
-  }, [currentIndex, sentences.length, onArticleFinished, articleCompleted, bookTitle, bookId])
+  }, [currentIndex, sentences.length, onArticleFinished, articleCompleted, bookTitle, bookId, recordCompletion])
 
   useEffect(() => {
     if (bookId) {
