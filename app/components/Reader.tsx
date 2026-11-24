@@ -3433,8 +3433,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               ) : (
                 <div style={{ position: 'relative', width: '100%' }}>
                   {renderExitGhost(false, {
-                    fontSize: 'clamp(22px, 3.2vw, 32px)', fontWeight: 800, color: '#2E2A26', textAlign: 'center',
-                    lineHeight: 1.75, letterSpacing: '0.02em',
+                    fontSize: `${displaySettings.fontSize}px`, fontWeight: 800, color: '#2E2A26', textAlign: 'center',
+                    lineHeight: displaySettings.lineHeight ?? 1.8, letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
                     fontFamily: '"Yuanti SC", "Hiragino Maru Gothic ProN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
                     whiteSpace: 'pre-wrap', width: '100%',
                   })}
@@ -3445,12 +3445,12 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     onTouchEnd={selectionDictLookup}
                     style={{
                     '--sentence-anim-speed': `${animSpeedMs}ms`,
-                    fontSize: 'clamp(22px, 3.2vw, 32px)',
+                    fontSize: `${displaySettings.fontSize}px`,
                     fontWeight: 800,
                     color: '#2E2A26',
                     textAlign: 'center',
-                    lineHeight: 1.75,
-                    letterSpacing: '0.02em',
+                    lineHeight: displaySettings.lineHeight ?? 1.8,
+                    letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
                     margin: 0,
                     fontFamily: '"Yuanti SC", "Hiragino Maru Gothic ProN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
                     whiteSpace: 'pre-wrap',
