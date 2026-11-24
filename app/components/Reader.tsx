@@ -2005,6 +2005,8 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const getBarColor = (pct: number): string => {
     if (einkMode) return '#000000'   // 墨水屏：純黑
     if (goalCompleted) return '#22c55e'
+    if (isPaper) return '#8F5524'    // 紙本：焦糖
+    return '#FF7A59'                 // 卡通：珊瑚
     const stops = [
       { p: 0,   r: 239, g: 68,  b: 68  },  // #EF4444 紅
       { p: 50,  r: 234, g: 179, b: 8   },  // #EAB308 黃
@@ -2689,7 +2691,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
           </div>
           <div className="w-full relative" style={{ height: 8 }}>
-            <div className="absolute inset-0 rounded-full" style={{ background: paperBars ? warm.track : '#e5e7eb' }} />
+            <div className="absolute inset-0 rounded-full" style={{ background: paperBars ? warm.track : (isPaper ? '#F0E2C8' : '#FFE3D9') }} />
             {/* 漸層色填充（紅→黃→瑞幸藍，沿用原插值邏輯；紙本模式用墨啡） */}
             <div
               className="absolute inset-y-0 left-0 rounded-full"
@@ -2727,10 +2729,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ①② 戰鬥征途：小勇者行向怪物 + 檢查點旗仔（有目標先顯示） */}
           {SHOW_QUEST_BAR && battleMonster && (
             <div className="w-full relative" style={{ height: 10, marginTop: 16 }}>
-              <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#eef2ff', border: '1px solid #e0e7ff' }} />
+              <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: isPaper ? '#F0E2C8' : '#FFF4E6', border: '2px solid #2E2A26' }} />
               <div
                 className="absolute inset-y-0 left-0 rounded-full"
-                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : 'linear-gradient(90deg,#a5b4fc,#6366f1)', transition: 'width 350ms var(--ease-out)' }}
+                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : (isPaper ? '#B08968' : '#A78BFA'), transition: 'width 350ms var(--ease-out)' }}
               />
               {/* ② 檢查點旗仔：25/50/75，通過時著燈 + 閃光 */}
               {[25, 50, 75].map(m => (
@@ -2783,9 +2785,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   ? `今日挑戰：擊敗 ${dailyChallenge.target} 隻怪獸`
                   : `今日挑戰：閱讀 ${dailyChallenge.target} 句`}
               </span>
-              <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb', minWidth: 40 }}>
+              <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: isPaper ? '#F0E2C8' : '#FFE3D9', minWidth: 40 }}>
                 <div
-                  style={{ height: '100%', width: `${Math.min((dailyChallenge.progress / dailyChallenge.target) * 100, 100)}%`, background: 'linear-gradient(90deg,#6366f1,#8b5cf6)', borderRadius: 99, transition: 'width 350ms var(--ease-out)' }}
+                  style={{ height: '100%', width: `${Math.min((dailyChallenge.progress / dailyChallenge.target) * 100, 100)}%`, background: isPaper ? '#8F5524' : 'linear-gradient(90deg,#FFD166,#FF7A59)', borderRadius: 99, transition: 'width 350ms var(--ease-out)' }}
                 />
               </div>
               <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -2866,13 +2868,13 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ⑤ 全書薄條 + 今日疆土：中灰=之前讀咗，黑=今日疆土，淺灰=未讀 */}
           <div
             className="w-full relative rounded-full overflow-hidden"
-            style={{ height: 5, background: '#e0e0e0', marginTop: battleMonster ? 10 : 6 }}
+            style={{ height: 8, background: isPaper ? '#F0E2C8' : '#FFE3D9', border: isEink ? '1px solid #000' : '2px solid #2E2A26', marginTop: battleMonster ? 10 : 6 }}
             title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
           >
-            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: '#999' }} />
+            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: isPaper ? '#C9B38A' : '#C9B38A' }} />
             <div
               className="absolute inset-y-0"
-              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: '#000', transition: 'none' }}
+              style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: isEink ? '#000' : '#2E2A26', transition: 'none' }}
             />
           </div>
           </>
@@ -3571,7 +3573,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <div className="relative w-full flex items-center justify-center">
+                <div className="cc-sentence-card relative w-full flex items-center justify-center">
                   {renderExitGhost(isEink, {
                     fontFamily: textFontFamily, fontSize: `${displaySettings.fontSize}px`,
                     color: displaySettings.textColor, whiteSpace: 'pre-wrap', textAlign: extTwoCol ? 'left' : 'center',
@@ -3634,11 +3636,11 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
             {/* 電腦：顯示按鈕；eink 模式下隱藏（用實體按鍵）；手機/平板：隱藏按鈕，改用觸摸分區 */}
             {!isEink && (
-              <div className={`mt-8 hidden ${isLandscapePhone ? "" : "md:flex"} items-center justify-between`}>
+              <div className={`cc-nav mt-8 hidden ${isLandscapePhone ? "" : "md:flex"} items-center justify-between`}>
                 <button
                   onClick={goToNext}
                   disabled={currentIndex === sentences.length - 1}
-                  className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="cc-next flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: '#4f46e5', color: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }}
                 >
                   <span>下一句</span>
@@ -3648,7 +3650,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 <button
                   onClick={goToPrevious}
                   disabled={currentIndex === 0}
-                  className="flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="cc-prev flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }}
                 >
                   <ChevronLeft className="w-5 h-5" />

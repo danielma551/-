@@ -765,7 +765,7 @@ export default function Home() {
     .sort((a, b) => b.lastReadDate - a.lastReadDate)[0]
 
   return (
-    <main className="min-h-screen bg-[#FAFAF8]">
+    <main className="cc-app min-h-screen">
       {showGoalModal && pendingBook && (
         <GoalModal
           onSetGoal={handleSetGoal}

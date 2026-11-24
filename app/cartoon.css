@@ -104,3 +104,74 @@
   border-bottom: 2px solid #000 !important;
   box-shadow: none !important;
 }
+
+/* ── 卡通主題：覆蓋閱讀器同面板嘅 Tailwind 色 ── */
+.cartoon-reader .bg-white,
+.cc-app .bg-white { background: var(--cc-surface) !important; }
+
+.cartoon-reader .shadow-sm,
+.cartoon-reader .shadow,
+.cartoon-reader .shadow-md,
+.cartoon-reader .shadow-lg,
+.cartoon-reader .shadow-xl,
+.cartoon-reader .shadow-2xl,
+.cc-app .shadow-sm,
+.cc-app .shadow,
+.cc-app .shadow-xl,
+.cc-app .shadow-2xl { box-shadow: var(--cc-shadow) !important; }
+
+.cartoon-reader .rounded-xl,
+.cartoon-reader .rounded-2xl,
+.cc-app .rounded-xl,
+.cc-app .rounded-2xl { border-radius: var(--cc-radius) !important; }
+
+.cartoon-reader .bg-indigo-600,
+.cartoon-reader .bg-blue-600,
+.cc-app .bg-indigo-600 { background: var(--cc-primary) !important; color: var(--cc-text) !important; }
+
+.cartoon-reader .text-indigo-600,
+.cartoon-reader .text-blue-600 { color: var(--cc-primary) !important; }
+
+.cartoon-reader .border-gray-100,
+.cartoon-reader .border-gray-200,
+.cc-app .border-gray-100,
+.cc-app .border-gray-200 { border-color: var(--cc-line) !important; }
+
+/* 面板：白卡加粗邊 */
+.cartoon-reader [class*="rounded-xl"].bg-white,
+.cartoon-reader [class*="rounded-2xl"].bg-white {
+  border: 2px solid var(--cc-line);
+}
+
+/* 閱讀器句子卡（加咗 class 嘅容器） */
+.cc-sentence-card {
+  background: var(--cc-surface);
+  border: 3px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  box-shadow: var(--cc-shadow);
+  padding: clamp(28px, 5vw, 56px) clamp(20px, 5vw, 48px);
+}
+
+/* 閱讀器底部按鈕 */
+.cc-nav button {
+  border: 3px solid var(--cc-line) !important;
+  border-radius: 999px !important;
+  box-shadow: var(--cc-shadow-sm) !important;
+  font-weight: 800 !important;
+  color: var(--cc-text) !important;
+}
+.cc-nav button:active { transform: translate(3px, 3px); box-shadow: none !important; }
+.cc-nav .cc-next { background: var(--cc-primary) !important; }
+.cc-nav .cc-prev { background: var(--cc-surface) !important; }
+
+/* 統一舊有強調色（indigo／amber）到卡通色系 */
+.cartoon-reader .text-indigo-600,
+.cartoon-reader .text-indigo-700,
+.cc-app .text-indigo-600,
+.cc-app .text-indigo-700 { color: #C2410C !important; }
+.cartoon-reader .bg-indigo-50,
+.cc-app .bg-indigo-50 { background: var(--cc-primary-soft) !important; }
+.cartoon-reader .bg-amber-500,
+.cc-app .bg-amber-500 { background: var(--cc-primary) !important; color: var(--cc-text) !important; }
+.cartoon-reader .border-indigo-400,
+.cc-app .border-indigo-400 { border-color: var(--cc-line) !important; }
