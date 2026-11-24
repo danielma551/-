@@ -3433,9 +3433,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               ) : (
                 <div style={{ position: 'relative', width: '100%' }}>
                   {renderExitGhost(false, {
-                    fontSize: `${displaySettings.fontSize}px`, color: paperTheme.text, textAlign: 'center',
-                    lineHeight: displaySettings.lineHeight ?? 1.8, letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
-                    fontFamily: textFontFamily, whiteSpace: 'pre-wrap', width: '100%',
+                    fontSize: 'clamp(22px, 3.2vw, 32px)', fontWeight: 800, color: '#2E2A26', textAlign: 'center',
+                    lineHeight: 1.75, letterSpacing: '0.02em',
+                    fontFamily: '"Yuanti SC", "Hiragino Maru Gothic ProN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
+                    whiteSpace: 'pre-wrap', width: '100%',
                   })}
                   <p
                     key={(displaySettings.animationStyle ?? 'rise') === 'rise' ? animKey : undefined}
