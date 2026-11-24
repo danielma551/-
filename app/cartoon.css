@@ -137,19 +137,17 @@
 .cc-app .border-gray-100,
 .cc-app .border-gray-200 { border-color: var(--cc-line) !important; }
 
-/* 面板：白卡加粗邊 */
-.cartoon-reader [class*="rounded-xl"].bg-white,
-.cartoon-reader [class*="rounded-2xl"].bg-white {
+/* 面板：只喺浮層（fixed）加粗邊，避免閱讀區大框 */
+.cartoon-reader .fixed [class*="rounded"].bg-white {
   border: 2px solid var(--cc-line);
 }
 
-/* 閱讀器句子卡（加咗 class 嘅容器） */
-.cc-sentence-card {
-  background: var(--cc-surface);
-  border: 3px solid var(--cc-line);
-  border-radius: var(--cc-radius);
-  box-shadow: var(--cc-shadow);
-  padding: clamp(28px, 5vw, 56px) clamp(20px, 5vw, 48px);
+/* 閱讀器原有嘅句子卡（rounded-2xl shadow-2xl）：貼紙卡化 */
+.cartoon-reader.cc-default [class*="rounded-2xl"][class*="shadow-2xl"] {
+  background: var(--cc-surface) !important;
+  border: 3px solid var(--cc-line) !important;
+  border-radius: var(--cc-radius) !important;
+  box-shadow: var(--cc-shadow) !important;
 }
 
 /* 閱讀器底部按鈕 */
@@ -175,3 +173,33 @@
 .cc-app .bg-amber-500 { background: var(--cc-primary) !important; color: var(--cc-text) !important; }
 .cartoon-reader .border-indigo-400,
 .cc-app .border-indigo-400 { border-color: var(--cc-line) !important; }
+
+/* 紙本模式：同卡通預設一樣嘅奶油底＋貼紙卡 */
+.cartoon-reader.cc-paper {
+  background-color: #FFF4E6 !important;
+  background-image: radial-gradient(rgba(46, 42, 38, .06) 1.5px, transparent 1.5px) !important;
+  background-size: 24px 24px !important;
+}
+.cc-paper-card {
+  background: #FFFFFF;
+  border: 3px solid #2E2A26;
+  border-radius: 24px;
+  box-shadow: 5px 5px 0 #2E2A26;
+  transform: rotate(-0.6deg);
+}
+.cc-paper-stamp {
+  position: absolute; left: 36px; top: -18px;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #6ED3B6; border: 3px solid #2E2A26; border-radius: 999px;
+  padding: 5px 14px; font-size: 12px; font-weight: 800; color: #2E2A26;
+  box-shadow: 3px 3px 0 #2E2A26; transform: rotate(-2deg);
+  font-family: var(--cc-font); white-space: nowrap; max-width: calc(100% - 72px);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.cc-paper-sun { position: absolute; right: 26px; top: 22px; width: 58px; height: 58px; }
+.cc-paper-star { position: absolute; left: 30px; bottom: 26px; width: 26px; height: 26px; }
+@media (max-width: 640px) {
+  .cc-paper-stamp { left: 18px; top: -16px; font-size: 11px; padding: 4px 10px; }
+  .cc-paper-sun { width: 44px; height: 44px; right: 16px; top: 14px; }
+  .cc-paper-star { display: none; }
+}

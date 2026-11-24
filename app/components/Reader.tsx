@@ -2005,7 +2005,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const getBarColor = (pct: number): string => {
     if (einkMode) return '#000000'   // 墨水屏：純黑
     if (goalCompleted) return '#22c55e'
-    if (isPaper) return '#8F5524'    // 紙本：焦糖
     return '#FF7A59'                 // 卡通：珊瑚
     const stops = [
       { p: 0,   r: 239, g: 68,  b: 68  },  // #EF4444 紅
@@ -2691,7 +2690,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             <span className="tabular-nums">{mergedBarWidth.toFixed(0)}%</span>
           </div>
           <div className="w-full relative" style={{ height: 8 }}>
-            <div className="absolute inset-0 rounded-full" style={{ background: paperBars ? warm.track : (isPaper ? '#F0E2C8' : '#FFE3D9') }} />
+            <div className="absolute inset-0 rounded-full" style={{ background: paperBars ? warm.track : '#FFE3D9' }} />
             {/* 漸層色填充（紅→黃→瑞幸藍，沿用原插值邏輯；紙本模式用墨啡） */}
             <div
               className="absolute inset-y-0 left-0 rounded-full"
@@ -2729,10 +2728,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           {/* ①② 戰鬥征途：小勇者行向怪物 + 檢查點旗仔（有目標先顯示） */}
           {SHOW_QUEST_BAR && battleMonster && (
             <div className="w-full relative" style={{ height: 10, marginTop: 16 }}>
-              <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: isPaper ? '#F0E2C8' : '#FFF4E6', border: '2px solid #2E2A26' }} />
+              <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#FFF4E6', border: '2px solid #2E2A26' }} />
               <div
                 className="absolute inset-y-0 left-0 rounded-full"
-                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : (isPaper ? '#B08968' : '#A78BFA'), transition: 'width 350ms var(--ease-out)' }}
+                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : '#A78BFA', transition: 'width 350ms var(--ease-out)' }}
               />
               {/* ② 檢查點旗仔：25/50/75，通過時著燈 + 閃光 */}
               {[25, 50, 75].map(m => (
@@ -2785,9 +2784,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   ? `今日挑戰：擊敗 ${dailyChallenge.target} 隻怪獸`
                   : `今日挑戰：閱讀 ${dailyChallenge.target} 句`}
               </span>
-              <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: isPaper ? '#F0E2C8' : '#FFE3D9', minWidth: 40 }}>
+              <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: '#FFE3D9', minWidth: 40 }}>
                 <div
-                  style={{ height: '100%', width: `${Math.min((dailyChallenge.progress / dailyChallenge.target) * 100, 100)}%`, background: isPaper ? '#8F5524' : 'linear-gradient(90deg,#FFD166,#FF7A59)', borderRadius: 99, transition: 'width 350ms var(--ease-out)' }}
+                  style={{ height: '100%', width: `${Math.min((dailyChallenge.progress / dailyChallenge.target) * 100, 100)}%`, background: 'linear-gradient(90deg,#FFD166,#FF7A59)', borderRadius: 99, transition: 'width 350ms var(--ease-out)' }}
                 />
               </div>
               <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -2871,7 +2870,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             style={{ height: 8, background: isPaper ? '#F0E2C8' : '#FFE3D9', border: isEink ? '1px solid #000' : '2px solid #2E2A26', marginTop: battleMonster ? 10 : 6 }}
             title={`全書 ${currentIndex + 1}/${sentences.length} 句 · 今日讀咗 ${Math.max(currentIndex - startIndex, 0) + 1} 句`}
           >
-            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: isPaper ? '#C9B38A' : '#C9B38A' }} />
+            <div className="absolute inset-y-0 left-0" style={{ width: `${bookBeforePct}%`, background: '#6ED3B6' }} />
             <div
               className="absolute inset-y-0"
               style={{ left: `${bookBeforePct}%`, width: `${bookTodayPct}%`, background: isEink ? '#000' : '#2E2A26', transition: 'none' }}
@@ -3401,13 +3400,24 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
           <div style={{ position: 'relative', maxWidth: 'min(900px, 80vw)', width: '100%', margin: '0 auto',
             ...(wpActive && wp.backing ? { background: 'rgba(253,250,243,0.82)', borderRadius: 18, padding: '28px 32px', boxShadow: '0 8px 30px rgba(60,40,10,.10)', backdropFilter: 'blur(6px)' } : {}) }}>
 
-            {/* 章節標題 */}
-            <div style={{ textAlign: 'center', marginBottom: 28, fontSize: 12, letterSpacing: '0.25em', color: '#bdb5a0', fontFamily: paperTheme.fontFamily }}>
-              {(() => { const st = stations[stationAt(stations, currentIndex)]; return st ? (st.auto ? st.title.split(' · ')[0] : st.title) : '第一章' })()} · {bookTitle}
-            </div>
 
-            {/* 沉浸內容：移除紙卡容器，句子直接在背景上 */}
-            <div style={{ position: 'relative', padding: '8px 0', minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* 沉浸內容：卡通貼紙卡 */}
+            <div className="cc-paper-card" style={{ position: 'relative', padding: 'clamp(36px, 6vw, 60px) clamp(22px, 5vw, 52px)', minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="cc-paper-stamp">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }} aria-hidden="true"><path d="M5 19c0-7 4-12 12-14 1 8-3 13-10 13"/><path d="M5 19c3-4 6-6 10-8"/></svg>
+                {(() => {
+                  const idx = Math.max(stationAt(stations, currentIndex), 0)
+                  const st = stations[idx]
+                  const name = st ? (st.auto ? st.title.split(' · ').slice(-1)[0] : st.title) : '精挑细淘'
+                  return `第 ${idx + 1} 站 · ${name}`
+                })()}
+              </span>
+              <svg className="cc-paper-sun" viewBox="0 0 80 80" fill="none" stroke="#2E2A26" strokeWidth="4.5" strokeLinecap="round" aria-hidden="true">
+                <circle cx="40" cy="40" r="15" fill="#FFD166"/><path d="M40 6v8M40 66v8M6 40h8M66 40h8M16 16l6 6M58 58l6 6M64 16l-6 6M22 58l-6 6"/>
+              </svg>
+              <svg className="cc-paper-star" viewBox="0 0 24 24" fill="#FFD166" stroke="#2E2A26" strokeWidth="2.5" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.6l-5.9 3.1 1.2-6.6L2.5 9.5l6.6-.9Z"/>
+              </svg>
 
               {isImageSentence(sentences[currentIndex]) ? (
                 <img
@@ -3434,13 +3444,14 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                     onTouchEnd={selectionDictLookup}
                     style={{
                     '--sentence-anim-speed': `${animSpeedMs}ms`,
-                    fontSize: `${displaySettings.fontSize}px`,
-                    color: paperTheme.text,
+                    fontSize: 'clamp(22px, 3.2vw, 32px)',
+                    fontWeight: 800,
+                    color: '#2E2A26',
                     textAlign: 'center',
-                    lineHeight: displaySettings.lineHeight ?? 1.8,
-                    letterSpacing: `${displaySettings.letterSpacing ?? 0.05}em`,
+                    lineHeight: 1.75,
+                    letterSpacing: '0.02em',
                     margin: 0,
-                    fontFamily: textFontFamily,
+                    fontFamily: '"Yuanti SC", "Hiragino Maru Gothic ProN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
                     whiteSpace: 'pre-wrap',
                     opacity: (displaySettings.animationStyle ?? 'rise') === 'rise' ? 1 : (fadeVisible ? 1 : 0),
                     transition: (displaySettings.animationStyle ?? 'rise') === 'rise' ? 'none' : (fadeVisible ? 'opacity 0.22s ease-in' : 'opacity 0.14s ease-out'),
@@ -3573,7 +3584,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                   }}
                 />
               ) : (
-                <div className="cc-sentence-card relative w-full flex items-center justify-center">
+                <div className="relative w-full flex items-center justify-center">
                   {renderExitGhost(isEink, {
                     fontFamily: textFontFamily, fontSize: `${displaySettings.fontSize}px`,
                     color: displaySettings.textColor, whiteSpace: 'pre-wrap', textAlign: extTwoCol ? 'left' : 'center',
@@ -3638,16 +3649,6 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
             {!isEink && (
               <div className={`cc-nav mt-8 hidden ${isLandscapePhone ? "" : "md:flex"} items-center justify-between`}>
                 <button
-                  onClick={goToNext}
-                  disabled={currentIndex === sentences.length - 1}
-                  className="cc-next flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ background: '#4f46e5', color: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }}
-                >
-                  <span>下一句</span>
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-
-                <button
                   onClick={goToPrevious}
                   disabled={currentIndex === 0}
                   className="cc-prev flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3655,6 +3656,16 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
                 >
                   <ChevronLeft className="w-5 h-5" />
                   <span>上一句</span>
+                </button>
+
+                <button
+                  onClick={goToNext}
+                  disabled={currentIndex === sentences.length - 1}
+                  className="cc-next flex items-center space-x-2 px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: '#4f46e5', color: '#fff', borderRadius: 8, boxShadow: '0 10px 15px -3px rgba(0,0,0,.1)' }}
+                >
+                  <span>下一句</span>
+                  <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
             )}
