@@ -2118,7 +2118,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
 
   return (
     <div
-      className="min-h-screen flex flex-col overflow-x-hidden transition-all duration-300"
+      className={`cartoon-reader ${isEink ? 'cc-eink' : isPaper ? 'cc-paper' : 'cc-default'} min-h-screen flex flex-col overflow-x-hidden transition-all duration-300`}
       style={{
         backgroundColor: isEink ? einkTheme.bg : isPaper ? paperTheme.bg : displaySettings.backgroundColor,
         // 紙本模式：好淡嘅紙紋（SVG 雜訊），取代「刮花」感

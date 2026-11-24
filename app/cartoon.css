@@ -72,3 +72,35 @@
 
 .cc-row { transition: transform .14s ease, box-shadow .14s ease; }
 .cc-row:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--cc-line); }
+
+/* ── 卡通閱讀器：第一階段（背景／字體／頂欄）── */
+.cartoon-reader.cc-default {
+  background-color: var(--cc-bg) !important;
+  background-image: radial-gradient(rgba(46, 42, 38, .06) 1.5px, transparent 1.5px) !important;
+  background-size: 24px 24px !important;
+  font-family: var(--cc-font);
+}
+.cartoon-reader.cc-default > header {
+  background: var(--cc-surface) !important;
+  border-bottom: 3px solid var(--cc-line) !important;
+  box-shadow: none !important;
+}
+.cartoon-reader.cc-paper {
+  background-color: #FBF3E2 !important;
+  background-image: radial-gradient(rgba(74, 58, 42, .07) 1.4px, transparent 1.4px) !important;
+  background-size: 20px 20px !important;
+  font-family: var(--cc-font);
+}
+.cartoon-reader.cc-paper > header {
+  border-bottom: 3px solid var(--cc-line) !important;
+  box-shadow: none !important;
+}
+.cartoon-reader.cc-eink {
+  background-color: #fff !important;
+  background-image: none !important;
+}
+.cartoon-reader.cc-eink > header {
+  background: #fff !important;
+  border-bottom: 2px solid #000 !important;
+  box-shadow: none !important;
+}
