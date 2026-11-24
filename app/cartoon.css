@@ -1,0 +1,74 @@
+/* 【卡通主題】共用設計變數同元件樣式
+   清新自然版嘅 tokens 仍然留喺 globals；呢度係卡通版專用。 */
+
+:root {
+  --cc-bg: #FFF4E6;
+  --cc-surface: #FFFFFF;
+  --cc-text: #2E2A26;
+  --cc-muted: #7A6E63;
+  --cc-line: #2E2A26;
+  --cc-primary: #FF7A59;
+  --cc-primary-ink: #2E2A26;
+  --cc-primary-soft: #FFE3D9;
+  --cc-accent: #FFD166;
+  --cc-mint: #6ED3B6;
+  --cc-lav: #A78BFA;
+  --cc-shadow: 5px 5px 0 var(--cc-line);
+  --cc-shadow-sm: 3px 3px 0 var(--cc-line);
+  --cc-radius: 24px;
+  --cc-font: "Yuanti SC", "Hiragino Maru Gothic ProN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+.cc-app {
+  background-color: var(--cc-bg);
+  color: var(--cc-text);
+  font-family: var(--cc-font);
+  background-image: radial-gradient(rgba(46, 42, 38, .07) 1.6px, transparent 1.6px);
+  background-size: 24px 24px;
+}
+
+.cc-card {
+  background: var(--cc-surface);
+  border: 3px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  box-shadow: var(--cc-shadow);
+}
+
+.cc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 22px; border: 3px solid var(--cc-line); border-radius: 999px;
+  box-shadow: var(--cc-shadow-sm); background: var(--cc-surface); color: var(--cc-text);
+  font-family: inherit; font-size: 14px; font-weight: 800; line-height: 1;
+  cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.cc-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--cc-line); }
+.cc-btn-primary { background: var(--cc-primary); }
+.cc-btn-primary:hover { background: #FF6647; }
+.cc-btn-ghost:hover { background: var(--cc-accent); }
+
+.cc-icon-btn {
+  width: 46px; height: 46px; border: 3px solid var(--cc-line); border-radius: 50%;
+  background: var(--cc-surface); box-shadow: var(--cc-shadow-sm);
+  display: grid; place-items: center; color: var(--cc-text); cursor: pointer;
+}
+.cc-icon-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--cc-line); }
+
+.cc-back {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px;
+  margin-left: -10px; font-size: 14px; font-weight: 800; color: var(--cc-muted);
+  text-decoration: none;
+}
+.cc-back:hover { color: var(--cc-primary); }
+
+.cc-bar { height: 10px; border: 2.5px solid var(--cc-line); border-radius: 999px; background: var(--cc-surface); overflow: hidden; }
+.cc-bar > i { display: block; height: 100%; background: var(--cc-primary); border-radius: 999px; }
+
+.cc-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+  border: 2.5px solid var(--cc-line); border-radius: 999px;
+  background: var(--cc-accent); color: var(--cc-text);
+  font-size: 12px; font-weight: 800;
+}
+
+.cc-row { transition: transform .14s ease, box-shadow .14s ease; }
+.cc-row:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--cc-line); }

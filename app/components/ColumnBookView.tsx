@@ -41,41 +41,52 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
   const chapters = [...(book.chapters || [])].sort((a, c) => (c.date || 0) - (a.date || 0))
 
   return (
-    <main className="min-h-screen bg-[#FAFAF8]">
+    <main className="cc-app min-h-screen">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <header className="flex items-center gap-3 mb-5">
-          <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> 書架
-          </button>
+        <button onClick={onBack} className="cc-back">
+          <ArrowLeft className="w-4 h-4" /> 我的書架
+        </button>
+
+        <header className="mb-6">
+          <div className="flex items-center gap-3">
+            <span className="grid place-items-center w-12 h-12 rounded-2xl border-[3px] border-[#2E2A26] bg-[#6ED3B6] shadow-[3px_3px_0_#2E2A26] -rotate-6">
+              <Rss className="w-6 h-6 text-[#2E2A26]" />
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#2E2A26]">{book.title}</h1>
+            <span className="cc-chip text-[#2E2A26]">{chapters.length} 篇</span>
+          </div>
+          <p className="mt-2 text-sm font-bold text-[#7A6E63]">精挑细淘，得到头条。每个工作日一篇。</p>
         </header>
 
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-            <div className="flex items-center gap-2 min-w-0">
-              <Rss className="w-4 h-4 text-sky-500 flex-shrink-0" />
-              <h1 className="font-serif-tc text-lg font-bold text-gray-900 truncate">{book.title}</h1>
-              <span className="text-xs text-gray-400 flex-shrink-0">{chapters.length} 篇</span>
-            </div>
-          </div>
-
+        <div className="grid gap-4">
           {chapters.map(ch => {
             const read = columnReadStorage.isRead(`${book.id}:${ch.startIndex}`)
             return (
               <button
                 key={`${ch.startIndex}-${ch.title}`}
                 onClick={() => onOpenArticle(ch.startIndex)}
-                className={`w-full text-left px-5 py-4 border-t border-gray-50 transition-colors ${read ? 'opacity-50 hover:bg-gray-50' : 'hover:bg-blue-50'}`}
+                className={`cc-card cc-row w-full text-left px-5 py-5 sm:px-6 sm:py-6 ${read ? 'opacity-70' : ''}`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium line-clamp-2 leading-snug ${read ? 'text-gray-400' : 'text-gray-800'}`}>{ch.title}</p>
-                    <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{summaryOf(book, ch)}</p>
+                    <p className={`text-lg sm:text-xl font-extrabold leading-snug line-clamp-2 ${read ? 'text-[#7A6E63]' : 'text-[#2E2A26]'}`}>
+                      {ch.title}
+                    </p>
+                    <p className="mt-1.5 text-sm sm:text-[15px] leading-relaxed text-[#7A6E63] line-clamp-2">
+                      {summaryOf(book, ch)}
+                    </p>
                   </div>
-                  <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                    <span className="text-xs text-gray-300 whitespace-nowrap">{relDate(ch.date)}</span>
-                    {read
-                      ? <span className="text-xs text-green-400">✓ 已讀</span>
-                      : <span className="text-xs text-blue-400">閱讀</span>}
+                  <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                    <span className="text-xs font-bold text-[#7A6E63] whitespace-nowrap">{relDate(ch.date)}</span>
+                    {read ? (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full border-[2.5px] border-[#2E2A26] bg-[#D9F5EA] text-xs font-extrabold text-[#146B52] whitespace-nowrap">
+                        ✓ 已讀
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-4 py-1.5 rounded-full border-[2.5px] border-[#2E2A26] bg-[#FF7A59] shadow-[2px_2px_0_#2E2A26] text-sm font-extrabold text-[#2E2A26] whitespace-nowrap">
+                        閱讀
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>
@@ -83,7 +94,7 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
           })}
 
           {chapters.length === 0 && (
-            <p className="px-5 py-10 text-center text-sm text-gray-400">仲未有任何文章</p>
+            <p className="cc-card px-5 py-10 text-center text-sm font-bold text-[#7A6E63]">仲未有任何文章</p>
           )}
         </div>
       </div>
