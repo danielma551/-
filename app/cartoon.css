@@ -203,3 +203,36 @@
   .cc-paper-sun { width: 44px; height: 44px; right: 16px; top: 14px; }
   .cc-paper-star { display: none; }
 }
+
+/* ── 首頁（書架）統一：卡片、標題、書封、按鈕 ── */
+.cc-app [class*="rounded-2xl"].bg-white,
+.cc-app [class*="rounded-xl"].bg-white {
+  border: 2.5px solid var(--cc-line) !important;
+  box-shadow: var(--cc-shadow-sm) !important;
+  border-radius: var(--cc-radius) !important;
+}
+.cc-app h1,
+.cc-app h2,
+.cc-app h3,
+.cc-app .font-serif-tc {
+  font-family: var(--cc-font) !important;
+  font-weight: 800 !important;
+  letter-spacing: .01em;
+}
+.cc-app [class*="aspect-[2/3]"] {
+  border: 3px solid var(--cc-line) !important;
+  border-radius: 16px !important;
+  box-shadow: 4px 4px 0 var(--cc-line) !important;
+}
+.cc-app button.bg-indigo-600,
+.cc-app button.bg-blue-600,
+.cc-app button.bg-amber-500,
+.cc-app button.bg-amber-400 {
+  border: 3px solid var(--cc-line) !important;
+  border-radius: 999px !important;
+  box-shadow: var(--cc-shadow-sm) !important;
+  color: var(--cc-text) !important;
+  font-weight: 800 !important;
+}
+.cc-app button.bg-amber-500,
+.cc-app button.bg-amber-400 { background: var(--cc-accent) !important; }
