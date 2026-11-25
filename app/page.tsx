@@ -10,6 +10,7 @@
 'use client'
 
 import { dailyGoalStorage, columnReadStorage } from './utils/storage'
+import { getGeneratedCover } from './utils/coverArt'
 import { PARA_SEP } from './utils/epubParser'
 import { useState, useEffect, useRef } from 'react'
 import { BookOpen, Trash2, Plus, Loader2, ImagePlus, FilePlus, KeyRound, X, LayoutGrid, ChevronDown, Phone, Library, Mic, Music, Download, Pencil, Link2 } from 'lucide-react'
@@ -1067,7 +1068,7 @@ export default function Home() {
             const p = Math.round(((b.currentIndex + 1) / b.sentences.length) * 100)
             const cover = b.coverImage
               ? { backgroundImage: `url(${b.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-              : { background: b.coverColor ?? getBookStyle(b.title) }
+              : { backgroundImage: getGeneratedCover(b), backgroundSize: 'cover', backgroundPosition: 'center' }
             return (
               <section className="mb-10 rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm flex gap-4 sm:gap-6 items-center book-card-animate">
                 <button
@@ -1186,7 +1187,7 @@ export default function Home() {
                         className="w-full h-full flex flex-col items-center justify-center p-4 relative"
                         style={book.coverImage
                           ? { backgroundImage: `url(${book.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                          : { background: book.coverColor ?? getBookStyle(book.title) }
+                          : { backgroundImage: getGeneratedCover(book), backgroundSize: 'cover', backgroundPosition: 'center' }
                         }
                       >
                         {book.coverImage && <div className="absolute inset-0 bg-black/30" />}
