@@ -2005,11 +2005,10 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
   const getBarColor = (pct: number): string => {
     if (einkMode) return '#000000'   // 墨水屏：純黑
     if (goalCompleted) return '#22c55e'
-    return '#FF7A59'                 // 卡通：珊瑚
     const stops = [
-      { p: 0,   r: 239, g: 68,  b: 68  },  // #EF4444 紅
-      { p: 50,  r: 234, g: 179, b: 8   },  // #EAB308 黃
-      { p: 100, r: 0,   g: 164, b: 228 },  // #00A4E4 瑞幸藍
+      { p: 0,   r: 255, g: 122, b: 89  },  // #FF7A59 珊瑚
+      { p: 50,  r: 255, g: 209, b: 102 },  // #FFD166 金
+      { p: 100, r: 110, g: 211, b: 182 },  // #6ED3B6 薄荷
     ]
     const capped = Math.min(Math.max(pct, 0), 100)
     let from = stops[0], to = stops[1]
@@ -2731,7 +2730,7 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
               <div className="absolute inset-0 rounded-full" style={paperBars ? { background: warm.track2, border: `1px solid ${paperTheme.border}` } : { background: '#FFF4E6', border: '2px solid #2E2A26' }} />
               <div
                 className="absolute inset-y-0 left-0 rounded-full"
-                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : '#A78BFA', transition: 'width 350ms var(--ease-out)' }}
+                style={{ width: `${questPct}%`, background: paperBars ? warm.quest : 'linear-gradient(90deg,#D5C8FF,#A78BFA)', transition: 'width 350ms var(--ease-out)' }}
               />
               {/* ② 檢查點旗仔：25/50/75，通過時著燈 + 閃光 */}
               {[25, 50, 75].map(m => (
