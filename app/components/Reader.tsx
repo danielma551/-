@@ -2006,9 +2006,9 @@ export default function Reader({ sentences, bookTitle, bookId, initialIndex, rea
     if (einkMode) return '#000000'   // 墨水屏：純黑
     if (goalCompleted) return '#22c55e'
     const stops = [
-      { p: 0,   r: 255, g: 122, b: 89  },  // #FF7A59 珊瑚
-      { p: 50,  r: 255, g: 209, b: 102 },  // #FFD166 金
-      { p: 100, r: 110, g: 211, b: 182 },  // #6ED3B6 薄荷
+      { p: 0,   r: 239, g: 68,  b: 68  },  // #EF4444 紅
+      { p: 50,  r: 234, g: 179, b: 8   },  // #EAB308 黃
+      { p: 100, r: 0,   g: 164, b: 228 },  // #00A4E4 瑞幸藍
     ]
     const capped = Math.min(Math.max(pct, 0), 100)
     let from = stops[0], to = stops[1]
