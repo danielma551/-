@@ -22,7 +22,9 @@ export interface BookData {
   lastReadDate: number
   coverColor?: string
   coverImage?: string
-  chapters?: ChapterMark[]   // EPUB 章節目錄（非 EPUB 書本為 undefined）
+  chapters?: ChapterMark[]
+  /** 專欄書：true = 由舊到新排（課程）；false/undefined = 最新在前（日更） */
+  chronological?: boolean   // EPUB 章節目錄（非 EPUB 書本為 undefined）
   kind?: 'audio'             // 由錄音轉錄而成嘅書（放入「🎧 錄音」文件夾）
 }
 

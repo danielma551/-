@@ -125,7 +125,7 @@ function splitIntoSentences(text) {
 }
 
 function cleanArticleText(text, title) {
-  const noise = /^(展开目录|设置文本|得到头条|今天|李南南亲述|得到用户，你好|\d+分\d+秒|.*\.mp3)$/
+  const noise = /^(展开目录|设置文本|得到头条|今天|李南南亲述|得到用户，你好|\d+分\d+秒|.*\.mp3|.*转述$)$/
   return text.replace(/\r\n/g, '\n').split('\n')
     .map(s => s.replace(/[\u200b-\u200d\ufeff]/g, '').trim())
     .filter(s => s && s !== title && !noise.test(s))
@@ -161,7 +161,7 @@ const EXTRACT_ARTICLE = `(() => {
 const IS_LOGIN = `(() => { const t=(document.body?.innerText||''); return t.length<2000 && /登录|登錄|扫码|掃碼|注册|验证码|驗證碼/.test(t) })()`
 
 // 專欄詳情頁：登入後會出現文章列表（.article-list-title）；未登入得返「登录／開始學習」
-const HAS_COURSE_LIST = `(() => !!document.querySelector('.article-list-title'))()`
+const HAS_COURSE_LIST = `(() => !!document.querySelector('.article-list-title') || /共\\s*\\d+\\s*讲/.test(document.body.innerText) || document.body.innerText.includes('已加入学习'))()`
 // 未登入時，用呢條已知文章 URL 觸發登入牆（登入係帳戶級，任何文章都一樣）
 const LOGIN_TRIGGER = 'https://www.dedao.cn/course/article?id=qavDm012GolV7OYQz0VxPjEy8zdk73'
 
@@ -171,31 +171,44 @@ function detailIdOf(u) {
 }
 
 async function fetchArticleList(c, detailId) {
-  const body = JSON.stringify({
-    chapter_id: '', count: 50, detail_id: detailId, include_edge: false,
-    is_unlearn: false, max_id: 0, max_order_num: 0, reverse: true,
-    since_id: 0, since_order_num: 0, unlearn_switch: false,
-  })
-  const js = `(async()=>{ const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),20000); try { const r=await fetch('/api/pc/bauhinia/pc/class/purchase/article_list',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(body)},signal:ctl.signal}); const t=await r.text(); clearTimeout(tm); return { status:r.status, text:t } } catch(e){ clearTimeout(tm); return { status:0, text:String(e.name||e.message) } } })()`
-  const res = await c.eval(js)
-  let data = null
-  try { data = res?.text ? JSON.parse(res.text) : null } catch { data = null }
-  if (!data || res?.status !== 200) {
-    console.log(`  ⚠️ article_list 回應 status=${res?.status}（可能未登入）`)
-    return []
-  }
+  const all = []
   const seenEnid = new Set()
-  const arts = (data?.c?.article_list || []).map(a => ({
-    enid: a.enid || a.id_str || String(a.id),
-    title: (a.title || '').trim(),
-    publish: a.publish_time || 0,
-    column: ((a.share_title || '').split(/[|｜]/)[0] || '').trim(),
-  })).filter(a => {
-    if (!a.enid || seenEnid.has(a.enid)) return false
-    seenEnid.add(a.enid)
-    return true
-  })
-  return arts
+  let maxId = 0, maxOrder = 0
+  for (let page = 0; page < 12; page++) {
+    const body = JSON.stringify({
+      chapter_id: '', count: 50, detail_id: detailId, include_edge: false,
+      is_unlearn: false, max_id: maxId, max_order_num: maxOrder, reverse: true,
+      since_id: 0, since_order_num: 0, unlearn_switch: false,
+    })
+    const js = `(async()=>{ const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),20000); try { const r=await fetch('/api/pc/bauhinia/pc/class/purchase/article_list',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(body)},signal:ctl.signal}); const t=await r.text(); clearTimeout(tm); return { status:r.status, text:t } } catch(e){ clearTimeout(tm); return { status:0, text:String(e.name||e.message) } } })()`
+    const res = await c.eval(js)
+    let data = null
+    try { data = res?.text ? JSON.parse(res.text) : null } catch { data = null }
+    if (!data || res?.status !== 200) {
+      console.log(`  ⚠️ article_list 回應 status=${res?.status}（可能未登入）`)
+      break
+    }
+    const raw = data?.c?.article_list || []
+    const arts = raw.map(a => ({
+      enid: a.enid || a.id_str || String(a.id),
+      title: (a.title || '').trim(),
+      publish: a.publish_time || 0,
+      column: ((a.share_title || '').split(/[|｜]/).map(x => x.trim()).filter(Boolean).pop() || '').trim(),
+    })).filter(a => {
+      if (!a.enid || seenEnid.has(a.enid)) return false
+      seenEnid.add(a.enid)
+      return true
+    })
+    all.push(...arts)
+    if (raw.length < 50) break
+    const last = raw[raw.length - 1]
+    const nid = last?.id ?? last?.id_str
+    const nord = last?.order_num
+    if (!nid || (String(nid) === String(maxId) && nord === maxOrder)) break
+    maxId = nid
+    maxOrder = nord
+  }
+  return all
 }
 
 async function main() {

@@ -38,7 +38,7 @@ interface Props {
 }
 
 export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
-  const chapters = [...(book.chapters || [])].sort((a, c) => (c.date || 0) - (a.date || 0))
+  const chapters = [...(book.chapters || [])].sort((a, c) => book.chronological ? (a.date || 0) - (c.date || 0) : (c.date || 0) - (a.date || 0))
 
   return (
     <main className="cc-app min-h-screen">
