@@ -171,6 +171,7 @@ function detailIdOf(u) {
 }
 
 async function fetchArticleList(c, detailId) {
+  const maxItems = Number(process.env.MSW_MAX_ARTICLES) || 50
   const all = []
   const seenEnid = new Set()
   let maxId = 0, maxOrder = 0
@@ -200,6 +201,7 @@ async function fetchArticleList(c, detailId) {
       return true
     })
     all.push(...arts)
+    if (all.length >= maxItems) break
     if (raw.length < 50) break
     const last = raw[raw.length - 1]
     const nid = last?.id ?? last?.id_str
@@ -208,7 +210,7 @@ async function fetchArticleList(c, detailId) {
     maxId = nid
     maxOrder = nord
   }
-  return all
+  return all.slice(0, maxItems)
 }
 
 async function main() {
