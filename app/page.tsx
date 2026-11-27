@@ -255,6 +255,11 @@ export default function Home() {
     id: string
     index: number
     chapters?: import('./utils/storage').ChapterMark[]
+    /** 由專欄文章列表入嚟：確認目標後要還原專欄狀態 */
+    isColumn?: boolean
+    columnBook?: BookData
+    columnBase?: number
+    columnKey?: string
   } | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
   const [readingArticleLink, setReadingArticleLink] = useState<string>('')
@@ -432,14 +437,22 @@ export default function Home() {
 
   const handleSetGoal = (goal: number) => {
     if (pendingBook) {
+      if (pendingBook.isColumn && pendingBook.columnBook) {
+        readingFromColumnRef.current = pendingBook.columnBook
+        columnArticleKeyRef.current = pendingBook.columnKey ?? null
+        setColumnReadOffset(pendingBook.columnBase ?? 0)
+        setColumnBook(null)
+      } else {
+        readingFromColumnRef.current = null
+        columnArticleKeyRef.current = null
+        setColumnReadOffset(0)
+      }
       setReadingArticleLink('')
       setSentences(pendingBook.sentences)
       setBookTitle(pendingBook.title)
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
       setActiveChapters(pendingBook.chapters)
-      columnArticleKeyRef.current = null
-      setColumnReadOffset(0)
       setReadingGoal(goal)
       setShowGoalModal(false)
       setPendingBook(null)
@@ -448,14 +461,22 @@ export default function Home() {
 
   const handleSkipGoal = () => {
     if (pendingBook) {
+      if (pendingBook.isColumn && pendingBook.columnBook) {
+        readingFromColumnRef.current = pendingBook.columnBook
+        columnArticleKeyRef.current = pendingBook.columnKey ?? null
+        setColumnReadOffset(pendingBook.columnBase ?? 0)
+        setColumnBook(null)
+      } else {
+        readingFromColumnRef.current = null
+        columnArticleKeyRef.current = null
+        setColumnReadOffset(0)
+      }
       setReadingArticleLink('')
       setSentences(pendingBook.sentences)
       setBookTitle(pendingBook.title)
       setBookId(pendingBook.id)
       setCurrentIndex(pendingBook.index)
       setActiveChapters(pendingBook.chapters)
-      columnArticleKeyRef.current = null
-      setColumnReadOffset(0)
       setReadingGoal(0)
       setShowGoalModal(false)
       setPendingBook(null)
@@ -692,16 +713,18 @@ export default function Home() {
     const base = ch.startIndex + lead
     const saved = book.currentIndex || 0
     const offset = (saved >= base && saved < end) ? saved - base : 0
-    readingFromColumnRef.current = book
-    columnArticleKeyRef.current = `${book.id}:${ch.startIndex}`
-    setColumnBook(null)
-    setColumnReadOffset(base)
-    setSentences(slice)
-    setBookTitle(ch.title)
-    setBookId(book.id)
-    setCurrentIndex(offset)
-    setActiveChapters(undefined)
-    setReadingGoal(0)
+    setPendingBook({
+      sentences: slice,
+      title: ch.title,
+      id: book.id,
+      index: offset,
+      chapters: undefined,
+      isColumn: true,
+      columnBook: book,
+      columnBase: base,
+      columnKey: `${book.id}:${ch.startIndex}`,
+    })
+    setShowGoalModal(true)
   }
 
   // 用戶從 RSS 訂閱點了一篇文章，直接開啟閱讀器（不需要目標設定）
@@ -752,11 +775,23 @@ export default function Home() {
   // 專欄書（例如得到頭条）：第二個頁面顯示文章列表
   if (columnBook) {
     return (
+      <>
       <ColumnBookView
         book={columnBook}
         onBack={() => setColumnBook(null)}
         onOpenArticle={(startIndex) => openColumnArticle(columnBook, startIndex)}
       />
+      {showGoalModal && pendingBook && (
+        <GoalModal
+          onSetGoal={handleSetGoal}
+          onSkip={handleSkipGoal}
+          onCancel={handleCancelGoal}
+          maxSentences={pendingBook.sentences.length}
+          dailyGoal={dailyGoal}
+          todayRead={dailyGoalStorage.todayRead(pendingBook.id)}
+        />
+      )}
+    </>
     )
   }
 

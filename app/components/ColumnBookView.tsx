@@ -4,6 +4,7 @@
 // 撳文章先入閱讀器。
 
 import { BookData, columnReadStorage } from '../utils/storage'
+import { getGeneratedCover } from '../utils/coverArt'
 import { ArrowLeft, Rss } from 'lucide-react'
 
 const PARA_SEP = '\u2029'
@@ -29,6 +30,17 @@ function summaryOf(book: BookData, ch: { startIndex: number }): string {
     .filter(s => s && s !== PARA_SEP && !s.startsWith('img:'))
     .join('')
   return text.replace(/\s+/g, ' ').slice(0, 140)
+}
+
+function coverOf(book: BookData, ch: { startIndex: number }): string {
+  const chs = book.chapters || []
+  const i = chs.findIndex(c => c.startIndex === ch.startIndex)
+  const end = chs[i + 1]?.startIndex ?? book.sentences.length
+  for (let k = ch.startIndex; k < Math.min(end, ch.startIndex + 8); k++) {
+    const s = book.sentences[k]
+    if (s && s.startsWith('img:')) return s.slice(4)
+  }
+  return ''
 }
 
 interface Props {
@@ -68,6 +80,24 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
                 className={`cc-card cc-row w-full text-left px-5 py-5 sm:px-6 sm:py-6 ${read ? 'opacity-70' : ''}`}
               >
                 <div className="flex items-start justify-between gap-4">
+                  {(() => {
+                    const cover = coverOf(book, ch)
+                    return cover ? (
+                      <img
+                        src={cover}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                        className="w-16 h-[86px] flex-shrink-0 object-cover rounded-xl border-[3px] border-[#2E2A26] shadow-[3px_3px_0_#2E2A26]"
+                      />
+                    ) : (
+                      <div
+                        aria-hidden="true"
+                        className="w-16 h-[86px] flex-shrink-0 rounded-xl border-[3px] border-[#2E2A26] shadow-[3px_3px_0_#2E2A26] bg-cover bg-center"
+                        style={{ backgroundImage: getGeneratedCover({ title: ch.title }) }}
+                      />
+                    )
+                  })()}
                   <div className="flex-1 min-w-0">
                     <p className={`text-lg sm:text-xl font-extrabold leading-snug line-clamp-2 ${read ? 'text-[#7A6E63]' : 'text-[#2E2A26]'}`}>
                       {ch.title}
