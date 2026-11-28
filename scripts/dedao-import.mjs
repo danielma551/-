@@ -155,7 +155,8 @@ const EXTRACT_ARTICLE = `(() => {
   const bodyEl = document.querySelector('.article-body') || document.querySelector('.iget_rich-text-panel--container')
   const text = bodyEl ? bodyEl.innerText : (document.body?.innerText || '')
   const imgs = [...new Set([...document.querySelectorAll('.article-cover img, .article-body img')].map(i => i.currentSrc || i.src).filter(u => /^https?:/i.test(u)))]
-  return { title: title.slice(0,200), column: column.slice(0,60), text: text.slice(0,300000), imgs: imgs.slice(0,30), url: location.href }
+  const cover = (document.querySelector('.article-cover img')?.currentSrc || document.querySelector('.article-cover img')?.src || '')
+  return { title: title.slice(0,200), column: column.slice(0,60), text: text.slice(0,300000), imgs: imgs.slice(0,30), cover, url: location.href }
 })()`
 
 const IS_LOGIN = `(() => { const t=(document.body?.innerText||''); return t.length<2000 && /登录|登錄|扫码|掃碼|注册|验证码|驗證碼/.test(t) })()`
@@ -309,7 +310,7 @@ async function main() {
     await sleep(6000)
     const d = await c.eval(EXTRACT_ARTICLE)
     const col = (d.column || a.column || '得到文章').trim() || '得到文章'
-    ;(groups[col] = groups[col] || []).push({ title: d.title || a.title, text: d.text, imgs: d.imgs, publish: a.publish })
+    ;(groups[col] = groups[col] || []).push({ title: d.title || a.title, text: d.text, imgs: d.imgs, cover: d.cover, publish: a.publish })
     seen[a.enid] = 1
     try { writeFileSync(SEEN_FILE, JSON.stringify(seen, null, 2)) } catch { /* ignore */ }
     console.log(`  ✔ ${(d.title || a.title).slice(0, 40)} → ${col}`)
@@ -332,13 +333,13 @@ async function main() {
       if (!ss.length) continue
       const start = (eb?.sentences.length || 0) + ns.length + (ns.length ? 1 : 0)
       ns.push(...ss)
-      nc.push({ title: a.title || '未命名', startIndex: start, date: a.publish ? a.publish * 1000 : undefined })
+      nc.push({ title: a.title || '未命名', startIndex: start, date: a.publish ? a.publish * 1000 : undefined, ...(a.cover ? { cover: a.cover } : {}) })
     }
     if (!ns.length) continue
     if (eb) {
       books.push({ ...eb, sentences: eb.sentences.length ? [...eb.sentences, PARA_SEP, ...ns] : ns, chapters: [...(eb.chapters || [{ title: eb.title, startIndex: 0 }]), ...nc], lastReadDate: now })
     } else {
-      books.push({ id: generateBookId(col), title: col, sentences: ns, currentIndex: 0, uploadDate: now, lastReadDate: now, chapters: [{ title: arts[0].title || col, startIndex: 0, date: arts[0].publish ? arts[0].publish * 1000 : undefined }, ...nc.slice(1)] })
+      books.push({ id: generateBookId(col), title: col, sentences: ns, currentIndex: 0, uploadDate: now, lastReadDate: now, chapters: [{ title: arts[0].title || col, startIndex: 0, date: arts[0].publish ? arts[0].publish * 1000 : undefined, ...(arts[0].cover ? { cover: arts[0].cover } : {}) }, ...nc.slice(1)] })
     }
   }
 

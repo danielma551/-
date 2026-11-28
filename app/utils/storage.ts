@@ -23,6 +23,8 @@ export interface BookData {
   coverColor?: string
   coverImage?: string
   chapters?: ChapterMark[]
+  /** 專欄文章封面圖（得到文章頂部大圖） */
+  cover?: string
   /** 專欄書：true = 由舊到新排（課程）；false/undefined = 最新在前（日更） */
   chronological?: boolean   // EPUB 章節目錄（非 EPUB 書本為 undefined）
   kind?: 'audio'             // 由錄音轉錄而成嘅書（放入「🎧 錄音」文件夾）
