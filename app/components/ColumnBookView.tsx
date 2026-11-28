@@ -3,6 +3,7 @@
 // 【專欄書內頁】書架撳入「得到頭条」呢類專欄書，先顯示文章列表（大圖＋標題），
 // 撳文章先入閱讀器。
 
+import { useEffect, useState } from 'react'
 import { BookData, columnReadStorage } from '../utils/storage'
 import { getGeneratedCover } from '../utils/coverArt'
 import { ArrowLeft, Rss } from 'lucide-react'
@@ -40,8 +41,14 @@ interface Props {
   onOpenArticle: (startIndex: number) => void
 }
 
+const PER_PAGE = 30
+
 export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
   const chapters = [...(book.chapters || [])].sort((a, c) => book.chronological ? (a.date || 0) - (c.date || 0) : (c.date || 0) - (a.date || 0))
+  const [page, setPage] = useState(0)
+  useEffect(() => { setPage(0) }, [book.id])
+  const pageCount = Math.max(1, Math.ceil(chapters.length / PER_PAGE))
+  const shown = chapters.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE)
 
   return (
     <main className="cc-app min-h-screen">
@@ -62,7 +69,7 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
         </header>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          {chapters.map(ch => {
+          {shown.map(ch => {
             const read = columnReadStorage.isRead(`${book.id}:${ch.startIndex}`)
             const cover = coverOf(book, ch)
             return (
@@ -119,6 +126,26 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
             <p className="cc-card px-5 py-10 text-center text-sm font-bold text-[#7A6E63]">仲未有任何文章</p>
           )}
         </div>
+
+        {pageCount > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <button
+              onClick={() => { setPage(p => Math.max(0, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              disabled={page === 0}
+              className="cc-btn cc-btn-ghost disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ← 上一頁
+            </button>
+            <span className="text-sm font-extrabold text-[#2E2A26] tabular-nums">第 {page + 1} / {pageCount} 頁</span>
+            <button
+              onClick={() => { setPage(p => Math.min(pageCount - 1, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              disabled={page >= pageCount - 1}
+              className="cc-btn cc-btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              下一頁 →
+            </button>
+          </div>
+        )}
       </div>
     </main>
   )
