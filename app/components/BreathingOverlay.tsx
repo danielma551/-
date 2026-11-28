@@ -1,7 +1,7 @@
 'use client'
 
 // 【呼吸休息卡片】每看完 4 個循環出現，引導一次吸氣→呼氣後自動消失。
-// 非鋪滿全屏：置中細卡片 + 淡背景。純 CSS + 計時器。
+// 卡通版：奶油霧化背景 + 貼紙卡 + 粗邊圓圈（吸氣珊瑚、呼氣薄荷）。
 // 重點：用 onCloseRef + 時間線（只在掛載時排程一次），避免父層重渲染重置計時器。
 
 import { useEffect, useRef, useState } from 'react'
@@ -14,17 +14,17 @@ interface Props {
 
 const INHALE_MS = 4000
 const EXHALE_MS = 4000
-
 const FADE_MS = 400
+
+const CC_FONT = '"Yuanti SC", "Hiragino Maru Gothic ProN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
 
 export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: Props) {
   const [phase, setPhase] = useState<'inhale' | 'exhale'>('inhale')
-  const [big, setBig] = useState(false)   // 圓圈大細：吸氣時放大
-  const [visible, setVisible] = useState(false)   // 淡入淡出（墨水屏除外）
+  const [big, setBig] = useState(false)
+  const [visible, setVisible] = useState(false)
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose            // 每次 render 更新，計時器讀最新的
+  onCloseRef.current = onClose
 
-  // 提前淡出後才真正關閉（墨水屏即時關閉，避免刷新殘影）
   const beginClose = useRef(() => {
     if (eink) { onCloseRef.current(); return }
     setVisible(false)
@@ -32,10 +32,9 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
   })
 
   useEffect(() => {
-    // 掛載即淡入
     const fadeIn = setTimeout(() => setVisible(true), 20)
     const timers: ReturnType<typeof setTimeout>[] = [fadeIn]
-    let t = 80   // 掛載後先由「細」狀態起步，等一格再吸氣 → 睇到放大動畫
+    let t = 80
     for (let r = 0; r < rounds; r++) {
       const inAt = t
       const outAt = t + INHALE_MS
@@ -50,74 +49,108 @@ export default function BreathingOverlay({ onClose, rounds = 1, eink = false }: 
   const inhaling = phase === 'inhale'
   const close = () => beginClose.current()
 
-  // ── 墨水屏版：黑白、無漸變／陰影、圓圈一步切換 ──
+  // ── 墨水屏：黑白、粗邊、無漸變／陰影、圓圈一步切換 ──
   if (eink) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }} onClick={close}>
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.28)', fontFamily: CC_FONT }}
+        onClick={close}
+      >
         <div
           className="flex flex-col items-center"
-          style={{ background: '#fff', border: '2px solid #000', borderRadius: 12, padding: '28px 40px' }}
+          style={{ background: '#fff', border: '3px solid #000', borderRadius: 16, padding: '26px 38px' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <p style={{ color: '#000', fontSize: 14, fontWeight: 700, marginBottom: 20 }}>休息一下 · 跟住圓圈呼吸</p>
+          <p style={{ color: '#000', fontSize: 13, fontWeight: 800, letterSpacing: 2, marginBottom: 18 }}>休息一下 · 跟住圓圈呼吸</p>
           <div className="flex items-center justify-center" style={{ width: 180, height: 180 }}>
             <div
               className="flex items-center justify-center"
               style={{
-                width: big ? 160 : 90, height: big ? 160 : 90,
-                borderRadius: '50%', border: '4px solid #000', background: '#fff', transition: 'none',
+                width: big ? 156 : 92, height: big ? 156 : 92,
+                borderRadius: '50%', border: '5px solid #000', background: '#fff', transition: 'none',
               }}
             >
-              <span style={{ color: '#000', fontSize: 22, fontWeight: 700, letterSpacing: 4 }}>{inhaling ? '吸氣' : '呼氣'}</span>
+              <span style={{ color: '#000', fontSize: 20, fontWeight: 800, letterSpacing: 5 }}>{inhaling ? '吸氣' : '呼氣'}</span>
             </div>
           </div>
+          <p style={{ color: '#000', fontSize: 12, fontWeight: 700, marginTop: 16 }}>點任意處跳過</p>
         </div>
       </div>
     )
   }
 
-  // ── 彩色版（5c）：米色霧化覆蓋層 + 白圓 + 雨的漣漪，無卡片 ──
+  // ── 卡通彩色版：奶油霧化 + 白貼紙卡 + 粗邊圓 ──
   return (
     <div
       className="fixed inset-0 z-[60] flex flex-col items-center justify-center"
       style={{
-        background: 'rgba(240,234,218,0.78)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)',
-        opacity: visible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease`,
+        background: 'rgba(46,42,38,0.28)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+        opacity: visible ? 1 : 0, transition: `opacity ${FADE_MS}ms ease`, fontFamily: CC_FONT,
       }}
       onClick={close}
     >
       <style>{`
-        @keyframes rippleOut { 0% { transform: scale(0.45); opacity: 0.6 } 100% { transform: scale(1.7); opacity: 0 } }
+        @keyframes rippleOut { 0% { transform: scale(0.45); opacity: 0.55 } 100% { transform: scale(1.55); opacity: 0 } }
       `}</style>
 
-      <div className="relative flex items-center justify-center" style={{ width: 150, height: 150 }} onClick={(e) => e.stopPropagation()}>
-        {/* 漣漪：只在吸氣時向外散開 */}
-        <div className="absolute inset-0" style={{ opacity: inhaling ? 1 : 0, transition: 'opacity .8s ease' }}>
-          {[0, 1.3, 2.6].map((delay, i) => (
-            <div key={i} style={{
-              position: 'absolute', left: '50%', top: '50%', width: 150, height: 150, marginLeft: -75, marginTop: -75,
-              borderRadius: '999px', border: `1.5px solid rgba(96,165,250,${[0.55, 0.45, 0.35][i]})`,
-              animation: `rippleOut 4s ease-out ${delay}s infinite`,
-            }} />
-          ))}
+      <div
+        className="relative flex flex-col items-center"
+        style={{
+          background: '#FFFDF6', border: '3px solid #2E2A26', borderRadius: 28,
+          boxShadow: '6px 6px 0 #2E2A26', padding: '28px 40px 24px',
+          transform: 'rotate(-1deg)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
+          <span
+            className="grid place-items-center"
+            style={{ width: 30, height: 30, borderRadius: '50%', background: '#6ED3B6', border: '2.5px solid #2E2A26', boxShadow: '2px 2px 0 #2E2A26' }}
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#2E2A26" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 19c0-7 4-12 12-14 1 8-3 13-10 13" /><path d="M5 19c3-4 6-6 10-8" />
+            </svg>
+          </span>
+          <p style={{ fontSize: 13, fontWeight: 800, color: '#7A6E63', letterSpacing: '0.08em' }}>休息一下 · 跟住圓圈呼吸</p>
         </div>
 
-        {/* 主圓 */}
-        <div
-          className="flex items-center justify-center"
-          style={{
-            width: 112, height: 112, borderRadius: '999px',
-            background: '#ffffff', border: '2px solid #5eead4', boxShadow: '0 8px 30px rgba(20,184,166,0.18)',
-            transform: `scale(${big ? 1.15 : 0.62})`,
-            transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms ease-in-out`,
-          }}
-        >
-          <span style={{ fontSize: 17, fontWeight: 500, letterSpacing: 6, paddingLeft: 6, color: '#0f766e' }}>{inhaling ? '吸氣' : '呼氣'}</span>
+        <div className="relative flex items-center justify-center" style={{ width: 200, height: 200 }}>
+          <div className="absolute inset-0" style={{ opacity: inhaling ? 1 : 0, transition: 'opacity .6s ease' }}>
+            {[0, 1.3, 2.6].map((delay, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute', left: '50%', top: '50%', width: 170, height: 170, marginLeft: -85, marginTop: -85,
+                  borderRadius: '999px', border: '2.5px solid rgba(255,122,89,0.5)',
+                  animation: `rippleOut 4s ease-out ${delay}s infinite`,
+                }}
+              />
+            ))}
+          </div>
+
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 150, height: 150, borderRadius: '999px',
+              background: inhaling ? '#FFE3D9' : '#DFF5EC',
+              border: '4px solid #2E2A26',
+              boxShadow: '0 6px 0 rgba(46,42,38,0.14)',
+              transform: `scale(${big ? 1.12 : 0.64})`,
+              transition: `transform ${big ? INHALE_MS : EXHALE_MS}ms cubic-bezier(.37,0,.63,1), background .6s ease`,
+            }}
+          >
+            <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: 6, paddingLeft: 6, color: '#2E2A26' }}>
+              {inhaling ? '吸氣' : '呼氣'}
+            </span>
+          </div>
         </div>
+
+        <p style={{ fontSize: 12, fontWeight: 800, color: '#7A6E63', marginTop: 14, letterSpacing: '0.04em' }}>
+          吸氣 4 秒 · 呼氣 4 秒 · 點任意處跳過
+        </p>
       </div>
-
-      <p style={{ fontSize: 12.5, letterSpacing: '0.15em', color: '#8d867a', marginTop: 22 }}>休息一下 · 眼睛望遠處</p>
-      <p style={{ fontSize: 10.5, color: '#c4bca6', marginTop: 8 }}>點任意處跳過</p>
     </div>
   )
 }
