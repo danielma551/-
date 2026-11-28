@@ -49,6 +49,25 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
   useEffect(() => { setPage(0) }, [book.id])
   const pageCount = Math.max(1, Math.ceil(chapters.length / PER_PAGE))
   const shown = chapters.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE)
+  const pager = (extra: string) => pageCount > 1 ? (
+    <div className={`flex items-center justify-center gap-3 ${extra}`}>
+      <button
+        onClick={() => { setPage(p => Math.max(0, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+        disabled={page === 0}
+        className="cc-btn cc-btn-ghost disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        ← 上一頁
+      </button>
+      <span className="text-sm font-extrabold text-[#2E2A26] tabular-nums">第 {page + 1} / {pageCount} 頁</span>
+      <button
+        onClick={() => { setPage(p => Math.min(pageCount - 1, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+        disabled={page >= pageCount - 1}
+        className="cc-btn cc-btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        下一頁 →
+      </button>
+    </div>
+  ) : null
 
   return (
     <main className="cc-app min-h-screen">
@@ -67,6 +86,8 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
           </div>
           <p className="mt-2 text-sm font-bold text-[#7A6E63]">{book.chronological ? '課程文章 · 按課程順序' : '專欄文章 · 最新文章在上'} · 每頁 30 篇</p>
         </header>
+
+        {pager('mb-5')}
 
         <div className="grid gap-5 sm:grid-cols-2">
           {shown.map(ch => {
@@ -127,25 +148,7 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
           )}
         </div>
 
-        {pageCount > 1 && (
-          <div className="mt-8 flex items-center justify-center gap-3">
-            <button
-              onClick={() => { setPage(p => Math.max(0, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              disabled={page === 0}
-              className="cc-btn cc-btn-ghost disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              ← 上一頁
-            </button>
-            <span className="text-sm font-extrabold text-[#2E2A26] tabular-nums">第 {page + 1} / {pageCount} 頁</span>
-            <button
-              onClick={() => { setPage(p => Math.min(pageCount - 1, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              disabled={page >= pageCount - 1}
-              className="cc-btn cc-btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              下一頁 →
-            </button>
-          </div>
-        )}
+        {pager('mt-8')}
       </div>
     </main>
   )
