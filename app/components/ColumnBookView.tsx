@@ -65,7 +65,7 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#2E2A26]">{book.title}</h1>
             <span className="cc-chip text-[#2E2A26] whitespace-nowrap">{chapters.length} 篇</span>
           </div>
-          <p className="mt-2 text-sm font-bold text-[#7A6E63]">精挑细淘，得到头条。每个工作日一篇。</p>
+          <p className="mt-2 text-sm font-bold text-[#7A6E63]">{book.chronological ? '課程文章 · 按課程順序' : '專欄文章 · 最新文章在上'} · 每頁 30 篇</p>
         </header>
 
         <div className="grid gap-5 sm:grid-cols-2">
