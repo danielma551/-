@@ -780,6 +780,8 @@ export default function Home() {
         book={columnBook}
         onBack={() => setColumnBook(null)}
         onOpenArticle={(startIndex) => openColumnArticle(columnBook, startIndex)}
+        dailyGoal={dailyGoal}
+        todayRead={dailyGoalStorage.todayRead(columnBook.id)}
       />
       {showGoalModal && pendingBook && (
         <GoalModal

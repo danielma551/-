@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { BookData, columnReadStorage } from '../utils/storage'
 import { getGeneratedCover } from '../utils/coverArt'
-import { ArrowLeft, Rss } from 'lucide-react'
+import { ArrowLeft, Rss, Target } from 'lucide-react'
 
 const PARA_SEP = '\u2029'
 
@@ -39,11 +39,13 @@ interface Props {
   book: BookData
   onBack: () => void
   onOpenArticle: (startIndex: number) => void
+  dailyGoal?: number
+  todayRead?: number
 }
 
 const PER_PAGE = 30
 
-export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
+export default function ColumnBookView({ book, onBack, onOpenArticle, dailyGoal = 404, todayRead = 0 }: Props) {
   const chapters = [...(book.chapters || [])].sort((a, c) => book.chronological ? (a.date || 0) - (c.date || 0) : (c.date || 0) - (a.date || 0))
   const [page, setPage] = useState(0)
   useEffect(() => { setPage(0) }, [book.id])
@@ -86,6 +88,24 @@ export default function ColumnBookView({ book, onBack, onOpenArticle }: Props) {
           </div>
           <p className="mt-2 text-sm font-bold text-[#7A6E63]">{book.chronological ? '課程文章 · 按課程順序' : '專欄文章 · 最新文章在上'} · 每頁 30 篇</p>
         </header>
+
+        {dailyGoal > 0 && (
+          <div className="cc-card px-4 py-3.5 sm:px-5 mb-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Target className="w-5 h-5 text-[#FF7A59] flex-shrink-0" />
+                <span className="text-sm font-extrabold text-[#2E2A26] whitespace-nowrap">今日目標 · {dailyGoal} 句</span>
+                {todayRead >= dailyGoal && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full border-2 border-[#2E2A26] bg-[#D9F5EA] text-[11px] font-extrabold text-[#146B52] whitespace-nowrap">✓ 已達成</span>
+                )}
+              </div>
+              <span className="text-sm font-extrabold text-[#2E2A26] tabular-nums whitespace-nowrap">已讀 {todayRead} 句</span>
+            </div>
+            <div className="mt-2 h-2.5 rounded-full border-[2px] border-[#2E2A26] bg-[#FFE3D9] overflow-hidden">
+              <div className="h-full rounded-full bg-[#FF7A59]" style={{ width: `${Math.min(100, Math.round((todayRead / dailyGoal) * 100))}%` }} />
+            </div>
+          </div>
+        )}
 
         {pager('mb-5')}
 
